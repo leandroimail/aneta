@@ -11,8 +11,7 @@ from time import sleep
 
 from Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn
 from Config import condition_include, condition_exclude, path_exlude_file, path_include_file, path_directory_bibs
-from Config import path_jcr, path_scimago, path_exlude_manual_file, list_of_fiels_exlude, list_of_fiels_include
-from Config import regex_expression_include, list_of_fiels_regex_include, regex_expression_exclude, list_of_fiels_regex_include
+from Config import path_jcr, path_scimago, path_exlude_manual_file, regex_expression_include, regex_expression_exclude
 from BibTex import join_bib, write_bibtex, bibtex_to_csv
 
 
@@ -44,8 +43,6 @@ def read_impact_factor(path_impact_factor):
                            'ISSN' : 'issn',
                            'Journal Impact Factor' : 'jcr'}, inplace=True)
 
-    df_impact.head(50)
-
     df_impact["title"] = df_impact["title"].str.lower()
     df_impact["title"] = df_impact["title"].map(lambda x: re.sub('[^a-zA-Z0-9 ]', ' ',x))
 
@@ -62,7 +59,6 @@ def read_impact_factor(path_impact_factor):
 
 def get_impact_factor(df_impact_factor, title, issn=""):
     jcr_array = array("u")
-
 
     if issn:
         jcr_array = df_impact_factor.jcr[df_impact_factor["issn"] == issn].values
@@ -124,7 +120,7 @@ def standardize_bib(path):
             if not year or year == 'None':
                 year = ""
             else:
-                if len(year) > 4:
+                if len(year) >= 4:
                     year = year.replace("/","-")
                     for y in year.split("-"):
                         if len(y) == 4:
@@ -150,6 +146,8 @@ def standardize_bib(path):
             if not scimago or scimago == 'None':
                 scimago = ""
 
+            if "proceeding" in bib["ENTRYTYPE"]:
+                bib["ENTRYTYPE"] = "proceedings"
 
             bib["title"] = title.strip()
             bib["keywords"] = keywords
@@ -225,13 +223,11 @@ def clean_duplicate(bibs_clear):
 
     write_bibtex(path_directory_bibs + "/OUTPUTS/bib_duplicate.bib", list_duplicate)
     write_bibtex(path_directory_bibs + "/OUTPUTS/bib_deduplicate.bib", list_bib)
-    # bibtex_to_csv(path_directory_bibs + "/OUTPUTS/bib_duplicate.bib")
-    # bibtex_to_csv(path_directory_bibs + "/OUTPUTS/bib_deduplicate.bib")
 
     return list_bib, list_duplicate
 
 
-#################   funções para  critérios de inclusão/exclusão   #################
+#################   Function to Include and Exclude Criteria using Regex   #################
 def process_regex(regex_expression, list_of_fiels_for_regex, bib):
     regex = re.compile(regex_expression)
 
@@ -242,24 +238,27 @@ def process_regex(regex_expression, list_of_fiels_for_regex, bib):
     return False
 
 
-def process_list(path_file_include_exclude, list_include_exclude_words, keywords, abstract, title, clean_word=False):
+def process_list(path_file_include_exclude, keywords, abstract, title, clean_word=False, only_title=False):
     with open(path_file_include_exclude, 'r', encoding="utf-8") as file:
         list_words = file.readlines()
 
-    if list_include_exclude_words:
-        for word in list_words:
-            word = word.strip().replace("\n", "").lower()
 
+    for word in list_words:
+        word = word.strip().replace("\n", "").lower()
+        if word:
             if clean_word:
                 word = re.sub('[^a-zA-Z0-9] ', '', word)
                 word = re.sub('\s+', '', word)
 
-            if ("keywords" in list_include_exclude_words) and (word in keywords.strip().replace("\n", "").lower()):
+            if word in title.strip().replace("\n", "").lower():
                 return True
-            if ("abstract" in list_include_exclude_words) and (word in abstract.strip().replace("\n", "").lower()):
+            if only_title:
+                continue
+            if word in abstract.strip().replace("\n", "").lower():
                 return True
-            if ("title" in list_include_exclude_words) and (word in title.strip().replace("\n", "").lower()):
+            if word in keywords.strip().replace("\n", "").lower():
                 return True
+
 
     return False
 
@@ -268,16 +267,35 @@ def pre_include(bib):
     keywords = bib["keywords"].lower()
     abstract = bib["abstract"].lower()
     title = bib["title"].lower()
+    type_publication = bib["ENTRYTYPE"].lower()
+    publication = bib["publication"].lower()
 
-    if condition_include(keywords, abstract, title):
+    if bib["jcr"]:
+        jcr = bib["jcr"].lower()
+    else:
+        jcr = 0
+
+    if bib["scimago"]:
+        scimago = float(bib["scimago"].lower())
+    else:
+        scimago = 0
+
+    if bib["year"]:
+        year = int(bib["year"].lower())
+    else:
+        year = 1900
+
+
+
+    if condition_include(keywords, abstract, title, jcr, scimago, year, type_publication, publication):
         return True
 
-    if regex_expression_include and list_of_fiels_regex_include:
-        if process_regex(regex_expression_include, list_of_fiels_regex_include, bib):
+    if regex_expression_include:
+        if process_regex(regex_expression_include, ["title", "abstract", "keywords"], bib):
             return True
 
-    if path_include_file and list_of_fiels_include:
-        if process_list(path_include_file, list_of_fiels_include, keywords, abstract, title):
+    if path_include_file :
+        if process_list(path_include_file,  keywords, abstract, title):
             return True
 
     return False
@@ -287,16 +305,21 @@ def pre_exclude(bib):
     keywords = bib["keywords"].lower()
     abstract = bib["abstract"].lower()
     title = bib["title"].lower()
+    jcr = bib["jcr"].lower()
+    scimago = bib["scimago"].lower()
+    year = bib["year"].lower()
+    type_publication = bib["ENTRYTYPE"].lower()
+    publication = bib["publication"].lower()
 
-    if condition_exclude(keywords, abstract, title):
+    if condition_exclude(keywords, abstract, title, jcr, scimago, year, type_publication, publication):
         return False
 
     if regex_expression_exclude and regex_expression_exclude:
-        if process_regex(regex_expression_exclude, regex_expression_exclude, bib):
+        if process_regex(regex_expression_exclude, ["title", "abstract", "keywords"], bib):
             return False
 
-    if path_exlude_file and list_of_fiels_exlude:
-        if process_list(path_exlude_file, list_of_fiels_exlude, keywords, abstract, title):
+    if path_exlude_file:
+        if process_list(path_exlude_file, keywords, abstract, title):
             return False
 
     return True
@@ -310,9 +333,13 @@ def select_final(bib):
         title = bib["title"]
         title = re.sub('[^a-zA-Z0-9] ', '', title)
         title = re.sub('\s+', '', title)
-        if process_list(path_exlude_manual_file, ["title"], "", "", title, clean_word=True):
+        if process_list(path_exlude_manual_file, "", "", title, clean_word=True, only_title=True):
             return False
     return True
+
+
+def select_final_not(bib):
+    return not select_final(bib)
 
 
 def display_results(dictionary, name_file, column_key, column_value="value", sort_by_value=False, reverse=False):
@@ -340,7 +367,7 @@ def summarizer(bibs, bib_duplicate={}):
     count_base_duplicate = {}
     count_year = {}
     count_publication = {}
-    count_article = {"article" : 0 , "conference" : 0}
+    count_article = {}
     count_jcr = {}
     count_scimago = {}
     count_keyowrds = {}
@@ -362,12 +389,15 @@ def summarizer(bibs, bib_duplicate={}):
             count_base_type[bib["base"] + "_conference"] = 0
 
 
-        if bib["ENTRYTYPE"] == "article":
-            count_article["article"] = count_article["article"] + 1
-            count_base_type[bib["base"] + "_article"] = count_base_type[bib["base"] + "_article" ] + 1
+        if bib["ENTRYTYPE"] in count_article:
+            count_article[bib["ENTRYTYPE"]] = count_article[bib["ENTRYTYPE"]] + 1
         else:
-            count_article["conference"] = count_article["conference"] + 1
-            count_base_type[bib["base"] + "_conference"] = count_base_type[bib["base"] + "_conference"] + 1
+            count_article[bib["ENTRYTYPE"]] =  1
+
+        if bib["base"] + "_" + bib["ENTRYTYPE"] in count_base_type:
+            count_base_type[bib["base"] + "_" + bib["ENTRYTYPE"]] = count_base_type[bib["base"] + "_" + bib["ENTRYTYPE"]] + 1
+        else:
+            count_base_type[bib["base"]  + "_" + bib["ENTRYTYPE"]] = 1
 
 
         if bib["year"] in count_year:
@@ -540,12 +570,15 @@ def analyzer(path):
     print("Get Excludes Bibs")
     exclude_bib = list(filter(pre_exclude_sample, include_bib))
 
-    print("Deduplicate Excludes Bibs")
-    exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib)
-    write_bibtex(path_directory_bibs + "/OUTPUTS/bib_exclude.bib", exclude_bib_deduplicate)
-
     print("Deduplicate Include Bibs")
     deduplicate, duplicate = clean_duplicate(bibs_without_exclude)
+
+    print("Select Manual Bibs")
+    select_bibs = list(filter(select_final, deduplicate))
+    exclude_bib = exclude_bib + list(filter(select_final_not, deduplicate))
+
+    print("Deduplicate Excludes Bibs")
+    exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib)
 
     summary_bibs = {
         "total_bibs": len(bibs),
@@ -555,8 +588,6 @@ def analyzer(path):
         "bibs_without_exclude": len(bibs_without_exclude),
         "pre_selects": len(deduplicate),
         "duplicates": len(duplicate),
-
-
     }
 
     if len(exclude_bib):
@@ -576,43 +607,35 @@ def analyzer(path):
     else:
         summary_bibs["'precente_include_over_total"] = "0%"
 
+    write_bibtex(path_directory_bibs + "/OUTPUTS/select_bibs.bib", select_bibs)
+    write_bibtex(path_directory_bibs + "/OUTPUTS/bib_exclude.bib", exclude_bib_deduplicate)
 
+    summary_bibs["select"] = len(select_bibs)
 
+    if len(deduplicate):
+        summary_bibs["exclude_manually"] = len(deduplicate) - len(select_bibs)
+        summary_bibs["percente_selec_over_pre_select"] = str(len(select_bibs) / len(deduplicate) * 100) + "%"
+    else:
+        summary_bibs["exclude_manually"] = len(select_bibs)
+        summary_bibs["percente_selec_over_pre_select"] = "100%"
 
-    if path_exlude_manual_file:
-        print("Select Manual Bibs")
-        select_bibs = list(filter(select_final, deduplicate))
-        write_bibtex(path_directory_bibs + "/OUTPUTS/select_bibs.bib", select_bibs)
-        # bibtex_to_csv(path_directory_bibs + "/OUTPUTS/select_bibs.bib")
-
-        summary_bibs["select"] = len(select_bibs)
-
-        if len(deduplicate):
-            summary_bibs["exclude_manually"] = len(deduplicate) - len(select_bibs)
-            summary_bibs["percente_selec_over_pre_select"] = str(len(select_bibs) / len(deduplicate) * 100) + "%"
-        else:
-            summary_bibs["exclude_manually"] = len(select_bibs)
-            summary_bibs["percente_selec_over_pre_select"] = "100%"
-
-        call_results(select_bibs, type="select")
-        call_results(bibs, type="all")
+    call_results(select_bibs, type="select")
+    call_results(bibs, type="all")
 
     call_results(deduplicate, duplicate, type="pre_select")
 
     print("\n")
-    print("---  ---")
+    print("--- Sumary  ---")
     display_results(summary_bibs, "sumary", "resume")
 
-
-    # print("\n")
-    # print("--- Gravando Titles ---")
-    # path = path_directory_bibs + "/OUTPUTS/title.csv"
-    # with open(path, "w") as file:
-    #     for bib in select_bibs:
-    #         file.writelines(bib["title"] + "\n")
-
+    print("\n")
+    print("--- Gravando Titles ---")
+    path = path_directory_bibs + "/OUTPUTS/title.txt"
+    with open(path, "w", encoding="utf-8") as file:
+        for bib in select_bibs:
+            file.writelines(bib["title"] + "\n")
 
 
-# clean_duplicate(path_directory_bibs)
-create_folder(path_directory_bibs)
-analyzer(path_directory_bibs)
+def get_analyse():
+    create_folder(path_directory_bibs)
+    analyzer(path_directory_bibs)

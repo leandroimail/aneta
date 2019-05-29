@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="9e89ea24-0e2c-4a4f-b674-c254cc243c37" name="Default" comment="" />
+    <list default="true" id="9e89ea24-0e2c-4a4f-b674-c254cc243c37" name="Default" comment="perdi tudo">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Analyse.py" beforeDir="false" afterPath="$PROJECT_DIR$/Analyse.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Config.py" beforeDir="false" afterPath="$PROJECT_DIR$/Config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/IncludeExclude/Exclude_Words.txt" beforeDir="false" afterPath="$PROJECT_DIR$/IncludeExclude/Exclude_Words.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/IncludeExclude/Exlude_Manually.txt" beforeDir="false" afterPath="$PROJECT_DIR$/IncludeExclude/Exlude_Manually.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/IncludeExclude/Include_Words.txt" beforeDir="false" afterPath="$PROJECT_DIR$/IncludeExclude/Include_Words.txt" afterDir="false" />
+    </list>
     <ignored path="RevisaoSistematica.iws" />
     <ignored path=".idea/workspace.xml" />
     <ignored path=".idea/dataSources.local.xml" />
@@ -28,29 +35,67 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/Config.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="240">
-              <caret line="37" column="37" lean-forward="true" selection-start-line="37" selection-start-column="37" selection-end-line="37" selection-end-column="37" />
+            <state relative-caret-position="329">
+              <caret line="27" column="23" selection-start-line="27" selection-end-line="27" selection-end-column="23" />
             </state>
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/Analyse.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="40">
-              <caret line="2" column="27" selection-start-line="2" selection-start-column="27" selection-end-line="2" selection-end-column="27" />
+            <state relative-caret-position="410">
+              <caret line="637" selection-start-line="637" selection-end-line="637" />
+              <folding>
+                <element signature="e#0#47#0" expanded="true" />
+              </folding>
             </state>
           </provider>
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/Abstract.py">
+        <entry file="file://$PROJECT_DIR$/BibTex.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="80">
-              <caret line="4" column="11" selection-start-line="4" selection-start-column="5" selection-end-line="4" selection-end-column="11" />
+            <state relative-caret-position="200">
+              <caret line="91" selection-start-line="91" selection-end-line="91" />
+              <folding>
+                <element signature="e#0#10#0" expanded="true" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/IncludeExclude/Exclude_Words.txt">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="20">
+              <caret line="1" column="49" selection-start-line="1" selection-start-column="49" selection-end-line="1" selection-end-column="49" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/IncludeExclude/Include_Words.txt">
+          <provider selected="true" editor-type-id="text-editor" />
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/IncludeExclude/Exlude_Manually.txt">
+          <provider selected="true" editor-type-id="text-editor">
+            <state>
+              <caret column="39" selection-start-column="39" selection-end-column="39" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/Exec.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="340">
+              <caret line="17" column="39" selection-start-line="17" selection-start-column="28" selection-end-line="17" selection-end-column="39" />
             </state>
           </provider>
         </entry>
@@ -66,12 +111,6 @@
   </component>
   <component name="FindInProjectRecents">
     <findStrings>
-      <find>scie</find>
-      <find>sleep</find>
-      <find>Driver</find>
-      <find>sl</find>
-      <find>path_exlude_manual_file</find>
-      <find>percente_duplicates</find>
       <find>ACM</find>
       <find>summarizer</find>
       <find>call_results</find>
@@ -96,6 +135,12 @@
       <find>dedu</find>
       <find>path_include_file</find>
       <find>\</find>
+      <find>list_of_fiels</find>
+      <find>condition_exclude</find>
+      <find>ENTRYTYPE</find>
+      <find>path_exlude_manual_file</find>
+      <find>select_final</find>
+      <find>select_final_not</find>
     </findStrings>
     <replaceStrings>
       <replace>, ' ',</replace>
@@ -109,6 +154,11 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="master" />
+      </map>
+    </option>
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/Analyse.py" root0="SKIP_INSPECTION" />
@@ -123,17 +173,18 @@
         <option value="$PROJECT_DIR$/Abstract.py" />
         <option value="$PROJECT_DIR$/ImpactFiles/ajust_scimago.py" />
         <option value="$PROJECT_DIR$/BibTex.py" />
-        <option value="$PROJECT_DIR$/Analyse.py" />
         <option value="$USER_HOME$/OneDrive/Área de Trabalho/Revisão Sitematica 2018/TITULOS/titulo.py" />
         <option value="$PROJECT_DIR$/IncludeExclude/Incluede_Title" />
-        <option value="$PROJECT_DIR$/IncludeExclude/Exclude_Words.txt" />
         <option value="$PROJECT_DIR$/SeachDataBases/xplore/xploreapi.py" />
         <option value="$PROJECT_DIR$/SeachDataBases/config/api_config.py" />
         <option value="$PROJECT_DIR$/SeachDataBases/Search.py" />
-        <option value="$PROJECT_DIR$/Config.py" />
         <option value="$PROJECT_DIR$/IncludeExclude/Incluede_Title.txt" />
-        <option value="$PROJECT_DIR$/IncludeExclude/Exlude_Manually.txt" />
         <option value="$PROJECT_DIR$/Exec.py" />
+        <option value="$PROJECT_DIR$/Config.py" />
+        <option value="$PROJECT_DIR$/IncludeExclude/Exclude_Words.txt" />
+        <option value="$PROJECT_DIR$/IncludeExclude/Include_Words.txt" />
+        <option value="$PROJECT_DIR$/IncludeExclude/Exlude_Manually.txt" />
+        <option value="$PROJECT_DIR$/Analyse.py" />
       </list>
     </option>
   </component>
@@ -155,6 +206,11 @@
             <path>
               <item name="ASLR" type="b2602c69:ProjectViewProjectNode" />
               <item name="ASLR" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="ASLR" type="b2602c69:ProjectViewProjectNode" />
+              <item name="ASLR" type="462c0819:PsiDirectoryNode" />
+              <item name="IncludeExclude" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
           <select />
@@ -187,7 +243,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.Analyse">
+  <component name="RunManager" selected="Python.Exec">
     <configuration default="true" type="tests" factoryName="Attests">
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -208,28 +264,6 @@
       <option name="USE_PATTERN" value="false" />
       <method />
     </configuration>
-    <configuration name="Abstract" type="PythonConfigurationType" factoryName="Python" temporary="true">
-      <module name="RevisaoSistematica" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Abstract.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
     <configuration name="Analyse" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="RevisaoSistematica" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -244,6 +278,28 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/Analyse.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="BibTex" type="PythonConfigurationType" factoryName="Python" temporary="true">
+      <module name="RevisaoSistematica" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/BibTex.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -366,19 +422,19 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Python.Abstract" />
       <item itemvalue="Python.Analyse" />
       <item itemvalue="Python.Exec" />
       <item itemvalue="Python.Search" />
       <item itemvalue="Python.api_config" />
+      <item itemvalue="Python.BibTex" />
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.Analyse" />
         <item itemvalue="Python.Exec" />
+        <item itemvalue="Python.BibTex" />
+        <item itemvalue="Python.Analyse" />
         <item itemvalue="Python.Search" />
         <item itemvalue="Python.api_config" />
-        <item itemvalue="Python.Abstract" />
       </list>
     </recent_temporary>
   </component>
@@ -393,10 +449,18 @@
       <option name="presentableId" value="Default" />
       <updated>1491060264561</updated>
     </task>
+    <task id="LOCAL-00001" summary="perdi tudo">
+      <created>1559116734543</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1559116734543</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="214000" />
+    <option name="totallyTimeSpent" value="4692000" />
   </component>
   <component name="TodoView" selected-index="2">
     <todo-panel id="selected-file">
@@ -409,20 +473,21 @@
   </component>
   <component name="ToolWindowManager">
     <frame x="-7" y="-7" width="1550" height="848" extended-state="6" />
+    <editor active="true" />
     <layout>
-      <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.4916067" visible="true" weight="0.24054053" />
+      <window_info content_ui="combo" id="Project" order="0" sideWeight="0.4916067" visible="true" weight="0.20202702" />
       <window_info id="Structure" order="1" weight="0.25" />
       <window_info id="Favorites" order="2" sideWeight="0.5083933" side_tool="true" weight="0.25718608" />
       <window_info anchor="bottom" id="Message" order="0" />
-      <window_info anchor="bottom" id="Find" order="1" weight="0.3283582" />
-      <window_info anchor="bottom" id="Run" order="2" sideWeight="0.53806734" weight="0.34300792" />
+      <window_info anchor="bottom" id="Find" order="1" weight="0.3282967" />
+      <window_info anchor="bottom" id="Run" order="2" sideWeight="0.53806734" weight="0.34203297" />
       <window_info anchor="bottom" id="Cvs" order="3" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="4" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="5" weight="0.32868218" />
-      <window_info anchor="bottom" id="Debug" order="6" sideWeight="0.4969743" weight="0.4845222" />
+      <window_info anchor="bottom" id="Debug" order="6" sideWeight="0.4969743" weight="0.48351648" />
       <window_info anchor="bottom" id="Event Log" order="7" sideWeight="0.46193266" side_tool="true" weight="0.33953488" />
-      <window_info anchor="bottom" id="Version Control" order="8" show_stripe_button="false" />
-      <window_info anchor="bottom" id="Python Console" order="9" weight="0.3294702" />
+      <window_info anchor="bottom" id="Version Control" order="8" weight="0.67582417" />
+      <window_info anchor="bottom" id="Python Console" order="9" weight="0.3282967" />
       <window_info anchor="bottom" id="Terminal" order="10" weight="0.3294702" />
       <window_info anchor="bottom" id="Docker" order="11" show_stripe_button="false" />
       <window_info anchor="right" id="Commander" order="0" weight="0.4" />
@@ -433,33 +498,47 @@
       <window_info anchor="right" id="SciView" order="5" />
       <window_info anchor="right" id="Data View" order="6" weight="0.32980332" />
     </layout>
-    <layout-to-restore>
-      <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.4916067" visible="true" weight="0.22868474" />
-      <window_info id="Structure" order="1" weight="0.25" />
-      <window_info id="Favorites" order="2" sideWeight="0.5083933" side_tool="true" weight="0.25718608" />
-      <window_info anchor="bottom" id="Message" order="0" />
-      <window_info anchor="bottom" id="Find" order="1" weight="0.3283582" />
-      <window_info anchor="bottom" id="Run" order="2" sideWeight="0.53806734" weight="0.44818303" />
-      <window_info anchor="bottom" id="Cvs" order="3" weight="0.25" />
-      <window_info anchor="bottom" id="Inspection" order="4" weight="0.4" />
-      <window_info anchor="bottom" id="TODO" order="5" weight="0.32868218" />
-      <window_info anchor="bottom" id="Debug" order="6" sideWeight="0.4969743" weight="0.48507464" />
-      <window_info anchor="bottom" id="Event Log" order="7" sideWeight="0.46193266" side_tool="true" weight="0.33953488" />
-      <window_info anchor="bottom" id="Version Control" order="8" show_stripe_button="false" />
-      <window_info anchor="bottom" id="Python Console" order="9" weight="0.3294702" />
-      <window_info anchor="bottom" id="Terminal" order="10" weight="0.3294702" />
-      <window_info anchor="bottom" id="Docker" order="11" show_stripe_button="false" />
-      <window_info anchor="right" id="Commander" order="0" weight="0.4" />
-      <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
-      <window_info anchor="right" content_ui="combo" id="Hierarchy" order="2" weight="0.25" />
-      <window_info anchor="right" x="0" y="0" width="295" height="554" id="Documentation" order="3" weight="0.32980332" />
-      <window_info anchor="right" id="Database" order="4" />
-      <window_info anchor="right" id="SciView" order="5" />
-      <window_info anchor="right" id="Data View" order="6" weight="0.32980332" />
-    </layout-to-restore>
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="1" />
+  </component>
+  <component name="Vcs.Log.History.Properties">
+    <option name="SHOW_DETAILS" value="true" />
+    <option name="SHOW_OTHER_BRANCHES" value="true" />
+    <option name="COLUMN_ORDER">
+      <list>
+        <option value="0" />
+        <option value="2" />
+        <option value="3" />
+        <option value="1" />
+      </list>
+    </option>
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="RECENTLY_FILTERED_USER_GROUPS">
+                <collection />
+              </option>
+              <option name="RECENTLY_FILTERED_BRANCH_GROUPS">
+                <collection />
+              </option>
+              <option name="COLUMN_ORDER">
+                <list>
+                  <option value="0" />
+                  <option value="1" />
+                  <option value="2" />
+                  <option value="3" />
+                </list>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="Vcs.Log.UiProperties">
     <option name="RECENTLY_FILTERED_USER_GROUPS">
@@ -468,6 +547,10 @@
     <option name="RECENTLY_FILTERED_BRANCH_GROUPS">
       <collection />
     </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="perdi tudo" />
+    <option name="LAST_COMMIT_MESSAGE" value="perdi tudo" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -483,18 +566,8 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/Analyse.py</url>
-          <line>40</line>
-          <option name="timeStamp" value="53" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/BibTex.py</url>
-          <line>91</line>
-          <option name="timeStamp" value="58" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/BibTex.py</url>
-          <line>87</line>
-          <option name="timeStamp" value="61" />
+          <line>576</line>
+          <option name="timeStamp" value="62" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
@@ -512,6 +585,11 @@
         <watch expression="row" language="Python" />
       </configuration>
     </watches-manager>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/ASLR$BibTex.coverage" NAME="BibTex Coverage Results" MODIFIED="1559120685660" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ASLR$Exec.coverage" NAME="Exec Coverage Results" MODIFIED="1559120920422" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/ASLR$Analyse.coverage" NAME="Analyse Coverage Results" MODIFIED="1559120127874" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
   <component name="debuggerHistoryManager">
     <expressions id="watch">
@@ -597,23 +675,10 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/IncludeExclude/Exclude_Words.txt">
-      <provider selected="true" editor-type-id="text-editor" />
-    </entry>
     <entry file="file://$PROJECT_DIR$/../NovoProjeto/venv/Lib/site-packages/pyparsing.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="32280">
           <caret line="1625" selection-start-line="1625" selection-end-line="1625" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/BibTex.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="410">
-          <caret line="89" selection-start-line="89" selection-end-line="89" />
-          <folding>
-            <element signature="e#0#10#0" expanded="true" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -641,37 +706,71 @@
     <entry file="file://$PROJECT_DIR$/IncludeExclude/Incluede_Title.txt">
       <provider selected="true" editor-type-id="text-editor" />
     </entry>
-    <entry file="file://$PROJECT_DIR$/IncludeExclude/Include_Words.txt">
-      <provider selected="true" editor-type-id="text-editor" />
+    <entry file="file://$PROJECT_DIR$/Abstract.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="260">
+          <caret line="13" lean-forward="true" selection-start-line="13" selection-end-line="13" />
+          <folding>
+            <element signature="e#0#10#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/IncludeExclude/Exlude_Manually.txt">
-      <provider selected="true" editor-type-id="text-editor" />
+    <entry file="file://$USER_HOME$/.PyCharm2019.1/system/python_stubs/1448368063/builtins.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="232">
+          <caret line="4947" column="8" selection-start-line="4947" selection-start-column="8" selection-end-line="4947" selection-end-column="8" />
+        </state>
+      </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Exec.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="40">
-          <caret line="3" lean-forward="true" selection-start-line="3" selection-end-line="3" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/Abstract.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="80">
-          <caret line="4" column="11" selection-start-line="4" selection-start-column="5" selection-end-line="4" selection-end-column="11" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/Analyse.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="40">
-          <caret line="2" column="27" selection-start-line="2" selection-start-column="27" selection-end-line="2" selection-end-column="27" />
+        <state relative-caret-position="340">
+          <caret line="17" column="39" selection-start-line="17" selection-start-column="28" selection-end-line="17" selection-end-column="39" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Config.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="240">
-          <caret line="37" column="37" lean-forward="true" selection-start-line="37" selection-start-column="37" selection-end-line="37" selection-end-column="37" />
+        <state relative-caret-position="329">
+          <caret line="27" column="23" selection-start-line="27" selection-end-line="27" selection-end-column="23" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/IncludeExclude/Exclude_Words.txt">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="20">
+          <caret line="1" column="49" selection-start-line="1" selection-start-column="49" selection-end-line="1" selection-end-column="49" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/IncludeExclude/Include_Words.txt">
+      <provider selected="true" editor-type-id="text-editor" />
+    </entry>
+    <entry file="file://$PROJECT_DIR$/IncludeExclude/Exlude_Manually.txt">
+      <provider selected="true" editor-type-id="text-editor">
+        <state>
+          <caret column="39" selection-start-column="39" selection-end-column="39" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/BibTex.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="200">
+          <caret line="91" selection-start-line="91" selection-end-line="91" />
+          <folding>
+            <element signature="e#0#10#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/Analyse.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="410">
+          <caret line="637" selection-start-line="637" selection-end-line="637" />
+          <folding>
+            <element signature="e#0#47#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
