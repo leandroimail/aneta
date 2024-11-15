@@ -2,16 +2,20 @@ from difflib import SequenceMatcher as seq_math
 from array import array
 from statistics import mean
 from collections import Counter, OrderedDict
+import string
+import random
 import re
 import os
 import shutil
+import math
 import pandas as pd
+import numpy as np
 
 from time import sleep
 
-from Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn
+from Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi
 from Config import condition_include, condition_exclude, path_exlude_file, path_include_file, path_directory_bibs
-from Config import path_jcr, path_scimago, path_exlude_manual_file, regex_expression_include, regex_expression_exclude
+from Config import path_jcr, path_scimago, path_exlude_manual_file, regex_expression_include, regex_expression_exclude, type_deduplication
 from BibTex import join_bib, write_bibtex, bibtex_to_csv
 
 
@@ -92,6 +96,7 @@ def standardize_bib(path):
             year = loop_json(list_year, bib)
             publication = loop_json(list_publication, bib)
             issn = loop_json(list_issn, bib)
+            doi = loop_json(list_doi, bib)
 
 
             if not issn or issn == 'None':
@@ -104,6 +109,11 @@ def standardize_bib(path):
             else:
                 abstract = abstract.replace("\n", " ").replace("  ", " ").strip()
 
+            if not doi or doi == 'None':
+                doi = ""
+            else:
+                doi = doi.replace("\n"," ").replace("  ", " ").replace("  ", " ").strip()
+                
             if not title or title == 'None':
                 title = ""
             else:
@@ -158,6 +168,7 @@ def standardize_bib(path):
             bib["issn"] = issn
             bib["jcr"] = jcr
             bib["scimago"] = scimago
+            bib["doi"] = doi
 
             list_new.append(bib)
 
@@ -167,60 +178,172 @@ def standardize_bib(path):
 
 # def clean_duplicate(path):
 #     bibs = standardize_bib(path)
-def clean_duplicate(bibs_clear):
+def clean_duplicate(bibs_clear, type_deduplication):
+    def isnone(y):
+        x = str(y)
+        npnone = False
+        try:
+            npnone = np.isnan(x)
+        except:
+            npnone = False
+        x_str = re.sub('[^a-zA-Z0-9]', '', str(x))
+        x_str_order = "".join(sorted(re.sub('[^a-zA-Z0-9]', '', str(x))))
+        return (
+            (not x) or 
+            (x is None) or
+            (pd.isna(x)) or 
+            (pd.isnull(x)) or 
+            (x != x) or
+            (not x_str) or 
+            (x_str is None) or 
+            (x_str.lower() in [' ', 'nan', 'none', 'null', 'empty']) or
+            (x_str_order is None) or 
+            (x_str_order.lower() in [' ', 'nan', 'none', 'null', 'empty']) or
+            (npnone)
+        )
+
+    def clean_fields(x):
+        if isnone(x):
+            return ""
+        else:
+            return str(x).strip().strip("{").strip("}")
+
+
+    def dedup_ramdom_value(x):
+        if isnone(x):
+            aleatorio = ''.join(random.choices(string.printable, k=6))
+            return aleatorio
+        else:
+            return x
+    
+    
     bibs = list(bibs_clear)
     list_duplicate = []
     list_bib = []
 
     num = 0
+    
+    if type_deduplication == 'fuzzy':
+        while len(bibs) > 0:
+            bib = bibs[0]
+            # print(len(bibs), num)
 
-    while len(bibs) > 0:
-        bib = bibs[0]
-        # print(len(bibs), num)
+            duplicate = False
+            for ic, bib_c in enumerate(bibs[1: ]):
+                ratio_abstract = 0.0
+                ratio_title = 0.0
+                ratio_keywords = 0.0
+                ratio_author = 0.0
+                ratio_total = array("f")
+                
+                if all((bib["abstract"], bib_c["abstract"])):
+                    abastract = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["abstract"].lower()).strip().split())
+                    abastract_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["abstract"].lower()).strip().split())
+                    ratio_abstract = seq_math(None, abastract, abastract_c).ratio()
+                    if ratio_abstract > 0.5:
+                        ratio_total.append(ratio_abstract)
+                if all((bib["title"], bib_c["title"])):
+                    title = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["title"].lower()).strip().split())
+                    title_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["title"].lower()).strip().split())
+                    ratio_title = seq_math(None, title, title_c).ratio()
+                    if ratio_title > 0.5:
+                        ratio_total.append(ratio_title)
+                if all((bib["keywords"], bib_c["keywords"])):
+                    keywords = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["keywords"].lower()).strip().split())
+                    keywords_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["keywords"].lower()).strip().split())
+                    ratio_keywords = seq_math(None, keywords, keywords_c).ratio()
+                    if ratio_keywords > 0.5:
+                        ratio_total.append(ratio_keywords)
+                if all((bib["author"], bib_c["author"])):
+                    author = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["author"].lower()).strip().split())
+                    author_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["author"].lower()).strip().split())
+                    ratio_author = seq_math(None, author, author_c).ratio()
+                    if ratio_author > 0.5:
+                        ratio_total.append(ratio_author)
+                if all((bib["doi"], bib_c["doi"])):
+                    doi = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["doi"].lower()).strip().split())
+                    doi_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["doi"].lower()).strip().split())
+                    ratio_doi = seq_math(None, doi, doi_c).ratio()
+                    if ratio_doi > 0.5:
+                        ratio_total.append(ratio_doi)
 
-        duplicate = False
-        for ic, bib_c in enumerate(bibs[1: ]):
-            ratio_abstract = 0.0
-            ratio_title = 0.0
-            ratio_keywords = 0.0
-            ratio_author = 0.0
-            ratio_total = array("f")
+                if (ratio_abstract > 0.8 or ratio_title > 0.8 or (len(ratio_total) > 1) and mean(ratio_total) > 0.65):
+                    duplicate = True
+                    list_duplicate.append(bib)
+                    break
 
-            if all((bib["abstract"], bib_c["abstract"])):
-                abastract = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["abstract"].lower()).strip().split())
-                abastract_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["abstract"].lower()).strip().split())
-                ratio_abstract = seq_math(None, abastract, abastract_c).ratio()
-                if ratio_abstract > 0.5:
-                    ratio_total.append(ratio_abstract)
-            if all((bib["title"], bib_c["title"])):
-                title = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["title"].lower()).strip().split())
-                title_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["title"].lower()).strip().split())
-                ratio_title = seq_math(None, title, title_c).ratio()
-                if ratio_title > 0.5:
-                    ratio_total.append(ratio_title)
-            if all((bib["keywords"], bib_c["keywords"])):
-                keywords = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["keywords"].lower()).strip().split())
-                keywords_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["keywords"].lower()).strip().split())
-                ratio_keywords = seq_math(None, keywords, keywords_c).ratio()
-                if ratio_keywords > 0.5:
-                    ratio_total.append(ratio_keywords)
-            if all((bib["author"], bib_c["author"])):
-                author = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib["author"].lower()).strip().split())
-                author_c = sorted(re.sub('[^a-zA-Z0-9]', ' ', bib_c["author"].lower()).strip().split())
-                ratio_author = seq_math(None, author, author_c).ratio()
-                if ratio_author > 0.5:
-                    ratio_total.append(ratio_author)
+            if not duplicate:
+                list_bib.append(bib)
+            bibs.pop(0)
+            num += 1
+    elif type_deduplication == 'default':
+        df = pd.DataFrame(bibs)
+        list_cols = df.columns        
+        for col in ['abstract', 'title', 'author', 'doi', 'issn', 'isbn', 'publication']:
+            name_col = 'dedup_' + str(col)
+            if col not in list_cols:
+                df[col] = ""
+                df[name_col] = ""
+            else:
+                df[name_col] = df[col].apply(lambda x : str(x).lower())
 
-            if (ratio_abstract > 0.8 or ratio_title > 0.8 or (len(ratio_total) > 1) and mean(ratio_total) > 0.65):
-                duplicate = True
-                list_duplicate.append(bib)
-                break
+        df["dedup_doi"] = df["dedup_doi"].apply(dedup_ramdom_value)      
+        df["dedup_doi"] = df["dedup_issn"].apply(dedup_ramdom_value) 
+        df["dedup_doi"] = df["dedup_isbn"].apply(dedup_ramdom_value) 
+        df["dedup_publication"] = df["dedup_publication"].apply(dedup_ramdom_value)  
 
-        if not duplicate:
-            list_bib.append(bib)
-        bibs.pop(0)
-        num += 1
+        df["dedup_new_abstract"] = df["dedup_abstract"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x))))
+        df["dedup_new_title"] = df["dedup_title"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x))))
+        df["dedup_new_author"] = df["dedup_author"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x)))) 
+        df["dedup_new_issn"] = df["dedup_issn"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x)))) 
+        df["dedup_new_isbn"] = df["dedup_isbn"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x)))) 
+        df["dedup_new_publication"] = df["dedup_publication"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x))))   
+        df["dedup_duplicate_doi"] = df.duplicated(subset=['dedup_title', 'dedup_doi'])
+        df["dedup_duplicate_title"] = df.duplicated(subset=['dedup_title', 'dedup_author'])  
+        df["dedup_duplicate_abstract"] = df.duplicated(subset=['dedup_title', 'dedup_abstract'])
+        df["dedup_duplicate_issn"] = df.duplicated(subset=['dedup_title', 'dedup_issn'])  
+        df["dedup_duplicate_isbn"] = df.duplicated(subset=['dedup_title', 'dedup_isbn'])
+        df["dedup_duplicate_publication"] = df.duplicated(subset=['dedup_title', 'dedup_publication'])  
 
+        df["dedup_duplicate_new_doi"] = df.duplicated(subset=['dedup_new_title', 'dedup_doi'])
+        df["dedup_duplicate_new_abstract"] = df.duplicated(subset=['dedup_new_title', 'dedup_new_abstract'])
+        df["dedup_duplicate_new_title"] = df.duplicated(subset=['dedup_new_title', 'dedup_new_author'])
+        df["dedup_duplicate_new_issn"] = df.duplicated(subset=['dedup_new_title', 'dedup_new_issn'])
+        df["dedup_duplicate_new_isbn"] = df.duplicated(subset=['dedup_new_title', 'dedup_new_isbn'])
+        df["dedup_duplicate_new_publication"] = df.duplicated(subset=['dedup_new_title', 'dedup_new_publication'])
+
+        df["dedup_duplicate"] = np.where(
+                                            (df['dedup_duplicate_doi']  == True) |
+                                            (df['dedup_duplicate_title']  == True) |
+                                            (df['dedup_duplicate_abstract']  == True) |
+                                            (df['dedup_duplicate_issn']  == True) |
+                                            (df['dedup_duplicate_isbn']  == True) |
+                                            (df['dedup_duplicate_publication']  == True) |
+                                            (df['dedup_duplicate_new_abstract']  == True) |
+                                            (df['dedup_duplicate_new_doi']  == True) |
+                                            (df['dedup_duplicate_new_issn']  == True) |
+                                            (df['dedup_duplicate_new_isbn']  == True) |
+                                            (df['dedup_duplicate_new_publication']  == True) |
+                                            (df['dedup_duplicate_new_title']  == True)
+                                        , True, False)   
+
+        list_cols = list(df.columns)
+        df_duplicated = df.loc[df['dedup_duplicate'] == True]
+        df = df.loc[df['dedup_duplicate'] == False]
+        
+        for col in list_cols:
+            if 'dedup_' in  col:
+                df.drop([col], inplace=True, axis=1)
+                df_duplicated.drop([col], inplace=True, axis=1)
+            else:                
+                df[col] = df[col].apply(clean_fields).astype(str)
+                df_duplicated[col] = df_duplicated[col].apply(clean_fields).astype(str)
+
+        list_bib = df.to_dict('records')
+        list_duplicate = df_duplicated.to_dict('records')    
+    else:
+        raise ValueError("Value of 'type_deduplication' need be 'default' or 'fuzze'. Please set in Config.py file")
+        
     write_bibtex(path_directory_bibs + "/OUTPUTS/bib_duplicate.bib", list_duplicate)
     write_bibtex(path_directory_bibs + "/OUTPUTS/bib_deduplicate.bib", list_bib)
 
@@ -571,14 +694,14 @@ def analyzer(path):
     exclude_bib = list(filter(pre_exclude_sample, include_bib))
 
     print("Deduplicate Include Bibs")
-    deduplicate, duplicate = clean_duplicate(bibs_without_exclude)
+    deduplicate, duplicate = clean_duplicate(bibs_without_exclude, type_deduplication)
 
     print("Select Manual Bibs")
     select_bibs = list(filter(select_final, deduplicate))
     exclude_bib = exclude_bib + list(filter(select_final_not, deduplicate))
 
     print("Deduplicate Excludes Bibs")
-    exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib)
+    exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib, type_deduplication)
 
     summary_bibs = {
         "total_bibs": len(bibs),

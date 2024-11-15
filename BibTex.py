@@ -9,6 +9,7 @@ import os
 
 
 def read_bibtex(path):
+    path = os.path.abspath(path)
     with open(path, "r", encoding='utf-8') as bibtex_file:
         parser = BibTexParser()
         parser.customization = convert_to_unicode
@@ -18,6 +19,7 @@ def read_bibtex(path):
 
 
 def write_bibtex(path, entries):
+    path = os.path.abspath(path)
     db = BibDatabase()
     db.entries = entries
     writer = BibTexWriter()
@@ -28,9 +30,11 @@ def write_bibtex(path, entries):
 def write_new_bibtex(path, entries):
     arq = path.split("/")[-1]
     path_exit = path.replace(arq, "NEW/")
+    path_exit = os.path.abspath(path_exit)
     if not os.path.exists(path_exit):
         os.makedirs(path_exit)
     path_exit += arq.replace(".csv", "_NEW.bib")
+    path_exit = os.path.abspath(path_exit)
     db = BibDatabase()
     db.entries = entries
     writer = BibTexWriter()
@@ -46,6 +50,7 @@ def bibtex_to_csv(path):
         if set(fieldnames) != set(bib.keys()):
             fieldnames = list(set(list(bib.keys())+fieldnames))
 
+    path_exit = os.path.abspath(path_exit)
     with open(path_exit, 'w', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=',', quotechar='"',
                                 quoting=csv.QUOTE_NONNUMERIC, lineterminator='\n')
@@ -85,7 +90,7 @@ def join_bib(path):
         if arquivos:
             for arq in arquivos:
                 if ((".bib" in arq) and (deduplicate_bib(path, arq))):
-                    new_path = caminho.strip("/") + "/" + arq
+                    new_path = os.path.join(caminho, arq)
                     print(new_path)
                     bib = read_bibtex(new_path)
                     bib = list(map(add_base, bib))

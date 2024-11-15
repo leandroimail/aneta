@@ -6,21 +6,27 @@
 #################   CONFIGS   #################
 
 ### ----------- Path of Bibs Directory  ----------- ###
-path_directory_bibs = r"C:\Users\leand\OneDrive\Área de Trabalho\RS_DQ"
+path_directory_bibs = r"/home/leandro/ProjetosLeandro/python/asrl/Example"
+# path_directory_bibs = r"/home/leandro/leandroWindows/OneDrive/Documentos/USP/SLR/2022/Complementar/old"
 
 ### ----------- Path and    ----------- ###
 ### Set path of csv/bib and name of base to scrape Abstract and Keywords.
 ### Set this variables only you use the Scrap abstract for ACM or SPRINGER
 ### For ACM you need a .bib file type
 ### For SPRING you need a .csv file type
-path_ACM = r"C:\Users\leand\OneDrive\Área de Trabalho\RS_DQ\ACM.bib"
-path_SPRINGER = r"C:\Users\leand\OneDrive\Área de Trabalho\RS_DQ\SPRINGER_.csv"
+# path_ACM = r"C:\Users\leand\OneDrive\Área de Trabalho\RS_DQ\ACM.bib"
+# path_SPRINGER = r"C:\Users\leand\OneDrive\Área de Trabalho\RS_DQ\SPRINGER_.csv"
+path_ACM = r""
+path_SPRINGER = r""
 
+#################   Default Type of Deduplication em Analyses Scritp   #################
+# default or fuzzy (fuzzy can spend too much time to process, use only with few records)
+type_deduplication = r"default"
 
 
 ### ----------- Parh to inclue and exclude criterius  ----------- ###
-path_include_file = r"C:/Users/leand/PycharmProjects/RevisaoSistematica/IncludeExclude/Incluede_Title.txt"
-#path_include_file = "C:/Users/leand/PycharmProjects/RevisaoSistematica/IncludeExclude/Incluede_Title.txt"
+path_include_file = r"./IncludeExclude/Incluede_Title.txt"
+#path_include_file = "./IncludeExclude/Incluede_Title.txt"
 
 path_exlude_file = r"./IncludeExclude/Exclude_Words.txt"
 # path_exlude_file = "./IncludeExclude/Exclude_Words.txt"
@@ -39,39 +45,34 @@ regex_expression_exclude = ""
 
 
 ### ----------- Define Conditional Includes and Exclude  ----------- ###
+
+
 def condition_include(keywords, abstract, title, jcr, scimago, year, type_publication, publication):
     """ condition can be changed using the input terms (keywords, abstract, title)
     
     Condition must return at least one true condition. If at least one condition is true the Bib will be
      selected.
     
-    :param keywords: terme containing string with keywords split for semicolon
-    :param abstract: terme containing string with abstract of publication
-    :param title: terme containing string with title of publication
-    :param jcr: terme containing float value. Initial in 0
-    :param scimago: terme containing float value. Initial in 0
-    :param year: terme containing containing int value with a date(year) of publication
-    :param type_publication: terme containing string type of publication. Ex: proceedings, article, book
-    :param publication: terme containing string with name of publication. Can be the name of proceedings, article, book, etc
+    :param keywords: term containing string with keywords split for semicolon
+    :param abstract: term containing string with abstract of publication
+    :param title: term containing string with title of publication
+    :param jcr: term containing float value. Initial in 0
+    :param scimago: term containing float value. Initial in 0
+    :param year: term containing containing int value with a date(year) of publication
+    :param type_publication: term containing string type of publication. Ex: proceedings, article, book
+    :param publication: term containing string with name of publication. Can be the name of proceedings, article, book, etc
 
     :return: this condition return a Boolean term for bool_conditional
     """
 
     bool_general = (
-
-
-
-        ("metadata" in keywords  or
-         "metadata" in abstract  or
-         "metadata" in title)
-        and
-        ("data quality" in keywords  or
-         "data quality" in abstract  or
-         "data quality" in title)
-        and
-        ("model" in keywords  or
-         "model" in abstract  or
-         "model" in title)
+        (
+            "lambda" in abstract.lower() or
+            "kappa" in abstract.lower() or
+            "streaming" in abstract.lower() or
+            "dataflow model" in abstract.lower() or
+            "architecture for iot" in abstract.lower()
+        ) 
     )
 
     return bool_general
@@ -100,6 +101,84 @@ def condition_exclude(keywords, abstract, title, jcr, scimago, year, type_public
     return bool_general
 
 
+# def condition_include(keywords, abstract, title, jcr, scimago, year, type_publication, publication):
+#     """ condition can be changed using the input terms (keywords, abstract, title)
+    
+#     Condition must return at least one true condition. If at least one condition is true the Bib will be
+#      selected.
+    
+#     :param keywords: terme containing string with keywords split for semicolon
+#     :param abstract: terme containing string with abstract of publication
+#     :param title: terme containing string with title of publication
+#     :param jcr: terme containing float value. Initial in 0
+#     :param scimago: terme containing float value. Initial in 0
+#     :param year: terme containing containing int value with a date(year) of publication
+#     :param type_publication: terme containing string type of publication. Ex: proceedings, article, book
+#     :param publication: terme containing string with name of publication. Can be the name of proceedings, article, book, etc
+
+#     :return: this condition return a Boolean term for bool_conditional
+#     """
+
+#     bool_general = (
+#         (
+#             ("data warehouse" in keywords.lower()  or
+#             "data warehouse" in abstract.lower()  or
+#             "data warehouse" in title.lower())
+#             or
+#             ("data mart" in keywords.lower()  or
+#             "data mart" in abstract.lower()  or
+#             "data mart" in title.lower())
+#             or
+#             ("business intelligence" in keywords.lower()  or
+#             "business intelligence" in abstract.lower()  or
+#             "business intelligence" in title.lower())
+#             or
+#             ("olap" in keywords.lower()  or
+#             "olap" in abstract.lower()  or
+#             "olap" in title.lower())
+#         )
+#         and
+#         (
+#             ("massive index" in keywords.lower()  or
+#             "massive index" in abstract.lower()  or
+#             "massive index" in title.lower())
+#             or
+#             ("search engine" in keywords.lower()  or
+#             "search engine" in abstract.lower()  or
+#             "search engine" in title.lower())            
+#             or
+#             ("full-text index" in keywords.lower()  or
+#             "full-text index" in abstract.lower()  or
+#             "full-text index" in title.lower())          
+#             or
+#             ("text index" in keywords.lower()  or
+#             "text index" in abstract.lower()  or
+#             "text index" in title.lower())     
+#             or
+#             ("elasticsearhc" in keywords.lower()  or
+#             "elasticsearhc" in abstract.lower()  or
+#             "elasticsearhc" in title.lower())
+#             or
+#             ("solr" in keywords.lower()  or
+#             "solr" in abstract.lower()  or
+#             "solr" in title.lower()) 
+#         )
+        
+#         and 
+#         (   
+#             ("book" not in type_publication.lower() or
+#             "inbook" not in type_publication.lower() or
+#             "techreport" not in type_publication.lower() or
+#             "incollection" not in type_publication.lower() or
+#             "misc" not in type_publication.lower())
+#         )
+        
+#         # and 
+#         # str(year) in ['2011','2020','2021']
+        
+#     )
+
+#     return bool_general
 
 #####################  SYSTEM CONFIG #####################
 #####################  SYSTEM CONFIG #####################
@@ -128,11 +207,6 @@ path_scimago = r"./ImpactFiles/scimago.csv"
 
 path_impact_factor = [path_jcr, path_scimago]
 
-#################   webdriver   #################
-path_webdriver = r"./RevisaoSistematica/webdriver/chromedriver.exe"
-path_webdriver = path_webdriver.replace("\\","/")
-
-
 
 ### ----------- Dictonarys used in scrape Abstrac and Key Words   ----------- ###
 json_base = {"ACM" : "ACM",
@@ -151,15 +225,17 @@ list_type_bibtex = ["article", "book", "booklet", "conference", "inbook", "incol
                     "mastersthesis", "misc", "phdthesis", "proceedings", "techreport", "unpublished"]
 
 
+
+
 ### ----------- Lists of terms to Standardize Bibs  ----------- ###
 ### Set terms used in Bibs for each field to standardize ###
-list_issn = {"issn", "ISSN", "Issn"}
+list_issn = ["issn", "ISSN", "Issn"]
+list_doi = ["doi", "Doi", "DOI", "Item DOI"]
 list_abstract = ["abstract", "ABSTRACT", "Abstract"]
 list_title = ["title", "Title", "TITLE",  "Item Title", "item title"]
 list_keywords = ["keyword", "Keyword", "KEYWORD", "Keywords", "keywords", "KEYWORDS", "Keywords-Plus"]
 list_author = ["author", "Author", "AUTHOR", "authors", "Authors", "AUTHORS"]
-list_year = ["year", "Year", "YEAR", "Publication Year", "publication year", "PUBLICATION YEAR", "Date", "DATE",
-             "date"]
+list_year = ["year", "Year", "YEAR", "Publication Year", "publication year", "PUBLICATION YEAR", "Date", "DATE", "date"]
 list_publication = ["journal", "Journal", "JOURNAL", "booktitle", "Booktitle", "BOOKTITLE", "Publication Title",
                     "publication title", "PUBLICATION TITLE"]
 
@@ -170,4 +246,5 @@ def webdriver ():
     :return: webdrive Selenium instantiated
     """
     from selenium import webdriver
-    return webdriver.Chrome(path_webdriver)
+    from webdriver_manager.chrome import ChromeDriverManager
+    return webdriver.Chrome(ChromeDriverManager().install())
