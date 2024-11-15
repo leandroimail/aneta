@@ -209,6 +209,8 @@ pyrightconfig.json
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
 .DS_STORE
+.pyc
+*.pyc
 
 # IPython
 profile_default/
