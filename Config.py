@@ -6,8 +6,8 @@
 #################   CONFIGS   #################
 
 ### ----------- Path of Bibs Directory  ----------- ###
-path_directory_bibs = r"/home/leandro/ProjetosLeandro/python/asrl/Example"
-# path_directory_bibs = r"/home/leandro/leandroWindows/OneDrive/Documentos/USP/SLR/2022/Complementar/old"
+# path_directory_bibs = r"/home/leandro/ProjetosLeandro/python/asrl/Example"
+path_directory_bibs = r"/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Documentos/USP/Doutorado/RSL/SchemaMatching/RSL"
 
 ### ----------- Path and    ----------- ###
 ### Set path of csv/bib and name of base to scrape Abstract and Keywords.
@@ -65,17 +65,18 @@ def condition_include(keywords, abstract, title, jcr, scimago, year, type_public
     :return: this condition return a Boolean term for bool_conditional
     """
 
-    bool_general = (
-        (
-            "lambda" in abstract.lower() or
-            "kappa" in abstract.lower() or
-            "streaming" in abstract.lower() or
-            "dataflow model" in abstract.lower() or
-            "architecture for iot" in abstract.lower()
-        ) 
-    )
+    # bool_general = (
+    #     (
+    #         "lambda" in abstract.lower() or
+    #         "kappa" in abstract.lower() or
+    #         "streaming" in abstract.lower() or
+    #         "dataflow model" in abstract.lower() or
+    #         "architecture for iot" in abstract.lower()
+    #     ) 
+    # )
 
-    return bool_general
+    # return bool_general
+    
 
 
 ##### OPTIONAL FUNCTION ########################
@@ -101,84 +102,83 @@ def condition_exclude(keywords, abstract, title, jcr, scimago, year, type_public
     return bool_general
 
 
-# def condition_include(keywords, abstract, title, jcr, scimago, year, type_publication, publication):
-#     """ condition can be changed using the input terms (keywords, abstract, title)
+def condition_include(keywords, abstract, title, jcr, scimago, year, type_publication, publication):
+    """ condition can be changed using the input terms (keywords, abstract, title)
     
-#     Condition must return at least one true condition. If at least one condition is true the Bib will be
-#      selected.
+    Condition must return at least one true condition. If at least one condition is true the Bib will be
+     selected.
     
-#     :param keywords: terme containing string with keywords split for semicolon
-#     :param abstract: terme containing string with abstract of publication
-#     :param title: terme containing string with title of publication
-#     :param jcr: terme containing float value. Initial in 0
-#     :param scimago: terme containing float value. Initial in 0
-#     :param year: terme containing containing int value with a date(year) of publication
-#     :param type_publication: terme containing string type of publication. Ex: proceedings, article, book
-#     :param publication: terme containing string with name of publication. Can be the name of proceedings, article, book, etc
+    :param keywords: terme containing string with keywords split for semicolon
+    :param abstract: terme containing string with abstract of publication
+    :param title: terme containing string with title of publication
+    :param jcr: terme containing float value. Initial in 0
+    :param scimago: terme containing float value. Initial in 0
+    :param year: terme containing containing int value with a date(year) of publication
+    :param type_publication: terme containing string type of publication. Ex: proceedings, article, book
+    :param publication: terme containing string with name of publication. Can be the name of proceedings, article, book, etc
 
-#     :return: this condition return a Boolean term for bool_conditional
-#     """
+    :return: this condition return a Boolean term for bool_conditional
+    """
 
-#     bool_general = (
-#         (
-#             ("data warehouse" in keywords.lower()  or
-#             "data warehouse" in abstract.lower()  or
-#             "data warehouse" in title.lower())
-#             or
-#             ("data mart" in keywords.lower()  or
-#             "data mart" in abstract.lower()  or
-#             "data mart" in title.lower())
-#             or
-#             ("business intelligence" in keywords.lower()  or
-#             "business intelligence" in abstract.lower()  or
-#             "business intelligence" in title.lower())
-#             or
-#             ("olap" in keywords.lower()  or
-#             "olap" in abstract.lower()  or
-#             "olap" in title.lower())
-#         )
-#         and
-#         (
-#             ("massive index" in keywords.lower()  or
-#             "massive index" in abstract.lower()  or
-#             "massive index" in title.lower())
-#             or
-#             ("search engine" in keywords.lower()  or
-#             "search engine" in abstract.lower()  or
-#             "search engine" in title.lower())            
-#             or
-#             ("full-text index" in keywords.lower()  or
-#             "full-text index" in abstract.lower()  or
-#             "full-text index" in title.lower())          
-#             or
-#             ("text index" in keywords.lower()  or
-#             "text index" in abstract.lower()  or
-#             "text index" in title.lower())     
-#             or
-#             ("elasticsearhc" in keywords.lower()  or
-#             "elasticsearhc" in abstract.lower()  or
-#             "elasticsearhc" in title.lower())
-#             or
-#             ("solr" in keywords.lower()  or
-#             "solr" in abstract.lower()  or
-#             "solr" in title.lower()) 
-#         )
-        
-#         and 
-#         (   
-#             ("book" not in type_publication.lower() or
-#             "inbook" not in type_publication.lower() or
-#             "techreport" not in type_publication.lower() or
-#             "incollection" not in type_publication.lower() or
-#             "misc" not in type_publication.lower())
-#         )
-        
-#         # and 
-#         # str(year) in ['2011','2020','2021']
-        
-#     )
+    bool_general = (
+        (
+            ("schema matching" in keywords.lower()  or
+            "schema matching" in abstract.lower()  or
+            "schema matching" in title.lower())
 
-#     return bool_general
+        )
+        and
+        (
+            ("llm" in keywords.lower()  or
+            "llm" in abstract.lower()  or
+            "llm" in title.lower())
+            or
+
+            ("language model" in keywords.lower()  or
+            "language model" in abstract.lower()  or
+            "language model" in title.lower())
+            or
+
+            ("generative ai" in keywords.lower()  or
+            "generative ai" in abstract.lower()  or
+            "generative ai" in title.lower())
+            or
+
+            ("genai" in keywords.lower()  or
+            "genai" in abstract.lower()  or
+            "genai" in title.lower())
+            or
+
+            ("rag" in keywords.lower()  or
+            "rag" in abstract.lower()  or
+            "rag" in title.lower())
+            or
+
+            ("retrieval-augmented generation" in keywords.lower()  or
+            "retrieval-augmented generation" in abstract.lower()  or
+            "retrieval-augmented generation" in title.lower())
+            or
+
+            ("retrieval augmented generation" in keywords.lower()  or
+            "retrieval augmented generation" in abstract.lower()  or
+            "retrieval augmented generation" in title.lower())
+        )
+        
+        # and 
+        # (   
+        #     ("book" not in type_publication.lower() or
+        #     "inbook" not in type_publication.lower() or
+        #     "techreport" not in type_publication.lower() or
+        #     "incollection" not in type_publication.lower() or
+        #     "misc" not in type_publication.lower())
+        # )
+        
+        # and 
+        # str(year) in ['2011','2020','2021']
+        
+    )
+
+    return bool_general
 
 #####################  SYSTEM CONFIG #####################
 #####################  SYSTEM CONFIG #####################

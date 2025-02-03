@@ -8,14 +8,43 @@ import os
 
 
 
+# def read_bibtex(path):
+#     path = os.path.abspath(path)
+#     with open(path, "r", encoding='utf-8') as bibtex_file:
+#         parser = BibTexParser()
+#         parser.customization = convert_to_unicode
+#         bib_database = bibtexparser.load(bibtex_file, parser=parser)
+
+#         return bib_database.entries
 def read_bibtex(path):
     path = os.path.abspath(path)
-    with open(path, "r", encoding='utf-8') as bibtex_file:
-        parser = BibTexParser()
-        parser.customization = convert_to_unicode
-        bib_database = bibtexparser.load(bibtex_file, parser=parser)
 
-        return bib_database.entries
+    try:
+        # 1. Attempt UTF-8 first (most common)
+        with open(path, "r", encoding='utf-8') as bibtex_file:
+            parser = BibTexParser()
+            parser.customization = convert_to_unicode
+            bib_database = bibtexparser.load(bibtex_file, parser=parser)
+            return bib_database.entries
+    except UnicodeDecodeError:
+        try:
+            # 2. Detect encoding using chardet
+            with open(path, "rb") as f:  # Open in binary mode for chardet
+                encoding_info = chardet.detect(f.read())
+                encoding = encoding_info['encoding']
+
+            # 3. Retry with the detected encoding
+            with open(path, "r", encoding=encoding) as bibtex_file:
+                parser = BibTexParser()
+                parser.customization = convert_to_unicode
+                bib_database = bibtexparser.load(bibtex_file, parser=parser)
+                return bib_database.entries
+        except Exception as e:  # Catch other potential errors
+            print(f"Error processing {path}: {e}")
+            return []  # Or raise the exception if you want to stop execution
+    except Exception as e:  # Catch other potential errors
+        print(f"Error processing {path}: {e}")
+        return []  # Or raise the exception if you want to stop execution
 
 
 def write_bibtex(path, entries):
@@ -86,7 +115,15 @@ def join_bib(path):
     bibs = []
     bib = []
 
-    for caminho, diretorios, arquivos in os.walk(path):
+    path = os.path.abspath(path)
+    
+    if not os.path.exists(path):
+        print(f"O caminho {path} não existe.")
+        raise FileNotFoundError(f"O caminho {path} não existe.")
+    elif not os.path.isdir(path):
+        raise NotADirectoryError(f"O caminho {path} não é um diretório.")
+
+    for caminho, diretorios, arquivos in os.walk(path, followlinks=True):
         if arquivos:
             for arq in arquivos:
                 if ((".bib" in arq) and (deduplicate_bib(path, arq))):

@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "ASRL"
+version = "0.1.0"
+description = ""
+authors = ["Leandro Mendes Ferreira"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+beautifulsoup4 = "^4.6.3"
+bibtexparser = "0.6.2"
+future = "^0.16.0"
+numpy = "^1.20.1"
+pyparsing = "^2.2.0"
+python-dateutil = "^2.7.3"
+pytz = "^2020.1"
+selenium = "^3.12.0"
+six = "^1.11.0"
+pandas = "^1.5.3"
+webdriver-manager = "^3.8.5"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

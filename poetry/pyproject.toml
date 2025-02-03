@@ -5,18 +5,25 @@ description = ""
 authors = ["Leandro Mendes Ferreira"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.12"
 beautifulsoup4 = "^4.6.3"
-bibtexparser = "0.6.2"
-future = "^0.16.0"
+bibtexparser = ">=1.2.0"
+future = ">=0.18.2"
 numpy = "^1.20.1"
 pyparsing = "^2.2.0"
 python-dateutil = "^2.7.3"
 pytz = "^2020.1"
-selenium = "^3.12.0"
+selenium = ">=4.9.0"
 six = "^1.11.0"
 pandas = "^1.5.3"
 webdriver-manager = "^3.8.5"
+pypaperbot = "^1.4.1"
+undetected-chromedriver = "^3.5.5"
+setuptools = "^75.8.0"
+scholarly = "^1.7.11"
+markdownify = "^0.14.1"
+crossref = "^0.1.2"
+backoff = "^2.2.1"
 
 [tool.poetry.dev-dependencies]
 

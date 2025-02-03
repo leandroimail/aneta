@@ -1,0 +1,167 @@
+@misc{250108686v1,
+  author = {Chuangtao Ma and Sriom Chakrabarti and Arijit Khan and Bálint Molnár},
+  title = {Knowledge Graph-based Retrieval-Augmented Generation for Schema Matching},
+  year = {2025},
+  eprint = {2501.08686v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.DB},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2501.08686},
+  keywords = {cs.DB; cs.CL; cs.IR},
+  abstract = {Traditional similarity-based schema matching methods are incapable of resolving semantic ambiguities and conflicts in domain-specific complex mapping scenarios due to missing commonsense and domain-specific knowledge. The hallucination problem of large language models (LLMs) also makes it challenging for LLM-based schema matching to address the above issues. Therefore, we propose a Knowledge Graph-based Retrieval-Augmented Generation model for Schema Matching, referred to as the KG-RAG4SM. In particular, KG-RAG4SM introduces novel vector-based, graph traversal-based, and query-based graph retrievals, as well as a hybrid approach and ranking schemes that identify the most relevant subgraphs from external large knowledge graphs (KGs). We showcase that KG-based retrieval-augmented LLMs are capable of generating more accurate results for complex matching cases without any re-training. Our experimental results show that KG-RAG4SM outperforms the LLM-based state-of-the-art (SOTA) methods (e.g., Jellyfish-8B) by 35.89% and 30.50% in terms of precision and F1 score on the MIMIC dataset, respectively; KG-RAG4SM with GPT-4o-mini outperforms the pre-trained language model (PLM)-based SOTA methods (e.g., SMAT) by 69.20% and 21.97% in terms of precision and F1 score on the Synthea dataset, respectively. The results also demonstrate that our approach is more efficient in end-to-end schema matching, and scales to retrieve from large KGs. Our case studies on the dataset from the real-world schema matching scenario exhibit that the hallucination problem of LLMs for schema matching is well mitigated by our solution.},
+  url = {http://arxiv.org/abs/2501.08686v1}
+}
+
+@misc{241024105v1,
+  author = {Nabeel Seedat and Mihaela van der Schaar},
+  title = {Matchmaker: Self-Improving Large Language Model Programs for Schema   Matching},
+  year = {2024},
+  eprint = {2410.24105v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2410.24105},
+  keywords = {cs.LG},
+  abstract = {Schema matching -- the task of finding matches between attributes across disparate data sources with different tables and hierarchies -- is critical for creating interoperable machine learning (ML)-ready data. Addressing this fundamental data-centric problem has wide implications, especially in domains like healthcare, finance and e-commerce -- but also has the potential to benefit ML models more generally, by increasing the data available for ML model training. However, schema matching is a challenging ML task due to structural/hierarchical and semantic heterogeneity between different schemas. Previous ML approaches to automate schema matching have either required significant labeled data for model training, which is often unrealistic or suffer from poor zero-shot performance. To this end, we propose Matchmaker - a compositional language model program for schema matching, comprised of candidate generation, refinement and confidence scoring. Matchmaker also self-improves in a zero-shot manner without the need for labeled demonstrations via a novel optimization approach, which constructs synthetic in-context demonstrations to guide the language model's reasoning process. Empirically, we demonstrate on real-world medical schema matching benchmarks that Matchmaker outperforms previous ML-based approaches, highlighting its potential to accelerate data integration and interoperability of ML-ready data.},
+  url = {http://arxiv.org/abs/2410.24105v1}
+}
+
+@misc{241208194v1,
+  author = {Yurong Liu and Eduardo Pena and Aecio Santos and Eden Wu and Juliana Freire},
+  title = {Magneto: Combining Small and Large Language Models for Schema Matching},
+  year = {2024},
+  eprint = {2412.08194v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.DB},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2412.08194},
+  keywords = {cs.DB; cs.LG},
+  abstract = {Recent advances in language models opened new opportunities to address complex schema matching tasks. Schema matching approaches have been proposed that demonstrate the usefulness of language models, but they have also uncovered important limitations: Small language models (SLMs) require training data (which can be both expensive and challenging to obtain), and large language models (LLMs) often incur high computational costs and must deal with constraints imposed by context windows. We present Magneto, a cost-effective and accurate solution for schema matching that combines the advantages of SLMs and LLMs to address their limitations. By structuring the schema matching pipeline in two phases, retrieval and reranking, Magneto can use computationally efficient SLM-based strategies to derive candidate matches which can then be reranked by LLMs, thus making it possible to reduce runtime without compromising matching accuracy. We propose a self-supervised approach to fine-tune SLMs which uses LLMs to generate syntactically diverse training data, and prompting strategies that are effective for reranking. We also introduce a new benchmark, developed in collaboration with domain experts, which includes real biomedical datasets and presents new challenges to schema matching methods. Through a detailed experimental evaluation, using both our new and existing benchmarks, we show that Magneto is scalable and attains high accuracy for datasets from different domains.},
+  url = {http://arxiv.org/abs/2412.08194v1}
+}
+
+@misc{240711852v1,
+  author = {Marcel Parciak and Brecht Vandevoort and Frank Neven and Liesbet M. Peeters and Stijn Vansummeren},
+  title = {Schema Matching with Large Language Models: an Experimental Study},
+  year = {2024},
+  eprint = {2407.11852v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.DB},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2407.11852},
+  keywords = {cs.DB; cs.AI},
+  abstract = {Large Language Models (LLMs) have shown useful applications in a variety of tasks, including data wrangling. In this paper, we investigate the use of an off-the-shelf LLM for schema matching. Our objective is to identify semantic correspondences between elements of two relational schemas using only names and descriptions. Using a newly created benchmark from the health domain, we propose different so-called task scopes. These are methods for prompting the LLM to do schema matching, which vary in the amount of context information contained in the prompt. Using these task scopes we compare LLM-based schema matching against a string similarity baseline, investigating matching quality, verification effort, decisiveness, and complementarity of the approaches. We find that matching quality suffers from a lack of context information, but also from providing too much context information. In general, using newer LLM versions increases decisiveness. We identify task scopes that have acceptable verification effort and succeed in identifying a significant number of true semantic matches. Our study shows that LLMs have potential in bootstrapping the schema matching process and are able to assist data engineers in speeding up this task solely based on schema element names and descriptions without the need for data instances.},
+  url = {http://arxiv.org/abs/2407.11852v1}
+}
+
+@misc{250102844v1,
+  author = {Yubo Wang and Haoyang Li and Fei Teng and Lei Chen},
+  title = {Graph-based Retrieval Augmented Generation for Dynamic Few-shot Text   Classification},
+  year = {2025},
+  eprint = {2501.02844v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2501.02844},
+  keywords = {cs.CL; cs.IR; cs.LG},
+  abstract = {Text classification is a fundamental task in natural language processing, pivotal to various applications such as query optimization, data integration, and schema matching. While neural network-based models, such as CNN and BERT, have demonstrated remarkable performance in text classification, their effectiveness heavily relies on abundant labeled training data. This dependency makes these models less effective in dynamic few-shot text classification, where labeled data is scarce, and target labels frequently evolve based on application needs. Recently, large language models (LLMs) have shown promise due to their extensive pretraining and contextual understanding. Current approaches provide LLMs with text inputs, candidate labels, and additional side information (e.g., descriptions) to predict text labels. However, their effectiveness is hindered by the increased input size and the noise introduced through side information processing. To address these limitations, we propose a graph-based online retrieval-augmented generation framework, namely GORAG, for dynamic few-shot text classification. GORAG constructs and maintains an adaptive information graph by extracting side information across all target texts, rather than treating each input independently. It employs a weighted edge mechanism to prioritize the importance and reliability of extracted information and dynamically retrieves relevant context using a minimum-cost spanning tree tailored for each text input. Empirical evaluations demonstrate that GORAG outperforms existing approaches by providing more comprehensive and accurate contextual information.},
+  url = {http://arxiv.org/abs/2501.02844v1}
+}
+
+@misc{240301567v2,
+  author = {Eitam Sheetrit and Menachem Brief and Moshik Mishaeli and Oren Elisha},
+  title = {ReMatch: Retrieval Enhanced Schema Matching with LLMs},
+  year = {2024},
+  eprint = {2403.01567v2},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.DB},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2403.01567},
+  keywords = {cs.DB; cs.AI},
+  abstract = {Schema matching is a crucial task in data integration, involving the alignment of a source schema with a target schema to establish correspondence between their elements. This task is challenging due to textual and semantic heterogeneity, as well as differences in schema sizes. Although machine-learning-based solutions have been explored in numerous studies, they often suffer from low accuracy, require manual mapping of the schemas for model training, or need access to source schema data which might be unavailable due to privacy concerns. In this paper we present a novel method, named ReMatch, for matching schemas using retrieval-enhanced Large Language Models (LLMs). Our method avoids the need for predefined mapping, any model training, or access to data in the source database. Our experimental results on large real-world schemas demonstrate that ReMatch is an effective matcher. By eliminating the requirement for training data, ReMatch becomes a viable solution for real-world scenarios.},
+  url = {http://arxiv.org/abs/2403.01567v2}
+}
+
+@misc{240201685v2,
+  author = {Yu Zhang and Mei Di and Haozheng Luo and Chenwei Xu and Richard Tzong-Han Tsai},
+  title = {SMUTF: Schema Matching Using Generative Tags and Hybrid Features},
+  year = {2024},
+  eprint = {2402.01685v2},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2402.01685},
+  keywords = {cs.CL; cs.AI; cs.DB},
+  abstract = {We introduce SMUTF, a unique approach for large-scale tabular data schema matching (SM), which assumes that supervised learning does not affect performance in open-domain tasks, thereby enabling effective cross-domain matching. This system uniquely combines rule-based feature engineering, pre-trained language models, and generative large language models. In an innovative adaptation inspired by the Humanitarian Exchange Language, we deploy 'generative tags' for each data column, enhancing the effectiveness of SM. SMUTF exhibits extensive versatility, working seamlessly with any pre-existing pre-trained embeddings, classification methods, and generative models.   Recognizing the lack of extensive, publicly available datasets for SM, we have created and open-sourced the HDXSM dataset from the public humanitarian data. We believe this to be the most exhaustive SM dataset currently available. In evaluations across various public datasets and the novel HDXSM dataset, SMUTF demonstrated exceptional performance, surpassing existing state-of-the-art models in terms of accuracy and efficiency, and} improving the F1 score by 11.84% and the AUC of ROC by 5.08%.},
+  url = {http://arxiv.org/abs/2402.01685v2}
+}
+
+@misc{240601876v1,
+  author = {Xuanqing Liu and Luyang Kong and Runhui Wang and Patrick Song and Austin Nevins and Henrik Johnson and Nimish Amlathe and Davor Golac},
+  title = {GRAM: Generative Retrieval Augmented Matching of Data Schemas in the   Context of Data Security},
+  year = {2024},
+  eprint = {2406.01876v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.DB},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2406.01876},
+  keywords = {cs.DB; cs.AI; cs.CL; cs.IR; cs.LG},
+  abstract = {Schema matching constitutes a pivotal phase in the data ingestion process for contemporary database systems. Its objective is to discern pairwise similarities between two sets of attributes, each associated with a distinct data table. This challenge emerges at the initial stages of data analytics, such as when incorporating a third-party table into existing databases to inform business insights. Given its significance in the realm of database systems, schema matching has been under investigation since the 2000s. This study revisits this foundational problem within the context of large language models. Adhering to increasingly stringent data security policies, our focus lies on the zero-shot and few-shot scenarios: the model should analyze only a minimal amount of customer data to execute the matching task, contrasting with the conventional approach of scrutinizing the entire data table. We emphasize that the zero-shot or few-shot assumption is imperative to safeguard the identity and privacy of customer data, even at the potential cost of accuracy. The capability to accurately match attributes under such stringent requirements distinguishes our work from previous literature in this domain.},
+  url = {http://arxiv.org/abs/2406.01876v1}
+}
+
+@misc{240805357v2,
+  author = {Zhi-Qi Cheng and Yifei Dong and Aike Shi and Wei Liu and Yuzhi Hu and Jason O'Connor and Alexander G. Hauptmann and Kate S. Whitefoot},
+  title = {SHIELD: LLM-Driven Schema Induction for Predictive Analytics in EV   Battery Supply Chain Disruptions},
+  year = {2024},
+  eprint = {2408.05357v2},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.AI},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2408.05357},
+  keywords = {cs.AI; cs.HC},
+  abstract = {The electric vehicle (EV) battery supply chain's vulnerability to disruptions necessitates advanced predictive analytics. We present SHIELD (Schema-based Hierarchical Induction for EV supply chain Disruption), a system integrating Large Language Models (LLMs) with domain expertise for EV battery supply chain risk assessment. SHIELD combines: (1) LLM-driven schema learning to construct a comprehensive knowledge library, (2) a disruption analysis system utilizing fine-tuned language models for event extraction, multi-dimensional similarity matching for schema matching, and Graph Convolutional Networks (GCNs) with logical constraints for prediction, and (3) an interactive interface for visualizing results and incorporating expert feedback to enhance decision-making. Evaluated on 12,070 paragraphs from 365 sources (2022-2023), SHIELD outperforms baseline GCNs and LLM+prompt methods (e.g., GPT-4o) in disruption prediction. These results demonstrate SHIELD's effectiveness in combining LLM capabilities with domain expertise for enhanced supply chain risk assessment.},
+  url = {http://arxiv.org/abs/2408.05357v2}
+}
+
+@misc{230816361v2,
+  author = {Haochen Zhang and Yuyang Dong and Chuan Xiao and Masafumi Oyamada},
+  title = {Large Language Models as Data Preprocessors},
+  year = {2023},
+  eprint = {2308.16361v2},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.AI},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2308.16361},
+  keywords = {cs.AI; cs.DB},
+  abstract = {Large Language Models (LLMs), typified by OpenAI's GPT, have marked a significant advancement in artificial intelligence. Trained on vast amounts of text data, LLMs are capable of understanding and generating human-like text across a diverse range of topics. This study expands on the applications of LLMs, exploring their potential in data preprocessing, a critical stage in data mining and analytics applications. Aiming at tabular data, we delve into the applicability of state-of-the-art LLMs such as GPT-4 and GPT-4o for a series of preprocessing tasks, including error detection, data imputation, schema matching, and entity matching. Alongside showcasing the inherent capabilities of LLMs, we highlight their limitations, particularly in terms of computational expense and inefficiency. We propose an LLM-based framework for data preprocessing, which integrates cutting-edge prompt engineering techniques, coupled with traditional methods like contextualization and feature selection, to improve the performance and efficiency of these models. The effectiveness of LLMs in data preprocessing is evaluated through an experimental study spanning a variety of public datasets. GPT-4 emerged as a standout, achieving 100\% accuracy or F1 score on 4 of these datasets, suggesting LLMs' immense potential in these tasks. Despite certain limitations, our study underscores the promise of LLMs in this domain and anticipates future developments to overcome current hurdles.},
+  url = {http://arxiv.org/abs/2308.16361v2}
+}
+
+@misc{201016037v1,
+  author = {Mohamed Trabelsi and Jin Cao and Jeff Heflin},
+  title = {Semantic Labeling Using a Deep Contextualized Language Model},
+  year = {2020},
+  eprint = {2010.16037v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2010.16037},
+  keywords = {cs.LG; cs.DB; cs.IR},
+  abstract = {Generating schema labels automatically for column values of data tables has many data science applications such as schema matching, and data discovery and linking. For example, automatically extracted tables with missing headers can be filled by the predicted schema labels which significantly minimizes human effort. Furthermore, the predicted labels can reduce the impact of inconsistent names across multiple data tables. Understanding the connection between column values and contextual information is an important yet neglected aspect as previously proposed methods treat each column independently. In this paper, we propose a context-aware semantic labeling method using both the column values and context. Our new method is based on a new setting for semantic labeling, where we sequentially predict labels for an input table with missing headers. We incorporate both the values and context of each data column using the pre-trained contextualized language model, BERT, that has achieved significant improvements in multiple natural language processing tasks. To our knowledge, we are the first to successfully apply BERT to solve the semantic labeling task. We evaluate our approach using two real-world datasets from different domains, and we demonstrate substantial improvements in terms of evaluation metrics over state-of-the-art feature-based methods.},
+  url = {http://arxiv.org/abs/2010.16037v1}
+}
+
+@misc{240721523v1,
+  author = {Lingxi Cui and Huan Li and Ke Chen and Lidan Shou and Gang Chen},
+  title = {Tabular Data Augmentation for Machine Learning: Progress and Prospects   of Embracing Generative AI},
+  year = {2024},
+  eprint = {2407.21523v1},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  type_publication = {Arxiv Paper},
+  doi = {https://doi.org/10.48550/arXiv.2407.21523},
+  keywords = {cs.LG; cs.AI; cs.DB},
+  abstract = {Machine learning (ML) on tabular data is ubiquitous, yet obtaining abundant high-quality tabular data for model training remains a significant obstacle. Numerous works have focused on tabular data augmentation (TDA) to enhance the original table with additional data, thereby improving downstream ML tasks. Recently, there has been a growing interest in leveraging the capabilities of generative AI for TDA. Therefore, we believe it is time to provide a comprehensive review of the progress and future prospects of TDA, with a particular emphasis on the trending generative AI. Specifically, we present an architectural view of the TDA pipeline, comprising three main procedures: pre-augmentation, augmentation, and post-augmentation. Pre-augmentation encompasses preparation tasks that facilitate subsequent TDA, including error handling, table annotation, table simplification, table representation, table indexing, table navigation, schema matching, and entity matching. Augmentation systematically analyzes current TDA methods, categorized into retrieval-based methods, which retrieve external data, and generation-based methods, which generate synthetic data. We further subdivide these methods based on the granularity of the augmentation process at the row, column, cell, and table levels. Post-augmentation focuses on the datasets, evaluation and optimization aspects of TDA. We also summarize current trends and future directions for TDA, highlighting promising opportunities in the era of generative AI. In addition, the accompanying papers and related resources are continuously updated and maintained in the GitHub repository at https://github.com/SuDIS-ZJU/awesome-tabular-data-augmentation to reflect ongoing advancements in the field.},
+  url = {http://arxiv.org/abs/2407.21523v1}
+}

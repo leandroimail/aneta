@@ -1,0 +1,168 @@
+import requests
+import json
+import re
+import sys
+
+# Configurações iniciais
+API_KEY = '1825041034684c3c834157d982783d10'
+BASE_URL = 'https://api.springernature.com/meta/v2/json'
+QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
+RESULTS_DESEJADOS = 500
+PAGE_SIZE = 25
+records_agregados = []
+
+def extrai_ano(data_str):
+    if data_str:
+        match = re.search(r'(\d{4})', data_str)
+        if match:
+            return int(match.group(1))
+    return ""
+
+def converte_para_bibtex(record):
+    # Obtém autores
+    authors_list = record.get('creators', [])
+    authors = "; ".join([creator['creator'] for creator in authors_list])
+
+    keywords = record.get('keyword', '')
+    if isinstance(keywords, list):
+        keywords = "; ".join(keywords)
+    elif isinstance(keywords, str):
+        keywords = keywords.strip()
+    else:
+        keywords = ""
+
+    abstract = record.get('abstract', '').strip()
+    title = record.get('title', '').strip()
+    cover_date = record.get('publicationDate', '')
+    year = extrai_ano(cover_date)
+    type_publication = record.get('contentType', '').strip()
+    publication = record.get('publicationName', '').strip()
+    publisher = record.get('publisherName', '').strip()  # Obtém o nome da editora responsável pela publicação
+    doi = record.get('doi', '').strip()
+
+    # Cria uma chave única para o BibTeX; utiliza o DOI se disponível, senão utiliza parte do título
+    if doi:
+        bibtex_key = doi.replace('/', '_')
+    else:
+        bibtex_key = re.sub(r'\W+', '', title)[:20] if title else "sem_titulo"
+
+    if type_publication == "Chapter ConferencePaper":
+        bibtex_entry = (
+            f"@inproceedings{{{bibtex_key},\n"
+            f"  authors = {{{authors}}},\n"
+            f"  keywords = {{{keywords}}},\n"
+            f"  abstract = {{{abstract}}},\n"
+            f"  title = {{{title}}},\n"
+            f"  year = {{{year}}},\n"
+            f"  type_publication = {{{type_publication}}},\n"
+            f"  publication = {{{publication}}},\n"
+            f"  publisher = {{{publisher}}},\n"
+            f"  doi = {{{doi}}}\n"
+            f"}}\n"
+        )
+    else:  # Default para tipo "Article"
+        bibtex_entry = (
+            f"@article{{{bibtex_key},\n"
+            f"  authors = {{{authors}}},\n"
+            f"  keywords = {{{keywords}}},\n"
+            f"  abstract = {{{abstract}}},\n"
+            f"  title = {{{title}}},\n"
+            f"  year = {{{year}}},\n"
+            f"  type_publication = {{{type_publication}}},\n"
+            f"  publication = {{{publication}}},\n"
+            f"  publisher = {{{publisher}}},\n"
+            f"  doi = {{{doi}}}\n"
+            f"}}\n"
+        )
+    return bibtex_entry
+
+def main():
+    global records_agregados
+    erro_ocorrido = False
+
+    print("Iniciando a coleta dos registros da API Springer Nature...\n")
+
+    num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE else 0)
+    print(f"Será necessário realizar até {num_requisicoes} requisições (p={PAGE_SIZE}).\n")
+
+    for i in range(num_requisicoes):
+        start = 1 + i * PAGE_SIZE
+        params = {
+            'api_key': API_KEY,
+            'q': QUERY,
+            's': start,
+            'p': PAGE_SIZE
+        }
+
+        url_debug = requests.Request('GET', BASE_URL, params=params).prepare().url
+        print(f"Requisição {i+1} iniciada para resultados a partir do registro {start}:")
+        print(f"URL: {url_debug}\n")
+
+        try:
+            response = requests.get(BASE_URL, params=params)
+        except Exception as e:
+            print(f"Exceção durante a requisição: {e}")
+            erro_ocorrido = True
+            break
+
+        if response.status_code == 200:
+            print(f"Requisição bem-sucedida (status {response.status_code}).")
+            try:
+                data = response.json()
+            except Exception as e:
+                print(f"Erro ao decodificar o JSON da resposta: {e}")
+                erro_ocorrido = True
+                break
+
+            records = data.get('records', [])
+            if not records:
+                print("Nenhum registro retornado nesta página. Encerrando a coleta.\n")
+                break
+
+            records_agregados.extend(records)
+            print(f"{len(records)} registros recebidos. Total acumulado: {len(records_agregados)}\n")
+
+            if len(records) < PAGE_SIZE:
+                print("Menos registros retornados que o esperado para a página. Finalizando a coleta.\n")
+                break
+        else:
+            print(f"Erro na requisição: código de status {response.status_code}.")
+            try:
+                error_info = response.json()
+                print(json.dumps(error_info, indent=4, ensure_ascii=False))
+            except Exception:
+                print(response.text)
+            erro_ocorrido = True
+            break
+
+    if erro_ocorrido or not records_agregados:
+        print("\nHouve um erro durante a coleta ou nenhum registro foi encontrado. Nenhum arquivo será salvo.")
+        sys.exit(1)
+
+    try:
+        with open("resultados_api.json", "w", encoding="utf-8") as f_json:
+            json.dump(records_agregados, f_json, ensure_ascii=False, indent=4)
+        print("Todos os resultados brutos salvos em 'resultados_api.json'\n")
+    except Exception as e:
+        print(f"Erro ao salvar o arquivo JSON: {e}")
+        sys.exit(1)
+
+    registros_filtrados = [rec for rec in records_agregados if rec.get('contentType', '') in ["Article", "Chapter ConferencePaper"]]
+    print(f"Após filtragem, foram mantidos {len(registros_filtrados)} registros dos tipos desejados.\n")
+
+    if not registros_filtrados:
+        print("Nenhum registro do tipo desejado foi encontrado após a filtragem. Nenhum arquivo será salvo.")
+        sys.exit(1)
+
+    bibtex_entries = [converte_para_bibtex(record) for record in registros_filtrados]
+
+    try:
+        with open("resultados_api.bib", "w", encoding="utf-8") as f_bib:
+            f_bib.write("\n".join(bibtex_entries))
+        print("Resultados convertidos para BibTeX salvos em 'resultados_api.bib'")
+    except Exception as e:
+        print(f"Erro ao salvar o arquivo BibTeX: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

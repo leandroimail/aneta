@@ -371,7 +371,7 @@ def process_list(path_file_include_exclude, keywords, abstract, title, clean_wor
         if word:
             if clean_word:
                 word = re.sub('[^a-zA-Z0-9] ', '', word)
-                word = re.sub('\s+', '', word)
+                word = re.sub(r'\s+', '', word)
 
             if word in title.strip().replace("\n", "").lower():
                 return True
@@ -455,7 +455,7 @@ def select_final(bib):
     if path_exlude_manual_file:
         title = bib["title"]
         title = re.sub('[^a-zA-Z0-9] ', '', title)
-        title = re.sub('\s+', '', title)
+        title = re.sub(r'\s+', '', title)
         if process_list(path_exlude_manual_file, "", "", title, clean_word=True, only_title=True):
             return False
     return True
@@ -635,7 +635,7 @@ def call_results(bibs, bib_duplicate={}, type="select"):
     display_results(count_base, type + "_" +"bases", "base")
 
     print("\n")
-    print("--- Contagem Base\Type ---")
+    print(r"--- Contagem Base\Type ---")
     display_results(count_base_type, type + "_" +"base_type", "base_type")
 
     print("\n")
@@ -758,6 +758,13 @@ def analyzer(path):
         for bib in select_bibs:
             file.writelines(bib["title"] + "\n")
 
+    print("\n")
+    print("--- Gravando DOIs ---")
+    path = path_directory_bibs + "/OUTPUTS/DOIs.txt"
+    with open(path, "w", encoding="utf-8") as file:
+        for bib in select_bibs:
+            if bib["doi"].strip().replace("\n", "").replace(" ", ""):
+                file.writelines(bib["doi"] + "\n")
 
 def get_analyse():
     create_folder(path_directory_bibs)
