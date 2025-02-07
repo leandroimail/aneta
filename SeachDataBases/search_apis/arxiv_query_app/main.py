@@ -6,7 +6,7 @@ import re
 import sys
 
 # =============================================================================
-# Configurações iniciais para a API arXiv
+# Initial configurations for the arXiv API
 # =============================================================================
 BASE_URL = 'http://export.arxiv.org/api/query'
 QUERY = (
@@ -16,9 +16,9 @@ QUERY = (
     'all:"Retrieval Augmented Generation")'
 )
 RESULTS_DESEJADOS = 500
-PAGE_SIZE = 25  # Número máximo de registros por requisição
+PAGE_SIZE = 25  # Maximum number of records per request
 
-# Namespaces presentes no XML retornado pela API
+# Namespaces present in the XML returned by the API
 ns = {
     'atom': 'http://www.w3.org/2005/Atom',
     'arxiv': 'http://arxiv.org/schemas/atom'
@@ -29,10 +29,10 @@ raw_feeds = []
 
 
 # =============================================================================
-# Funções auxiliares
+# Helper functions
 # =============================================================================
 def extrai_ano(data_str):
-    """Extrai o ano a partir de uma string de data."""
+    """Extracts the year from a date string."""
     if data_str:
         match = re.search(r'(\d{4})', data_str)
         if match:
@@ -42,32 +42,32 @@ def extrai_ano(data_str):
 
 def parse_xml_entry(entry):
     """
-    Recebe um elemento XML <entry> e extrai os campos desejados,
-    retornando um dicionário com os dados.
+    Receives an XML <entry> element and extracts the desired fields,
+    returning a dictionary with the data.
     """
     record = {}
 
-    # Campo id (ex.: http://arxiv.org/abs/2410.24105v1)
+    # Field id (e.g., http://arxiv.org/abs/2410.24105v1)
     id_elem = entry.find('atom:id', ns)
     if id_elem is not None and id_elem.text:
         record["id"] = id_elem.text.strip()
 
-    # Título
+    # Title
     title_elem = entry.find('atom:title', ns)
     if title_elem is not None and title_elem.text:
         record["title"] = title_elem.text.strip()
 
-    # Data de publicação
+    # Publication date
     published_elem = entry.find('atom:published', ns)
     if published_elem is not None and published_elem.text:
         record["published"] = published_elem.text.strip()
 
-    # Resumo/abstract
+    # Abstract/summary
     summary_elem = entry.find('atom:summary', ns)
     if summary_elem is not None and summary_elem.text:
         record["summary"] = summary_elem.text.strip()
 
-    # Autores
+    # Authors
     authors = []
     for author in entry.findall('atom:author', ns):
         name_elem = author.find('atom:name', ns)
@@ -75,20 +75,20 @@ def parse_xml_entry(entry):
             authors.append({"name": name_elem.text.strip()})
     record["authors"] = authors
 
-    # Categorias (tags)
+    # Categories (tags/keywords from arXiv)
     tags = []
     for category in entry.findall('atom:category', ns):
         term = category.attrib.get("term", "").strip()
         if term:
             tags.append({"term": term})
-    record["tags"] = tags
+    record["tags"] = tags  # These are the keywords extracted from arXiv categories
 
-    # Categoria primária (se disponível)
+    # Primary category (if available)
     primary_cat = entry.find('arxiv:primary_category', ns)
     if primary_cat is not None:
         record["arxiv_primary_category"] = {"term": primary_cat.attrib.get("term", "").strip()}
 
-    # Tenta extrair o DOI do XML (pode não estar presente em muitos casos)
+    # Attempts to extract DOI from XML (may not be present in many cases)
     doi_elem = entry.find('arxiv:doi', ns)
     if doi_elem is not None and doi_elem.text:
         record["doi"] = doi_elem.text.strip()
@@ -98,8 +98,8 @@ def parse_xml_entry(entry):
 
 def obter_doi(record, arxiv_id):
     """
-    Retorna o DOI presente no record ou, se ausente, gera-o a partir do arXiv ID.
-    Remove o sufixo de versão (por meio de re.sub(r'v\d+$', '', arxiv_id)) e constrói:
+    Returns the DOI present in the record or, if absent, generates it from the arXiv ID.
+    Removes the version suffix (using re.sub(r'v\d+$', '', arxiv_id)) and constructs:
 
       https://doi.org/10.48550/arXiv.<arxiv_id_sem_versao>
 
@@ -110,7 +110,7 @@ def obter_doi(record, arxiv_id):
     """
     doi = record.get("doi", "")
     if not doi and arxiv_id:
-        # Remove o sufixo de versão (ex.: 'v1', 'v2', etc.)
+        # Remove the version suffix (e.g., 'v1', 'v2', etc.)
         arxiv_base = re.sub(r'v\d+$', '', arxiv_id)
         doi = f"https://doi.org/10.48550/arXiv.{arxiv_base}"
     return doi
@@ -118,11 +118,11 @@ def obter_doi(record, arxiv_id):
 
 def converte_para_bibtex(record):
     """
-    Converte um registro (dicionário) em uma entrada BibTeX.
-    Se o DOI não for fornecido no XML, ele é gerado a partir do arXiv ID.
-    Se o tipo de publicação não estiver presente, ele é fixado como "Arxiv Paper".
+    Converts a record (dictionary) into a BibTeX entry.
+    If the DOI is not provided in the XML, it is generated from the arXiv ID.
+    If the publication type is not present, it is fixed as "Arxiv Paper".
     """
-    # Formata os autores para o padrão BibTeX (nomes separados por "and")
+    # Format authors for BibTeX standard (names separated by "and")
     authors_list = record.get('authors', [])
     authors = " and ".join([author.get('name', '') for author in authors_list])
 
@@ -131,29 +131,30 @@ def converte_para_bibtex(record):
     published = record.get('published', '')
     year = extrai_ano(published)
 
-    # Extrai o arXiv ID a partir do campo 'id'
+    # Extract the arXiv ID from the 'id' field
     arxiv_id = ""
     if "id" in record:
         arxiv_id = record["id"].split('/abs/')[-1]
 
-    # Gera uma chave única para a entrada BibTeX
+    # Generate a unique key for the BibTeX entry
     bibtex_key = re.sub(r'\W+', '', arxiv_id) if arxiv_id else (
         re.sub(r'\W+', '', title)[:20] if title else "sem_titulo"
     )
 
-    # Concatena palavras-chave a partir das tags
+    # Concatenate keywords from tags
     tags = record.get("tags", [])
+    # Directly use the terms from tags as keywords, separated by semicolons
     keywords = "; ".join([tag.get("term", "") for tag in tags]) if tags else ""
 
-    # Categoria primária (se disponível)
+    # Primary category (if available)
     primary_category = ""
     if 'arxiv_primary_category' in record:
         primary_category = record['arxiv_primary_category'].get('term', '')
 
-    # Obtém o DOI (se ausente, gera a partir do arXiv ID)
+    # Get the DOI (if absent, generate from arXiv ID)
     doi = obter_doi(record, arxiv_id)
 
-    # Tipo de publicação fixado como "Arxiv Paper"
+    # Publication type fixed as "Arxiv Paper"
     type_publication = "Arxiv Paper" # Publication Type fixed as "Arxiv Paper" (Instruction 2)
 
     bibtex_entry = (
@@ -166,7 +167,7 @@ def converte_para_bibtex(record):
         f"  primaryClass = {{{primary_category}}},\n"
         f"  type_publication = {{{type_publication}}},\n"
         f"  doi = {{{doi}}},\n"
-        f"  keywords = {{{keywords}}},\n"
+        f"  keywords = {{{keywords}}},\n" # Keywords are directly from arXiv categories
         f"  abstract = {{{abstract}}},\n"
         f"  url = {{{record.get('id', '')}}}\n"
         f"}}\n"
@@ -176,8 +177,8 @@ def converte_para_bibtex(record):
 
 def simplifica_entry(record):
     """
-    Cria um dicionário simplificado com os campos principais do registro,
-    facilitando a serialização para JSON.
+    Creates a simplified dictionary with the main fields of the record,
+    facilitating serialization to JSON.
     """
     dados = {
         "id": record.get("id", ""),
@@ -185,7 +186,7 @@ def simplifica_entry(record):
         "published": record.get("published", ""),
         "summary": record.get("summary", "").replace('\n', ' ').strip(),
         "authors": [author.get("name", "") for author in record.get("authors", [])],
-        "tags": [tag.get("term", "") for tag in record.get("tags", [])]
+        "tags": [tag.get("term", "") for tag in record.get("tags", [])] # Keywords are directly from arXiv categories
     }
     if "arxiv_primary_category" in record:
         dados["arxiv_primary_category"] = record["arxiv_primary_category"].get("term", "")
@@ -195,14 +196,14 @@ def simplifica_entry(record):
 
 
 # =============================================================================
-# Função principal
+# Main function
 # =============================================================================
 def main():
     global records_agregados, raw_feeds
     erro_ocorrido = False
-    print("Iniciando a coleta dos registros da API arXiv...\n")
+    print("Starting the collection of records from the arXiv API...\n")
     num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE else 0)
-    print(f"Serão realizadas até {num_requisicoes} requisições (max_results={PAGE_SIZE}).\n")
+    print(f"Up to {num_requisicoes} requests will be made (max_results={PAGE_SIZE}).\n")
 
     for i in range(num_requisicoes):
         start = i * PAGE_SIZE
@@ -212,62 +213,62 @@ def main():
             'max_results': PAGE_SIZE
         }
         url = BASE_URL + "?" + urllib.parse.urlencode(params)
-        print(f"Requisição {i+1} iniciada para resultados a partir do registro {start}:")
+        print(f"Request {i+1} initiated for results starting from record {start}:")
         print(f"URL: {url}\n")
 
         try:
             response = requests.get(url)
         except Exception as e:
-            print(f"Exceção durante a requisição: {e}")
+            print(f"Exception during request: {e}")
             erro_ocorrido = True
             break
 
         if response.status_code != 200:
-            print(f"Erro na requisição: código de status {response.status_code}.")
+            print(f"Error in request: status code {response.status_code}.")
             erro_ocorrido = True
             break
 
         try:
-            # Faz o parsing do XML e armazena o feed bruto
+            # Parses the XML and stores the raw feed
             feed_xml = ET.fromstring(response.text)
             raw_feeds.append(feed_xml)
         except Exception as e:
-            print(f"Erro ao parsear o XML: {e}")
+            print(f"Error parsing XML: {e}")
             erro_ocorrido = True
             break
 
         entries = feed_xml.findall('atom:entry', ns)
         if not entries:
-            print("Nenhum registro retornado nesta página. Encerrando a coleta.\n")
+            print("No records returned on this page. Ending collection.\n")
             break
 
         for entry in entries:
             record = parse_xml_entry(entry)
             records_agregados.append(record)
 
-        print(f"{len(entries)} registros recebidos. Total acumulado: {len(records_agregados)}\n")
+        print(f"{len(entries)} records received. Accumulated total: {len(records_agregados)}\n")
         if len(entries) < PAGE_SIZE:
-            print("Menos registros retornados que o esperado para a página. Finalizando a coleta.\n")
+            print("Fewer records returned than expected for the page. Finalizing collection.\n")
             break
 
     if erro_ocorrido or not records_agregados:
-        print("\nHouve um erro durante a coleta ou nenhum registro foi encontrado. Nenhum arquivo será salvo.")
+        print("\nThere was an error during collection or no records were found. No files will be saved.")
         sys.exit(1)
 
     # -----------------------------------------------------------------------------
-    # Salva os dados simplificados em JSON
+    # Saves simplified data in JSON
     # -----------------------------------------------------------------------------
     registros_json = [simplifica_entry(record) for record in records_agregados]
     try:
         with open("resultados_api.json", "w", encoding="utf-8") as f_json:
             json.dump(registros_json, f_json, ensure_ascii=False, indent=4)
-        print("Resultados simplificados salvos em 'resultados_api.json'\n")
+        print("Simplified results saved in 'resultados_api.json'\n")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo JSON: {e}")
+        print(f"Error saving JSON file: {e}")
         sys.exit(1)
 
     # -----------------------------------------------------------------------------
-    # Salva os feeds XML agregados
+    # Saves aggregated XML feeds
     # -----------------------------------------------------------------------------
     try:
         root_agg = ET.Element("results")
@@ -275,22 +276,26 @@ def main():
             root_agg.append(feed)
         tree = ET.ElementTree(root_agg)
         tree.write("resultados_api.xml", encoding="utf-8", xml_declaration=True)
-        print("Feeds XML agregados salvos em 'resultados_api.xml'\n")
+        print("Aggregated XML feeds saved in 'resultados_api.xml'\n")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo XML: {e}")
+        print(f"Error saving XML file: {e}")
         sys.exit(1)
 
     # -----------------------------------------------------------------------------
-    # Converte os registros para entradas BibTeX e salva
+    # Converts records to BibTeX entries and saves
     # -----------------------------------------------------------------------------
     bibtex_entries = [converte_para_bibtex(record) for record in records_agregados]
     try:
         with open("resultados_api.bib", "w", encoding="utf-8") as f_bib:
             f_bib.write("\n".join(bibtex_entries))
-        print("Entradas BibTeX salvas em 'resultados_api.bib'")
+        print("BibTeX entries saved in 'resultados_api.bib'")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo BibTeX: {e}")
+        print(f"Error saving BibTeX file: {e}")
         sys.exit(1)
+
+    print("\nData collection and saving process completed successfully.")
+    print("Please note: Keywords are extracted directly from arXiv API categories.")
+    print("If specific keyword classification or filtering is desired, further processing needs to be implemented.")
 
 
 if __name__ == "__main__":

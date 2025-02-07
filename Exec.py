@@ -11,7 +11,7 @@ run_abstract = False
 
 ###################  Informe se deve-se rodar o download dos papers
 ###################  run_download_papers seja falso, rodará a Análise dos Bibtex
-run_download_papers = True
+run_download_papers = False
 bib_file = "OUTPUTS/select_bibs.bib"
 doi_file = "OUTPUTS/DOIs.txt"
 folder_save_pdf = "PDFs"
