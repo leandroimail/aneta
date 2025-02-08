@@ -51,4 +51,5 @@ path_directory_file_json = os.path.join(path_directory_bibs, json_file)
 
 json_bibs = extract_bibtex_info(path_directory_file_bib, path_directory_file_json)
 
+print(f"Quantidade de artigos {len(json_bibs)}")
 print(json_bibs)
