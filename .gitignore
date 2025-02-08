@@ -1,3 +1,16 @@
+### Files and paths to ignore ###
+# Compiled source #
+Sandbox/
+Sandbox/*
+zSandbox/
+zSandbox/*
+SandBox/
+SandBox/*
+zSanBoox/
+zSanBoox/*
+
+
+
 ### RStudio ###
 .Rproj.user
 .Rhistory
