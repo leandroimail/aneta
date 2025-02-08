@@ -37,8 +37,21 @@ def converte_para_bibtex(record):
     year = extrai_ano(cover_date)
     type_publication = record.get('contentType', '').strip()
     publication = record.get('publicationName', '').strip()
-    publisher = record.get('publisherName', '').strip()  # Obtém o nome da editora responsável pela publicação
+    publisher = record.get('publisherName', '').strip()  # Nome da editora responsável pela publicação
     doi = record.get('doi', '').strip()
+
+    # Extrai as URLs para PDF e HTML, se disponíveis
+    url_pdf = ""
+    url_html = ""
+    urls = record.get("url", [])
+    if isinstance(urls, list):
+        for link in urls:
+            if isinstance(link, dict):
+                fmt = link.get("format", "").lower()
+                if fmt == "pdf":
+                    url_pdf = link.get("value", "")
+                elif fmt == "html":
+                    url_html = link.get("value", "")
 
     # Cria uma chave única para o BibTeX; utiliza o DOI se disponível, senão utiliza parte do título
     if doi:
@@ -46,6 +59,7 @@ def converte_para_bibtex(record):
     else:
         bibtex_key = re.sub(r'\W+', '', title)[:20] if title else "sem_titulo"
 
+    # Constrói a entrada BibTeX com os novos campos url_pdf e url_html
     if type_publication == "Chapter ConferencePaper":
         bibtex_entry = (
             f"@inproceedings{{{bibtex_key},\n"
@@ -57,7 +71,9 @@ def converte_para_bibtex(record):
             f"  type_publication = {{{type_publication}}},\n"
             f"  publication = {{{publication}}},\n"
             f"  publisher = {{{publisher}}},\n"
-            f"  doi = {{{doi}}}\n"
+            f"  doi = {{{doi}}},\n"
+            f"  url_pdf = {{{url_pdf}}},\n"
+            f"  url_html = {{{url_html}}}\n"
             f"}}\n"
         )
     else:  # Default para tipo "Article"
@@ -71,7 +87,9 @@ def converte_para_bibtex(record):
             f"  type_publication = {{{type_publication}}},\n"
             f"  publication = {{{publication}}},\n"
             f"  publisher = {{{publisher}}},\n"
-            f"  doi = {{{doi}}}\n"
+            f"  doi = {{{doi}}},\n"
+            f"  url_pdf = {{{url_pdf}}},\n"
+            f"  url_html = {{{url_html}}}\n"
             f"}}\n"
         )
     return bibtex_entry
@@ -140,9 +158,9 @@ def main():
         sys.exit(1)
 
     try:
-        with open("resultados_api.json", "w", encoding="utf-8") as f_json:
+        with open("springer.json", "w", encoding="utf-8") as f_json:
             json.dump(records_agregados, f_json, ensure_ascii=False, indent=4)
-        print("Todos os resultados brutos salvos em 'resultados_api.json'\n")
+        print("Todos os resultados brutos salvos em 'springer.json'\n")
     except Exception as e:
         print(f"Erro ao salvar o arquivo JSON: {e}")
         sys.exit(1)
@@ -157,9 +175,9 @@ def main():
     bibtex_entries = [converte_para_bibtex(record) for record in registros_filtrados]
 
     try:
-        with open("resultados_api.bib", "w", encoding="utf-8") as f_bib:
+        with open("springer.bib", "w", encoding="utf-8") as f_bib:
             f_bib.write("\n".join(bibtex_entries))
-        print("Resultados convertidos para BibTeX salvos em 'resultados_api.bib'")
+        print("Resultados convertidos para BibTeX salvos em 'springer.bib'")
     except Exception as e:
         print(f"Erro ao salvar o arquivo BibTeX: {e}")
         sys.exit(1)

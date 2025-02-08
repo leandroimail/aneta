@@ -9,7 +9,7 @@ import sys
 # Initial configurations for the arXiv API
 # =============================================================================
 BASE_URL = 'http://export.arxiv.org/api/query'
-QUERY = '"Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation")'
+QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
 RESULTS_DESEJADOS = 500
 PAGE_SIZE = 25  # Maximum number of records per request
 
@@ -88,30 +88,98 @@ def parse_xml_entry(entry):
     if doi_elem is not None and doi_elem.text:
         record["doi"] = doi_elem.text.strip()
 
+    # -------------------------------------------------------------------------
+    # Extração dos links para download do HTML e do PDF a partir dos elementos <link>
+    # -------------------------------------------------------------------------
+    url_pdf = ""
+    url_html = ""
+    for link in entry.findall('atom:link', ns):
+        href = link.attrib.get("href", "").strip()
+        rel = link.attrib.get("rel", "").strip()
+        typ = link.attrib.get("type", "").strip()
+        title = link.attrib.get("title", "").strip().lower()
+        if rel == "alternate" and typ == "text/html":
+            url_html = href
+        elif title == "pdf" or (rel == "related" and typ == "application/pdf"):
+            url_pdf = href
+    record["url_pdf"] = url_pdf
+    record["url_html"] = url_html
+
     return record
 
 
+# def converter_query(query):
+#     """
+#     Converte a query do novo formato para o formato desejado pelo arXiv API.
+#     """
+#     def processar_termo(termo):
+#         return f'all:"{termo}"' if ' ' in termo else f'all:{termo}'
+
+#     # Substituir os operadores AND e OR por versões em maiúsculas
+#     query = query.replace(' and ', ' AND ').replace(' or ', ' OR ')
+
+#     # Processar a query
+#     partes = re.findall(r'\(.*?\)|".*?"|\S+', query)
+#     nova_query = []
+#     for parte in partes:
+#         if parte.startswith('(') and parte.endswith(')'):
+#             nova_query.append(f'({converter_query(parte[1:-1])})')
+#         elif parte in ('AND', 'OR'):
+#             nova_query.append(parte)
+#         else:
+#             nova_query.append(processar_termo(parte))
+#     return ' '.join(nova_query)
 def converter_query(query):
     """
-    Converte a query do novo formato para o formato desejado pelo arXiv API.
+    Converte a query (no formato livre) para o formato desejado pelo arXiv,
+    em que cada termo deve ser 'all:termo' ou 'all:"termo com espaco"',
+    respeitando operadores AND, OR, NOT -> ANDNOT e parênteses.
+    
+    Exemplo de uso:
+      Input:
+        ("Schema Matching" AND ("Language Model" OR "LLM"))
+      Saída:
+        ( all:"Schema Matching" AND ( all:"Language Model" OR all:"LLM" ) )
     """
-    def processar_termo(termo):
-        return f'all:"{termo}"' if ' ' in termo else f'all:{termo}'
 
-    # Substituir os operadores AND e OR por versões em maiúsculas
-    query = query.replace(' and ', ' AND ').replace(' or ', ' OR ')
+    # Regex para capturar:
+    # - Parênteses: ( ou )
+    # - Strings entre aspas: "..."
+    # - Operadores lógicos: AND, OR, ANDNOT, NOT
+    # - Qualquer outro 'token' sem espaço nem parênteses
+    pattern = r'(\(|\)|"[^"]*"|ANDNOT|AND|OR|NOT|[^()\s]+)'
 
-    # Processar a query
-    partes = re.findall(r'\(.*?\)|".*?"|\S+', query)
-    nova_query = []
-    for parte in partes:
-        if parte.startswith('(') and parte.endswith(')'):
-            nova_query.append(f'({converter_query(parte[1:-1])})')
-        elif parte in ('AND', 'OR'):
-            nova_query.append(parte)
+    # Quebramos a query em tokens
+    tokens = re.findall(pattern, query, flags=re.IGNORECASE)
+
+    resultado = []
+    for token in tokens:
+        # Normalizamos para checar operadores em maiúsculo
+        upper_token = token.upper()
+
+        if token == '(' or token == ')':
+            # Mantém parênteses como estão
+            resultado.append(token)
+        elif upper_token in ['AND', 'OR', 'ANDNOT']:
+            # Mantém operadores em maiúsculo
+            resultado.append(upper_token)
+        elif upper_token == 'NOT':
+            # Converte NOT em ANDNOT
+            resultado.append('ANDNOT')
+        elif token.startswith('"') and token.endswith('"'):
+            # Token entre aspas -> remove as aspas externas e converte para all:"conteúdo"
+            frase = token[1:-1]  # remove aspas
+            resultado.append(f'all:"{frase}"')
         else:
-            nova_query.append(processar_termo(parte))
-    return ' '.join(nova_query)
+            # Se o token tiver espaço, usa aspas
+            if ' ' in token or '-' in token:
+                resultado.append(f'all:"{token}"')
+            else:
+                resultado.append(f'all:{token}')
+
+    # Junta tudo com espaço como separador
+    return ' '.join(resultado)
+
 
 def obter_doi(record, arxiv_id):
     """
@@ -172,7 +240,11 @@ def converte_para_bibtex(record):
     doi = obter_doi(record, arxiv_id)
 
     # Publication type fixed as "Arxiv Paper"
-    type_publication = "Arxiv Paper" # Publication Type fixed as "Arxiv Paper" (Instruction 2)
+    type_publication = "Arxiv Paper"  # Publication Type fixed as "Arxiv Paper"
+
+    # Recupera os links para PDF e HTML extraídos
+    url_pdf = record.get("url_pdf", "")
+    url_html = record.get("url_html", "")
 
     bibtex_entry = (
         f"@misc{{{bibtex_key},\n"
@@ -184,9 +256,11 @@ def converte_para_bibtex(record):
         f"  primaryClass = {{{primary_category}}},\n"
         f"  type_publication = {{{type_publication}}},\n"
         f"  doi = {{{doi}}},\n"
-        f"  keywords = {{{keywords}}},\n" # Keywords are directly from arXiv categories
+        f"  keywords = {{{keywords}}},\n"  # Keywords are directly from arXiv categories
         f"  abstract = {{{abstract}}},\n"
-        f"  url = {{{record.get('id', '')}}}\n"
+        f"  url = {{{record.get('id', '')}}},\n"
+        f"  url_pdf = {{{url_pdf}}},\n"
+        f"  url_html = {{{url_html}}}\n"
         f"}}\n"
     )
     return bibtex_entry
@@ -199,16 +273,21 @@ def simplifica_entry(record):
     """
     dados = {
         "id": record.get("id", ""),
-        "title": record.get("title", "").replace('\n', ' ').strip(),
+        "title": record.get("title", "").replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').strip(),
         "published": record.get("published", ""),
-        "summary": record.get("summary", "").replace('\n', ' ').strip(),
+        "summary": record.get("summary", "").replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').strip(),
         "authors": [author.get("name", "") for author in record.get("authors", [])],
-        "tags": [tag.get("term", "") for tag in record.get("tags", [])] # Keywords are directly from arXiv categories
+        "tags": [tag.get("term", "") for tag in record.get("tags", [])]  # Keywords are directly from arXiv categories
     }
     if "arxiv_primary_category" in record:
         dados["arxiv_primary_category"] = record["arxiv_primary_category"].get("term", "")
     if "doi" in record:
         dados["doi"] = record["doi"]
+    # Opcional: incluir também os links extraídos, se desejado no JSON simplificado
+    if "url_pdf" in record:
+        dados["url_pdf"] = record["url_pdf"]
+    if "url_html" in record:
+        dados["url_html"] = record["url_html"]
     return dados
 
 
