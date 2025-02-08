@@ -9,12 +9,7 @@ import sys
 # Initial configurations for the arXiv API
 # =============================================================================
 BASE_URL = 'http://export.arxiv.org/api/query'
-QUERY = (
-    'all:"Schema Matching" AND ('
-    'all:"Language Model" OR all:LLM OR all:"Generative AI" OR '
-    'all:GenAI OR all:RAG OR all:"Retrieval-Augmented Generation" OR '
-    'all:"Retrieval Augmented Generation")'
-)
+QUERY = '"Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation")'
 RESULTS_DESEJADOS = 500
 PAGE_SIZE = 25  # Maximum number of records per request
 
@@ -95,6 +90,28 @@ def parse_xml_entry(entry):
 
     return record
 
+
+def converter_query(query):
+    """
+    Converte a query do novo formato para o formato desejado pelo arXiv API.
+    """
+    def processar_termo(termo):
+        return f'all:"{termo}"' if ' ' in termo else f'all:{termo}'
+
+    # Substituir os operadores AND e OR por versões em maiúsculas
+    query = query.replace(' and ', ' AND ').replace(' or ', ' OR ')
+
+    # Processar a query
+    partes = re.findall(r'\(.*?\)|".*?"|\S+', query)
+    nova_query = []
+    for parte in partes:
+        if parte.startswith('(') and parte.endswith(')'):
+            nova_query.append(f'({converter_query(parte[1:-1])})')
+        elif parte in ('AND', 'OR'):
+            nova_query.append(parte)
+        else:
+            nova_query.append(processar_termo(parte))
+    return ' '.join(nova_query)
 
 def obter_doi(record, arxiv_id):
     """
@@ -299,4 +316,5 @@ def main():
 
 
 if __name__ == "__main__":
+    QUERY = converter_query(QUERY)
     main()
