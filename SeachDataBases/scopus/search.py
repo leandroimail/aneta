@@ -98,6 +98,9 @@ def main(query, path_data):
     print("==============================================\n")
     
     out_dir = os.path.join(path_data, "scopus")
+    if os.path.exists(out_dir):
+        import shutil
+        shutil.rmtree(out_dir)
     os.makedirs(out_dir, exist_ok=True)
     global records_agregados
     

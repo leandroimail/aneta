@@ -4,6 +4,7 @@ import requests
 import json
 import re
 import sys
+import shutil
 
 load_dotenv()
 
@@ -111,6 +112,8 @@ def main(query, path_data):
         
     # Cria a pasta específica para Web of Science dentro do path_data
     out_dir = os.path.join(path_data, "web_of_science")
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
     os.makedirs(out_dir, exist_ok=True)
     
     global records_agregados
@@ -196,6 +199,6 @@ def main(query, path_data):
 # Execução principal
 # ============================================================
 if __name__ == "__main__":
-    QUERY = sys.argv[1] if len(sys.argv) > 1 else ""
-    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else ""
+    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "")
     main(QUERY, PATH_DATA)
