@@ -105,6 +105,11 @@ def converte_para_bibtex(entry):
 def main(query, path_data):
     global records_agregados
     
+    # Log inicial melhorado
+    print("\n==============================================")
+    print("         INICIANDO BUSCA: IEEE Xplore         ")
+    print("==============================================\n")
+    
     out_dir = os.path.join(path_data, "ieee")
     os.makedirs(out_dir, exist_ok=True)
     
@@ -172,6 +177,12 @@ def main(query, path_data):
             sys.exit(1)
     else:
         print("Nenhum registro encontrado. Nenhum arquivo gerado.")
+    
+    # Log final
+    print("\n==============================================")
+    print("         BUSCA FINALIZADA: IEEE Xplore          ")
+    print(f"      Artigos encontros e adicionados: {len(records_agregados)}")
+    print("==============================================\n")
 
 # ============================================================
 # Execução principal

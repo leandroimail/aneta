@@ -1,6 +1,6 @@
-arxiv: false
-ieee: false
-science_direct: false
-scopus: false
-spring_nature: false
+arxiv: true
+ieee: true
+science_direct: true
+scopus: true
+spring_nature: true
 web_of_science: true

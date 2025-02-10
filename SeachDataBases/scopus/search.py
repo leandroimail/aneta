@@ -92,6 +92,11 @@ def converte_para_bibtex(entry):
     return bibtex_entry
 
 def main(query, path_data):
+    # Log inicial melhorado
+    print("\n==============================================")
+    print("         INICIANDO BUSCA: SCOPUS              ")
+    print("==============================================\n")
+    
     out_dir = os.path.join(path_data, "scopus")
     os.makedirs(out_dir, exist_ok=True)
     global records_agregados
@@ -167,6 +172,13 @@ def main(query, path_data):
             sys.exit(1)
     else:
         print("Nenhum registro encontrado. Nenhum arquivo gerado.")
+    
+    # Log final
+    total = len(records_agregados)
+    print("\n==============================================")
+    print("         BUSCA FINALIZADA: SCOPUS             ")
+    print(f"       Artigos encontros e adicionados: {total}")
+    print("==============================================\n")
 
 if __name__ == "__main__":
     import sys

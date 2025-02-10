@@ -100,6 +100,11 @@ def converte_para_bibtex(record):
     return bibtex_entry
 
 def main(query, path_data):
+    # Log inicial melhorado
+    print("\n==============================================")
+    print("       INICIANDO BUSCA: SPRING NATURE           ")
+    print("==============================================\n")
+    
     out_dir = os.path.join(path_data, "spring_nature")
     os.makedirs(out_dir, exist_ok=True)
     global records_agregados
@@ -188,6 +193,13 @@ def main(query, path_data):
     except Exception as e:
         print(f"Erro ao salvar o arquivo BibTeX: {e}")
         sys.exit(1)
+
+    total = len(records_agregados)
+    # Log final
+    print("\n==============================================")
+    print("     BUSCA FINALIZADA: SPRING NATURE            ")
+    print(f"      Artigos encontros e adicionados: {total}")
+    print("==============================================\n")
 
 if __name__ == "__main__":
     import sys

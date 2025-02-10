@@ -100,6 +100,11 @@ def converte_para_bibtex(entry):
 # Função principal
 # ============================================================
 def main(query, path_data):
+    # Log inicial melhorado
+    print("\n==============================================")
+    print("        INICIANDO BUSCA: WEB OF SCIENCE       ")
+    print("==============================================\n")
+    
     # Se não houver query, utiliza a variável de ambiente SEARCH_QUERY
     if not query:
         query = os.getenv("SEARCH_QUERY", "")
@@ -114,7 +119,6 @@ def main(query, path_data):
         'Accept': 'application/json'
     }
     
-    print("Web of Science search started.")
     print("Query:", query)
     print("Path Data:", path_data)
     
@@ -181,6 +185,12 @@ def main(query, path_data):
             sys.exit(1)
     else:
         print("Nenhum registro encontrado. Nenhum arquivo gerado.")
+    
+    # Log final com total de artigos encontros e adicionados:
+    print("\n==============================================")
+    print("     BUSCA FINALIZADA: WEB OF SCIENCE         ")
+    print(f"   Artigos encontros e adicionados: {len(records_agregados)}")
+    print("==============================================\n")
 
 # ============================================================
 # Execução principal

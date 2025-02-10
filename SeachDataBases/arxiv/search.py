@@ -275,6 +275,11 @@ def simplifica_entry(record):
 # Main function
 # =============================================================================
 def main(query, path_data):
+    # Log inicial melhorado
+    print("\n==============================================")
+    print("          INICIANDO BUSCA: ARXIV              ")
+    print("==============================================\n")
+    
     out_dir = os.path.join(path_data, "arxiv")
     os.makedirs(out_dir, exist_ok=True)
     global records_agregados, raw_feeds
@@ -371,6 +376,12 @@ def main(query, path_data):
     except Exception as e:
         print(f"Error saving BibTeX file: {e}")
         sys.exit(1)
+
+    # Log final
+    print("\n==============================================")
+    print("         BUSCA FINALIZADA: ARXIV               ")
+    print(f"       Artigos encontros e adicionados: {len(records_agregados)}")
+    print("==============================================\n")
 
     print("\nData collection and saving process completed successfully.")
     print("Please note: Keywords are extracted directly from arXiv API categories.")

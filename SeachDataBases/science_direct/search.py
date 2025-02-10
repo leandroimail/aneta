@@ -93,6 +93,11 @@ def converte_para_bibtex(record):
 # Função principal
 # ============================================================
 def main(query, path_data):
+    # Log inicial melhorado
+    print("\n==============================================")
+    print("      INICIANDO BUSCA: SCIENCE DIRECT         ")
+    print("==============================================\n")
+    
     out_dir = os.path.join(path_data, "science_direct")
     os.makedirs(out_dir, exist_ok=True)
     global records_agregados
@@ -188,6 +193,12 @@ def main(query, path_data):
     except Exception as e:
         print(f"Erro ao salvar o arquivo BibTeX: {e}")
         sys.exit(1)
+    
+    # Log final
+    print("\n==============================================")
+    print("     BUSCA FINALIZADA: SCIENCE DIRECT         ")
+    print(f"   Artigos encontros e adicionados: {len(records_agregados)}")
+    print("==============================================\n")
 
 
 # ============================================================
