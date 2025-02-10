@@ -1,17 +1,18 @@
+import os
 import requests
 import xml.etree.ElementTree as ET
 import urllib.parse
 import json
 import re
 import sys
+from dotenv import load_dotenv
 
-# =============================================================================
-# Initial configurations for the arXiv API
-# =============================================================================
+load_dotenv()
+
 BASE_URL = 'http://export.arxiv.org/api/query'
-QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
+# Remova a query fixa; ela será definida externamente
 RESULTS_DESEJADOS = 500
-PAGE_SIZE = 25  # Maximum number of records per request
+PAGE_SIZE = 25
 
 # Namespaces present in the XML returned by the API
 ns = {
@@ -108,27 +109,6 @@ def parse_xml_entry(entry):
     return record
 
 
-# def converter_query(query):
-#     """
-#     Converte a query do novo formato para o formato desejado pelo arXiv API.
-#     """
-#     def processar_termo(termo):
-#         return f'all:"{termo}"' if ' ' in termo else f'all:{termo}'
-
-#     # Substituir os operadores AND e OR por versões em maiúsculas
-#     query = query.replace(' and ', ' AND ').replace(' or ', ' OR ')
-
-#     # Processar a query
-#     partes = re.findall(r'\(.*?\)|".*?"|\S+', query)
-#     nova_query = []
-#     for parte in partes:
-#         if parte.startswith('(') and parte.endswith(')'):
-#             nova_query.append(f'({converter_query(parte[1:-1])})')
-#         elif parte in ('AND', 'OR'):
-#             nova_query.append(parte)
-#         else:
-#             nova_query.append(processar_termo(parte))
-#     return ' '.join(nova_query)
 def converter_query(query):
     """
     Converte a query (no formato livre) para o formato desejado pelo arXiv,
@@ -294,7 +274,9 @@ def simplifica_entry(record):
 # =============================================================================
 # Main function
 # =============================================================================
-def main():
+def main(query, path_data):
+    out_dir = os.path.join(path_data, "arxiv")
+    os.makedirs(out_dir, exist_ok=True)
     global records_agregados, raw_feeds
     erro_ocorrido = False
     print("Starting the collection of records from the arXiv API...\n")
@@ -304,7 +286,7 @@ def main():
     for i in range(num_requisicoes):
         start = i * PAGE_SIZE
         params = {
-            'search_query': QUERY,
+            'search_query': query,
             'start': start,
             'max_results': PAGE_SIZE
         }
@@ -356,7 +338,7 @@ def main():
     # -----------------------------------------------------------------------------
     registros_json = [simplifica_entry(record) for record in records_agregados]
     try:
-        with open("resultados_api.json", "w", encoding="utf-8") as f_json:
+        with open(os.path.join(out_dir, "resultados_api.json"), "w", encoding="utf-8") as f_json:
             json.dump(registros_json, f_json, ensure_ascii=False, indent=4)
         print("Simplified results saved in 'resultados_api.json'\n")
     except Exception as e:
@@ -371,7 +353,8 @@ def main():
         for feed in raw_feeds:
             root_agg.append(feed)
         tree = ET.ElementTree(root_agg)
-        tree.write("resultados_api.xml", encoding="utf-8", xml_declaration=True)
+        with open(os.path.join(out_dir, "resultados_api.xml"), "wb") as f_xml:
+            tree.write(f_xml, encoding="utf-8", xml_declaration=True)
         print("Aggregated XML feeds saved in 'resultados_api.xml'\n")
     except Exception as e:
         print(f"Error saving XML file: {e}")
@@ -382,7 +365,7 @@ def main():
     # -----------------------------------------------------------------------------
     bibtex_entries = [converte_para_bibtex(record) for record in records_agregados]
     try:
-        with open("resultados_api.bib", "w", encoding="utf-8") as f_bib:
+        with open(os.path.join(out_dir, "resultados_api.bib"), "w", encoding="utf-8") as f_bib:
             f_bib.write("\n".join(bibtex_entries))
         print("BibTeX entries saved in 'resultados_api.bib'")
     except Exception as e:
@@ -395,5 +378,9 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys
+    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl/Sandbox/Data")
+    # Converte a query, se necessário
     QUERY = converter_query(QUERY)
-    main()
+    main(QUERY, PATH_DATA)

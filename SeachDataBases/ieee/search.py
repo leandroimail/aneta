@@ -1,17 +1,21 @@
+import os
 import requests
 import json
 import re
 import sys
 from urllib.parse import quote
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ============================================================
 # Configurações iniciais
 # ============================================================
-API_KEY = "uz5phck8x3kbx8nfzvh78q3c"
+API_KEY = os.getenv("IEEE_API_KEY", "")
 BASE_URL = 'https://ieeexploreapi.ieee.org/api/v1/search/articles'
 
 # Query de pesquisa ajustada para sintaxe IEEE
-QS_QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
+# QS_QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
 
 RESULTS_DESEJADOS = 500
 PAGE_SIZE = 25  # IEEE permite até 200 por requisição
@@ -98,8 +102,11 @@ def converte_para_bibtex(entry):
 # ============================================================
 # Função principal
 # ============================================================
-def main():
+def main(query, path_data):
     global records_agregados
+    
+    out_dir = os.path.join(path_data, "ieee")
+    os.makedirs(out_dir, exist_ok=True)
     
     print("Iniciando coleta de registros da API IEEE Xplore...\n")
     
@@ -110,7 +117,7 @@ def main():
         start_record = (pagina * PAGE_SIZE) + 1  # IEEE começa em 1
         
         params = {
-            'querytext': QS_QUERY,
+            'querytext': query,
             'start_record': start_record,
             'max_records': PAGE_SIZE,
             'apikey': API_KEY
@@ -147,7 +154,7 @@ def main():
     # Salvando resultados brutos
     if records_agregados:
         try:
-            with open('ieee.json', 'w', encoding='utf-8') as f:
+            with open(os.path.join(out_dir, 'ieee.json'), 'w', encoding='utf-8') as f:
                 json.dump(records_agregados, f, indent=4, ensure_ascii=False)
             print("Dados brutos salvos em 'ieee.json'")
         except Exception as e:
@@ -156,7 +163,7 @@ def main():
         
         # Convertendo para BibTeX
         try:
-            with open('ieee.bib', 'w', encoding='utf-8') as f:
+            with open(os.path.join(out_dir, 'ieee.bib'), 'w', encoding='utf-8') as f:
                 bibtex_entries = [converte_para_bibtex(r) for r in records_agregados]
                 f.write('\n'.join(bibtex_entries))
             print("Arquivo BibTeX gerado: 'ieee.bib'")
@@ -170,4 +177,8 @@ def main():
 # Execução principal
 # ============================================================
 if __name__ == "__main__":
-    main()
+    import sys
+    # Assumindo que a query é passada como argumento ou obtida via .env
+    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl/Sandbox/Data")
+    main(QUERY, PATH_DATA)

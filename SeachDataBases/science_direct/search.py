@@ -1,17 +1,19 @@
+import os
 import requests
 import json
 import re
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ============================================================
 # Configurações iniciais
 # ============================================================
-API_KEY = "e795e9dbd2edeb1081126a218f52f693"
+API_KEY = os.getenv("ELSEVIER_API_KEY", "")
 BASE_URL = 'https://api.elsevier.com/content/search/sciencedirect'
 
-# Query definida para o campo "qs" (pesquisa livre sobre todo o conteúdo do artigo)
-QS_QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
-
+# Remova QS_QUERY fixa; use "query" que será passado
 RESULTS_DESEJADOS = 500
 PAGE_SIZE = 25  # Valores permitidos: 10, 25, 50, 100
 records_agregados = []
@@ -90,7 +92,9 @@ def converte_para_bibtex(record):
 # ============================================================
 # Função principal
 # ============================================================
-def main():
+def main(query, path_data):
+    out_dir = os.path.join(path_data, "science_direct")
+    os.makedirs(out_dir, exist_ok=True)
     global records_agregados
     erro_ocorrido = False
 
@@ -112,7 +116,7 @@ def main():
 
         # Corpo da requisição seguindo o schema da API v2
         body = {
-            "qs": QS_QUERY,
+            "qs": query,
             "display": {
                 "offset": offset,
                 "show": PAGE_SIZE,
@@ -167,7 +171,7 @@ def main():
 
     # Salvando os resultados brutos em arquivo JSON
     try:
-        with open("science_direct.json", "w", encoding="utf-8") as f_json:
+        with open(os.path.join(out_dir, "science_direct.json"), "w", encoding="utf-8") as f_json:
             json.dump(records_agregados, f_json, ensure_ascii=False, indent=4)
         print("Todos os resultados brutos salvos em 'science_direct.json'\n")
     except Exception as e:
@@ -178,7 +182,7 @@ def main():
     bibtex_entries = [converte_para_bibtex(record) for record in records_agregados]
 
     try:
-        with open("science_direct.bib", "w", encoding="utf-8") as f_bib:
+        with open(os.path.join(out_dir, "science_direct.bib"), "w", encoding="utf-8") as f_bib:
             f_bib.write("\n".join(bibtex_entries))
         print("Resultados convertidos para BibTeX salvos em 'science_direct.bib'")
     except Exception as e:
@@ -190,4 +194,6 @@ def main():
 # Execução principal
 # ============================================================
 if __name__ == "__main__":
-    main()
+    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl/Sandbox/Data")
+    main(QUERY, PATH_DATA)

@@ -1,16 +1,17 @@
+from dotenv import load_dotenv
+import os
 import requests
 import json
 import re
 import sys
 
+load_dotenv()
+
 # ============================================================
 # Configurações iniciais
 # ============================================================
-API_KEY = "c7edde98f32710dcb41c483da6f95b63284a9e08"
+API_KEY = os.getenv("WEB_OF_SCIENCE_KEY", "")
 BASE_URL = 'https://api.clarivate.com/apis/wos-starter/v1/documents'
-
-# Query de pesquisa (ajustada para sintaxe WoS)
-TS_QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
 
 RESULTS_DESEJADOS = 500
 PAGE_SIZE = 25  # WoS permite até 50 por página, mas usaremos 25 para consistência
@@ -98,20 +99,30 @@ def converte_para_bibtex(entry):
 # ============================================================
 # Função principal
 # ============================================================
-def main():
+def main(query, path_data):
+    # Se não houver query, utiliza a variável de ambiente SEARCH_QUERY
+    if not query:
+        query = os.getenv("SEARCH_QUERY", "")
+        
+    # Cria a pasta específica para Web of Science dentro do path_data
+    out_dir = os.path.join(path_data, "web_of_science")
+    os.makedirs(out_dir, exist_ok=True)
+    
     global records_agregados
     headers = {
         'X-ApiKey': API_KEY,
         'Accept': 'application/json'
     }
     
-    print("Iniciando coleta de registros da API Web of Science...\n")
+    print("Web of Science search started.")
+    print("Query:", query)
+    print("Path Data:", path_data)
     
     num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
     
-    
-    query = f"TS=({TS_QUERY})"  # TS = Topic Search
+    # Utiliza a query passada como parâmetro na composição da consulta
+    query = f"TS=({query})"  # TS = Topic Search
     for pagina in range(num_requisicoes):
         start = pagina * PAGE_SIZE
         params = {
@@ -149,19 +160,19 @@ def main():
             print(f"Erro na requisição: {e}")
             sys.exit(1)
     
-    # Salvando resultados brutos
+    # Salvando resultados brutos no diretório criado
     if records_agregados:
         try:
-            with open('wos.json', 'w', encoding='utf-8') as f:
+            with open(os.path.join(out_dir, 'wos.json'), 'w', encoding='utf-8') as f:
                 json.dump(records_agregados, f, indent=4, ensure_ascii=False)
             print("Dados brutos salvos em 'wos.json'")
         except Exception as e:
             print(f"Erro ao salvar JSON: {e}")
             sys.exit(1)
         
-        # Convertendo para BibTeX
+        # Convertendo para BibTeX e salvando no diretório criado
         try:
-            with open('wos.bib', 'w', encoding='utf-8') as f:
+            with open(os.path.join(out_dir, 'wos.bib'), 'w', encoding='utf-8') as f:
                 bibtex_entries = [converte_para_bibtex(r) for r in records_agregados]
                 f.write('\n'.join(bibtex_entries))
             print("Arquivo BibTeX gerado: 'wos.bib'")
@@ -175,4 +186,6 @@ def main():
 # Execução principal
 # ============================================================
 if __name__ == "__main__":
-    main()
+    QUERY = sys.argv[1] if len(sys.argv) > 1 else ""
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else ""
+    main(QUERY, PATH_DATA)

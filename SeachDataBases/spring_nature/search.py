@@ -2,11 +2,16 @@ import requests
 import json
 import re
 import sys
+import os
+from dotenv import load_dotenv
 
-# Configurações iniciais
-API_KEY = '1825041034684c3c834157d982783d10'
+load_dotenv()
+
+# Obtém a chave e removemos a constante fixa
+API_KEY = os.getenv("SPRINGER_API_KEY", "")
 BASE_URL = 'https://api.springernature.com/meta/v2/json'
-QUERY = '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))'
+# Remova a constante QUERY fixa; será recebida como parâmetro
+# QUERY = '("Schema Matching" AND (...))'
 RESULTS_DESEJADOS = 500
 PAGE_SIZE = 25
 records_agregados = []
@@ -94,7 +99,9 @@ def converte_para_bibtex(record):
         )
     return bibtex_entry
 
-def main():
+def main(query, path_data):
+    out_dir = os.path.join(path_data, "spring_nature")
+    os.makedirs(out_dir, exist_ok=True)
     global records_agregados
     erro_ocorrido = False
 
@@ -107,7 +114,7 @@ def main():
         start = 1 + i * PAGE_SIZE
         params = {
             'api_key': API_KEY,
-            'q': QUERY,
+            'q': query,
             's': start,
             'p': PAGE_SIZE
         }
@@ -158,7 +165,7 @@ def main():
         sys.exit(1)
 
     try:
-        with open("springer.json", "w", encoding="utf-8") as f_json:
+        with open(os.path.join(out_dir, "springer.json"), "w", encoding="utf-8") as f_json:
             json.dump(records_agregados, f_json, ensure_ascii=False, indent=4)
         print("Todos os resultados brutos salvos em 'springer.json'\n")
     except Exception as e:
@@ -175,7 +182,7 @@ def main():
     bibtex_entries = [converte_para_bibtex(record) for record in registros_filtrados]
 
     try:
-        with open("springer.bib", "w", encoding="utf-8") as f_bib:
+        with open(os.path.join(out_dir, "springer.bib"), "w", encoding="utf-8") as f_bib:
             f_bib.write("\n".join(bibtex_entries))
         print("Resultados convertidos para BibTeX salvos em 'springer.bib'")
     except Exception as e:
@@ -183,4 +190,7 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    import sys
+    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl/Sandbox/Data")
+    main(QUERY, PATH_DATA)

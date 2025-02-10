@@ -1,24 +1,20 @@
+import os
 import requests
 import json
 import re
 import sys
+from dotenv import load_dotenv
 
-# ============================================================
-# Configurações iniciais
-# ============================================================
-API_KEY = "e795e9dbd2edeb1081126a218f52f693"
+load_dotenv()
+
+API_KEY = os.getenv("ELSEVIER_API_KEY", "")
 BASE_URL = 'https://api.elsevier.com/content/search/scopus'
-
-# Query de pesquisa (ajustada para sintaxe Scopus)
-QS_QUERY = '"Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation")'
-
+# Remova a constante QS_QUERY fixa; será usado o parâmetro query
+# QS_QUERY = '"Schema Matching" AND (...)'
 RESULTS_DESEJADOS = 500
-PAGE_SIZE = 25  # Scopus geralmente permite até 25 por página
+PAGE_SIZE = 25
 records_agregados = []
 
-# ============================================================
-# Funções auxiliares
-# ============================================================
 def extrai_ano(data_str):
     """Extrai o ano de uma data no formato Scopus (YYYY-MM-DD)"""
     if data_str:
@@ -95,27 +91,27 @@ def converte_para_bibtex(entry):
     )
     return bibtex_entry
 
-# ============================================================
-# Função principal
-# ============================================================
-def main():
+def main(query, path_data):
+    out_dir = os.path.join(path_data, "scopus")
+    os.makedirs(out_dir, exist_ok=True)
     global records_agregados
+    
+    print("Iniciando coleta de registros da API Scopus...\n")
+    # Use o parâmetro "query" para construir a requisição, por exemplo:
+    query_param = f"TITLE-ABS-KEY({query})"
+    
     headers = {
         'X-ELS-APIKey': API_KEY,
         'Accept': 'application/json'
     }
     
-    print("Iniciando coleta de registros da API Scopus...\n")
-    
     num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
-    
-    query = f"TITLE-ABS-KEY({QS_QUERY})"
     
     for pagina in range(num_requisicoes):
         start = pagina * PAGE_SIZE
         params = {
-            'query': query,
+            'query': query_param,
             'start': start,
             'count': PAGE_SIZE,
             'view': 'COMPLETE',  # Para obter todos os campos necessários
@@ -153,16 +149,16 @@ def main():
     # Salvando resultados brutos
     if records_agregados:
         try:
-            with open('scopus.json', 'w', encoding='utf-8') as f:
+            with open(os.path.join(out_dir, "scopus.json"), "w", encoding="utf-8") as f:
                 json.dump(records_agregados, f, indent=4, ensure_ascii=False)
-            print("Dados brutos salvos em 'scopus.json'")
+            print("Dados brutos salvos em 'scopus.json'\n")
         except Exception as e:
             print(f"Erro ao salvar JSON: {e}")
             sys.exit(1)
         
         # Convertendo para BibTeX
         try:
-            with open('scopus.bib', 'w', encoding='utf-8') as f:
+            with open(os.path.join(out_dir, "scopus.bib"), "w", encoding="utf-8") as f:
                 bibtex_entries = [converte_para_bibtex(r) for r in records_agregados]
                 f.write('\n'.join(bibtex_entries))
             print("Arquivo BibTeX gerado: 'scopus.bib'")
@@ -172,8 +168,8 @@ def main():
     else:
         print("Nenhum registro encontrado. Nenhum arquivo gerado.")
 
-# ============================================================
-# Execução principal
-# ============================================================
 if __name__ == "__main__":
-    main()
+    import sys
+    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl/Sandbox/Data")
+    main(QUERY, PATH_DATA)
