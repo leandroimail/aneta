@@ -167,9 +167,9 @@ def main():
 
     # Salvando os resultados brutos em arquivo JSON
     try:
-        with open("elsevier.json", "w", encoding="utf-8") as f_json:
+        with open("science_direct.json", "w", encoding="utf-8") as f_json:
             json.dump(records_agregados, f_json, ensure_ascii=False, indent=4)
-        print("Todos os resultados brutos salvos em 'elsevier.json'\n")
+        print("Todos os resultados brutos salvos em 'science_direct.json'\n")
     except Exception as e:
         print(f"Erro ao salvar o arquivo JSON: {e}")
         sys.exit(1)
@@ -178,9 +178,9 @@ def main():
     bibtex_entries = [converte_para_bibtex(record) for record in records_agregados]
 
     try:
-        with open("elsevier.bib", "w", encoding="utf-8") as f_bib:
+        with open("science_direct.bib", "w", encoding="utf-8") as f_bib:
             f_bib.write("\n".join(bibtex_entries))
-        print("Resultados convertidos para BibTeX salvos em 'elsevier.bib'")
+        print("Resultados convertidos para BibTeX salvos em 'science_direct.bib'")
     except Exception as e:
         print(f"Erro ao salvar o arquivo BibTeX: {e}")
         sys.exit(1)
