@@ -21,7 +21,7 @@ webdriver-manager = "^3.8.5"
 pypaperbot = "^1.4.1"
 undetected-chromedriver = "^3.5.5"
 setuptools = "^75.8.0"
-scholarly = "^1.7.11"
+scholarly = {extras = ["tor"], version = "^1.7.11"}
 markdownify = "^0.14.1"
 crossref = "^0.1.2"
 backoff = "^2.2.1"
