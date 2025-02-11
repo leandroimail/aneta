@@ -15,8 +15,9 @@ import shutil
 import tempfile
 import requests
 import argparse
-import time  # Import time module for sleep
-import random # Import random module for random delays
+import time  
+import random 
+from dotenv import load_dotenv
 
 try:
     import bibtexparser
@@ -41,7 +42,7 @@ except ImportError:
 # Funções utilitárias
 # =====================================================================
 
-
+load_dotenv()
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
 
@@ -60,9 +61,7 @@ def download_file(url, file_path, binary=True, timeout=20):
     Adicionado timeout para requests.get
     """
     try:
-        # Removendo parâmetros da URL antes do download
-        url_sem_parametros = url.split('?')[0]
-        response = requests.get(url_sem_parametros, stream=True, timeout=timeout, headers = HEADERS)
+        response = requests.get(url, stream=True, timeout=timeout, headers=HEADERS)
         if response.status_code == 200:
             mode = 'wb' if binary else 'w'
             with open(file_path, mode) as f:
@@ -220,17 +219,13 @@ def get_crossref_pdf_link(doi, timeout=10):
                 for link in data['message']['link']:
                     if link.get('content-type') == 'application/pdf':
                         pdf_url = link['URL']
-                        # Removendo parâmetros da URL antes de retornar
-                        pdf_url_sem_parametros = pdf_url.split('?')[0]
-                        print(f"Link PDF encontrado via Crossref: {pdf_url_sem_parametros}")
-                        return pdf_url_sem_parametros
+                        print(f"Link PDF encontrado via Crossref: {pdf_url}")
+                        return pdf_url
 
             if 'link' in data['message'] and data['message']['link']:
                 pdf_url = data['message']['link'][0]['URL']
-                # Removendo parâmetros da URL antes de retornar
-                pdf_url_sem_parametros = pdf_url.split('?')[0]
-                print(f"Link PDF encontrado via Crossref (outro formato): {pdf_url_sem_parametros}")
-                return pdf_url_sem_parametros
+                print(f"Link PDF encontrado via Crossref (outro formato): {pdf_url}")
+                return pdf_url
 
             print("Link PDF não encontrado via Crossref.")
             return None
@@ -247,7 +242,8 @@ def get_crossref_pdf_link(doi, timeout=10):
         return None
 
 
-def get_openalex_pdf_link(doi, timeout=10, email='seu@email.com'):
+
+def get_openalex_pdf_link(doi, timeout=10, email=""):
     """
     Busca a URL do PDF via API do OpenAlex usando o DOI.
     Retorna a URL do PDF (string) se encontrada ou None.
@@ -263,6 +259,13 @@ def get_openalex_pdf_link(doi, timeout=10, email='seu@email.com'):
     
     if not email:
         email = os.getenv('OPENALEX_EMAIL')
+        if not email:
+            print("E-mail não fornecido e variável de ambiente OPENALEX_EMAIL não definida")
+            print("Recomenda-se fornecer um e-mail para evitar limitações na API")
+            print("Consulte  para mais informações")
+            print("Obtenção de PDFs pode ser limitada sem e-mail se o uso unpaywall")
+            return None
+            return None
     
     # Formata o DOI para a URL da API conforme documentação
     encoded_doi = doi.replace('/', '%2F')
@@ -286,21 +289,21 @@ def get_openalex_pdf_link(doi, timeout=10, email='seu@email.com'):
                 if oa_info.get('is_oa') and oa_info.get('oa_url'):
                     pdf_url = oa_info['oa_url']
                     print(f"Link OA encontrado via OpenAlex: {pdf_url}")
-                    return pdf_url.split('?')[0]  # Remove parâmetros
+                    return pdf_url
             
             # Segunda verificação: Locations com PDF :cite[9]
             for location in data.get('locations') or []:
                 if location.get('pdf_url'):
                     pdf_url = location['pdf_url']
                     print(f"Link PDF em locations encontrado: {pdf_url}")
-                    return pdf_url.split('?')[0]
+                    return pdf_url
             
             # Terceira verificação: Versão mais recente :cite[9]
             best_oa = data.get('best_oa_location') or {}
             if best_oa.get('pdf_url'):
                 pdf_url = best_oa['pdf_url']
                 print(f"Link PDF em best_oa_location: {pdf_url}")
-                return pdf_url.split('?')[0]
+                return pdf_url
             
             print("Nenhum link PDF encontrado via OpenAlex")
             return None
@@ -318,6 +321,49 @@ def get_openalex_pdf_link(doi, timeout=10, email='seu@email.com'):
         return None
     except Exception as e:
         print(f"Erro geral ao buscar PDF via OpenAlex: {str(e)}")
+        return None
+
+
+def get_unpaywall_pdf_link(doi, timeout=10, email=""):
+    """
+    Busca a URL do PDF via API do Unpaywall usando o DOI.
+    Retorna a URL do PDF (string) se encontrada ou None.
+    """
+    print("Buscando PDF via Unpaywall...")
+    
+    if not email:
+        email = os.getenv('UNPAYWALL_EMAIL')
+        if not email:
+            print("E-mail não fornecido e variável de ambiente UNPAYWALL_EMAIL não definida")
+            print("Recomenda-se fornecer um e-mail para evitar limitações na API")
+            print("Consulte https://unpaywall.org/products/api para mais informações")
+            print("Obtenção de PDFs pode ser limitada sem e-mail se o uso unpaywall")
+            return None
+        
+    url = f"https://api.unpaywall.org/v2/{doi}?email={email}"
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': 'application/json'
+        }
+        response = requests.get(url, headers=headers, timeout=timeout)
+        if response.status_code == 200:
+            data = response.json()
+            best_oa = data.get('best_oa_location') or {}
+            if best_oa.get('url_for_pdf'):
+                pdf_url = best_oa['url_for_pdf']
+                print(f"Link PDF encontrado via Unpaywall: {pdf_url}")
+                return pdf_url
+            print("Nenhum link PDF encontrado via Unpaywall")
+            return None
+        else:
+            print(f"Erro na requisição no Unpaywall. Status code: {response.status_code}")
+            return None
+    except requests.exceptions.Timeout:
+        print(f"Timeout ao buscar DOI {doi} no Unpaywall")
+        return None
+    except Exception as e:
+        print(f"Erro geral ao buscar PDF via Unpaywall: {str(e)}")
         return None
 
 
@@ -439,7 +485,7 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via Crossref API")
             return True
         
-    # 2. Buscar PDF via OpenAlex
+    # 3. Buscar PDF via OpenAlex
     print("Tentando buscar PDF via OpenAlex...")
     pdf_url = get_openalex_pdf_link(doi)
     if pdf_url:
@@ -448,7 +494,16 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via OpenAlex")
             return True
 
-    # 3. Busca no Google Scholar por DOI
+    # 4. Buscar PDF via Unpaywall
+    print("Tentando buscar PDF via Unpaywall...")
+    pdf_url = get_unpaywall_pdf_link(doi)
+    if pdf_url:
+        if download_file(pdf_url, pdf_path):
+            print(f"PDF salvo: {pdf_path}\n")
+            logs["downloaded"].append(f"{doi} -> PDF via Unpaywall")
+            return True
+
+    # 5. Busca no Google Scholar por DOI
     print("Tentando buscar PDF via Google Scholar (por DOI)...")
     pdf_url = fetch_article_by_doi(doi)
     if pdf_url and pdf_url != 'PDF não encontrado.' and pdf_url != "Artigo não encontrado." and not pdf_url.startswith("Erro ao buscar artigo"): # Check for error messages from scholarly
@@ -457,7 +512,7 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por DOI)")
             return True
 
-    # 4. Busca no Google Scholar por título (se disponível)
+    # 6. Busca no Google Scholar por título (se disponível)
     title = entry.get("title", "")
     if title:
         print("Tentando buscar PDF via Google Scholar (por título)...")
@@ -468,7 +523,7 @@ def download_doi_entry(entry, pdf_dir, logs):
                 logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por título)")
                 return True
 
-    # 5. Tentar integração com PyPaperBot
+    # 7. Tentar integração com PyPaperBot
     print("Tentando utilizar o PyPaperBot...")
     if run_pypaperbot_for_doi(doi, pdf_dir):
         print(f"PyPaperBot conseguiu baixar o PDF para {doi}\n")
