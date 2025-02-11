@@ -247,6 +247,80 @@ def get_crossref_pdf_link(doi, timeout=10):
         return None
 
 
+def get_openalex_pdf_link(doi, timeout=10, email='seu@email.com'):
+    """
+    Busca a URL do PDF via API do OpenAlex usando o DOI.
+    Retorna a URL do PDF (string) se encontrada ou None.
+    
+    Parâmetros:
+    - doi (str): DOI do trabalho científico
+    - timeout (int): Tempo máximo de espera em segundos
+    - email (str): E-mail para identificação no 'Polite Pool' da API
+    
+    Referência: :cite[1]:cite[5]:cite[9]
+    """
+    print("Buscando PDF via OpenAlex...")
+    
+    if not email:
+        email = os.getenv('OPENALEX_EMAIL')
+    
+    # Formata o DOI para a URL da API conforme documentação
+    encoded_doi = doi.replace('/', '%2F')
+    url = f"https://api.openalex.org/works/https://doi.org/{encoded_doi}"
+    
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': 'application/json',
+            'From': email  # Melhora prioridade na API :cite[3]
+        }
+        
+        response = requests.get(url, headers=headers, timeout=timeout)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Primeira verificação: Open Access direct URL :cite[9]
+            if data.get('open_access'):
+                oa_info = data['open_access']
+                if oa_info.get('is_oa') and oa_info.get('oa_url'):
+                    pdf_url = oa_info['oa_url']
+                    print(f"Link OA encontrado via OpenAlex: {pdf_url}")
+                    return pdf_url.split('?')[0]  # Remove parâmetros
+            
+            # Segunda verificação: Locations com PDF :cite[9]
+            for location in data.get('locations') or []:
+                if location.get('pdf_url'):
+                    pdf_url = location['pdf_url']
+                    print(f"Link PDF em locations encontrado: {pdf_url}")
+                    return pdf_url.split('?')[0]
+            
+            # Terceira verificação: Versão mais recente :cite[9]
+            best_oa = data.get('best_oa_location') or {}
+            if best_oa.get('pdf_url'):
+                pdf_url = best_oa['pdf_url']
+                print(f"Link PDF em best_oa_location: {pdf_url}")
+                return pdf_url.split('?')[0]
+            
+            print("Nenhum link PDF encontrado via OpenAlex")
+            return None
+        
+        elif response.status_code == 403:
+            print("Erro 403: Acesso negado. Verifique o formato do DOI")
+            return None
+            
+        else:
+            print(f"Erro na requisição. Status code: {response.status_code}")
+            return None
+            
+    except requests.exceptions.Timeout:
+        print(f"Timeout ao buscar DOI {doi} no OpenAlex")
+        return None
+    except Exception as e:
+        print(f"Erro geral ao buscar PDF via OpenAlex: {str(e)}")
+        return None
+
+
 def fetch_article_by_doi(doi, timeout=20):
     """
     Busca a URL do PDF no Google Scholar usando o DOI.
@@ -363,6 +437,15 @@ def download_doi_entry(entry, pdf_dir, logs):
         if download_file(pdf_url, pdf_path):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via Crossref API")
+            return True
+        
+    # 2. Buscar PDF via OpenAlex
+    print("Tentando buscar PDF via OpenAlex...")
+    pdf_url = get_openalex_pdf_link(doi)
+    if pdf_url:
+        if download_file(pdf_url, pdf_path):
+            print(f"PDF salvo: {pdf_path}\n")
+            logs["downloaded"].append(f"{doi} -> PDF via OpenAlex")
             return True
 
     # 3. Busca no Google Scholar por DOI
