@@ -197,5 +197,5 @@ def main(query, path_data):
 # ============================================================
 if __name__ == "__main__":
     QUERY = sys.argv[1] if len(sys.argv) > 1 else ""
-    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else ""
+    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
     main(QUERY, PATH_DATA)
