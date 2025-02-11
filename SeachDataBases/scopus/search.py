@@ -62,6 +62,8 @@ def converte_para_bibtex(entry):
     # Novas tags extraídas do JSON
     publisher = entry.get('publisher', '')
     isbn = entry.get('prism:isbn', [""])[0]
+    if isbn:
+        isbn =  str(isbn.get('$', [""])).replace("'", "").replace("[", "").replace("]", "")
     issn = entry.get('prism:issn', '') or entry.get('prism:eIssn', '')
     volume = entry.get('prism:volume', '')
     number = entry.get('prism:issueIdentifier', '')
