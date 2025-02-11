@@ -111,9 +111,6 @@ def main(query, path_data):
     print("==============================================\n")
     
     out_dir = os.path.join(path_data, "ieee")
-    if os.path.exists(out_dir):
-        import shutil
-        shutil.rmtree(out_dir)
     os.makedirs(out_dir, exist_ok=True)
     
     print("Iniciando coleta de registros da API IEEE Xplore...\n")

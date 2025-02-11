@@ -26,17 +26,12 @@ def extrai_ano(data_str):
 def converte_para_bibtex(entry):
     """
     Converte um registro da API Scopus para formato BibTeX.
-    
     Campos mapeados:
-    - authors: Lista de autores (campo 'author')
-    - title: dc:title
-    - year: prism:coverDate
-    - publication: prism:publicationName
-    - doi: prism:doi
-    - url: link com @ref='scopus'
-    - abstract: dc:description
-    - keywords: authkeywords (separados por |)
-    - type_publication: subtypeDescription
+    - authors, title, year, publication, doi, url, abstract, etc.
+    Novas tags:
+      publisher, isbn, issn, volume, number, pages, source, journal, conference,
+      keywords (de publisher ou journal), author_keywords, cited_by_count_source,
+      affiliations, autor_orcid, abbrev_source_title, openaccess
     """
     # Autores
     authors_list = entry.get('author', [])
@@ -46,28 +41,45 @@ def converte_para_bibtex(entry):
         if autor.get('given-name') or autor.get('surname')
     ])
     
-    # Título
+    # Título e data
     title = entry.get('dc:title', '').strip().replace('\n', ' ')
-    
-    # Data e ano
     publication_date = entry.get('prism:coverDate', '')
     year = extrai_ano(publication_date)
     
-    # Fonte de publicação
+    # Publicação
     publication = entry.get('prism:publicationName', '').strip()
     
-    # Identificadores
+    # Identificadores e URL
     doi = entry.get('prism:doi', '').strip()
-    
-    # URL
     url = next((link['@href'] for link in entry.get('link', []) 
-               if link.get('@ref') == 'scopus'), '')
+                if link.get('@ref') == 'scopus'), '')
     
     # Campos adicionais
     abstract = entry.get('dc:description', '').strip().replace('\n', ' ')
-    keywords = '; '.join(entry.get('authkeywords', '').strip().split('|'))
-    type_publication = entry.get('subtypeDescription', 'Article').strip()
-    publisher = ""  # Não disponível na resposta Scopus
+    keywords_auth = '; '.join(entry.get('authkeywords', '').strip().split('|'))
+    type_publication = entry.get('subtypeDescription', 'not informed').strip()
+    
+    # Novas tags extraídas do JSON
+    publisher = entry.get('publisher', '')
+    isbn = entry.get('prism:isbn', [""])[0]
+    issn = entry.get('prism:issn', '') or entry.get('prism:eIssn', '')
+    volume = entry.get('prism:volume', '')
+    number = entry.get('prism:issueIdentifier', '')
+    pages = entry.get('prism:pageRange', '')
+    source = entry.get('source-id', '')
+    journal = publication if entry.get('prism:aggregationType', '').lower() == 'journal' else ''
+    conference = publication if (entry.get('prism:aggregationType', '').lower() == 'conference proceeding' or 
+                                 entry.get('subtypeDescription', '').lower() == 'conference paper') else ''
+    keywords_pub = entry.get('prism:keyword', '')
+    cited_by_count_source = entry.get('citedby-count', '')
+    affiliations = "; ".join(
+        ", ".join(filter(None, [aff.get("affilname", ""), aff.get("affiliation-city", ""), aff.get("affiliation-country", "")]))
+        for aff in entry.get("affiliation", [])
+        if any([aff.get("affilname", ""), aff.get("affiliation-city", ""), aff.get("affiliation-country", "")])
+    )
+    autor_orcid = entry.get('orcid', '')
+    abbrev_source_title = ""
+    openaccess = "true" if entry.get('openaccessFlag', False) or entry.get('openaccess', '0') == "1" else "false"
     
     # Gera chave BibTeX
     if doi:
@@ -78,13 +90,27 @@ def converte_para_bibtex(entry):
     bibtex_entry = (
         f"@article{{{bibtex_key},\n"
         f"  authors = {{{authors}}},\n"
-        f"  keywords = {{{keywords}}},\n"
-        f"  abstract = {{{abstract}}},\n"
+        f"  author_keywords = {{{keywords_auth}}},\n"
         f"  title = {{{title}}},\n"
         f"  year = {{{year}}},\n"
         f"  type_publication = {{{type_publication}}},\n"
         f"  publication = {{{publication}}},\n"
         f"  publisher = {{{publisher}}},\n"
+        f"  isbn = {{{isbn}}},\n"
+        f"  issn = {{{issn}}},\n"
+        f"  volume = {{{volume}}},\n"
+        f"  number = {{{number}}},\n"
+        f"  pages = {{{pages}}},\n"
+        f"  source = {{{source}}},\n"
+        f"  journal = {{{journal}}},\n"
+        f"  conference = {{{conference}}},\n"
+        f"  keywords = {{{keywords_pub}}},\n"
+        f"  cited_by_count_source = {{{cited_by_count_source}}},\n"
+        f"  affiliations = {{{affiliations}}},\n"
+        f"  autor_orcid = {{{autor_orcid}}},\n"
+        f"  abbrev_source_title = {{{abbrev_source_title}}},\n"
+        f"  openaccess = {{{openaccess}}},\n"
+        f"  abstract = {{{abstract}}},\n"
         f"  doi = {{{doi}}},\n"
         f"  url_html = {{{url}}}\n"
         f"}}\n"
@@ -98,9 +124,6 @@ def main(query, path_data):
     print("==============================================\n")
     
     out_dir = os.path.join(path_data, "scopus")
-    if os.path.exists(out_dir):
-        import shutil
-        shutil.rmtree(out_dir)
     os.makedirs(out_dir, exist_ok=True)
     global records_agregados
     
@@ -167,7 +190,14 @@ def main(query, path_data):
         # Convertendo para BibTeX
         try:
             with open(os.path.join(out_dir, "scopus.bib"), "w", encoding="utf-8") as f:
-                bibtex_entries = [converte_para_bibtex(r) for r in records_agregados]
+                bibtex_entries = []
+                for r in records_agregados:
+                    if isinstance(r, dict):
+                        entry = converte_para_bibtex(r)
+                        # Garante entrada string
+                        bibtex_entries.append(entry if isinstance(entry, str) else str(entry))
+                    else:
+                        bibtex_entries.append(str(r))
                 f.write('\n'.join(bibtex_entries))
             print("Arquivo BibTeX gerado: 'scopus.bib'")
         except Exception as e:
