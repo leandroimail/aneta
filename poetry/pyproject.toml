@@ -32,6 +32,8 @@ langchain-community = "^0.3.16"
 langsmith = "^0.3.4"
 llama-index = "^0.12.15"
 pyyaml = "^6.0.2"
+sentence-transformers = "^3.4.1"
+google-generativeai = "^0.8.4"
 
 [tool.poetry.dev-dependencies]
 
