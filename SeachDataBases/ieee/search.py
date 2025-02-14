@@ -44,12 +44,17 @@ def converte_para_bibtex(entry):
     - doi: doi
     - url: html_url
     - abstract: abstract
-    - keywords: author_terms + ieee_terms
-    - type_publication: content_type
+    - keywords: index_terms > ieee_terms
+    - author_keywords: index_terms > author_terms
+    - publisher, isbn, issn, volume, number, pages, source, journal, conference,
+      cited_by_count_source, affiliations, autor_orcid, abbrev_source_title, openaccess
     """
     # Autores com verificação do tipo
-    authors_list = entry.get('authors', [])
-    authors = "; ".join([(autor.get('full_name', '').strip() if isinstance(autor, dict) else str(autor).strip()) for autor in authors_list])
+    authors_list = entry.get('authors', {}).get('authors', [])
+    authors = "; ".join([
+        (autor.get('full_name', '').strip() if isinstance(autor, dict) else str(autor).strip())
+        for autor in authors_list
+    ])
     
     # Título
     title = entry.get('title', '').strip().replace('\n', ' ')
@@ -60,18 +65,51 @@ def converte_para_bibtex(entry):
     # Fonte de publicação
     publication = entry.get('publication_title', '').strip()
     
-    # Identificadores
+    # Identificadores e URLs
     doi = entry.get('doi', '').strip()
     url_html = entry.get('html_url', '')
     url_pdf = entry.get('pdf_url', '')
     
     # Campos adicionais
     abstract = entry.get('abstract', '').strip().replace('\n', ' ')
-    author_terms = entry.get('author_terms', {}).get('terms', []) or []
-    ieee_terms = entry.get('ieee_terms', {}).get('terms', []) or []
-    keywords = '; '.join(author_terms + ieee_terms)
-    type_publication = entry.get('content_type', 'Article').strip()
+    
+    # Palavras-chave
+    keywords_old = '; '.join(entry.get('author_terms', {}).get('terms', []) 
+                             or [])  # mantido o código antigo se houver
+    # Novas tags derivadas de index_terms
+    keywords = '; '.join(entry.get('index_terms', {}).get('ieee_terms', {}).get('terms', []))
+    author_keywords = '; '.join(entry.get('index_terms', {}).get('author_terms', {}).get('terms', []))
+    
+    # Outras tags
     publisher = entry.get('publisher', 'IEEE').strip()
+    isbn = entry.get('isbn', '').strip()
+    issn = entry.get('issn', '').strip()
+    volume = entry.get('volume', '').strip()
+    number = entry.get('number', '').strip()
+    
+    # Combina páginas se disponíveis
+    start_page = entry.get('start_page', '').strip()
+    end_page = entry.get('end_page', '').strip()
+    pages = f"{start_page}--{end_page}" if start_page and end_page else ""
+    
+    source = publication
+    journal = entry.get('journal', '').strip()
+    conference = entry.get('conference_location', '').strip()
+    cited_by_count_source = str(entry.get('citing_paper_count', ''))
+    
+    # Extrai as afiliações únicas dos autores
+    affiliations_list = []
+    for autor in authors_list:
+        if isinstance(autor, dict):
+            aff = autor.get('affiliation', '').strip()
+            if aff and aff not in affiliations_list:
+                affiliations_list.append(aff)
+    affiliations = '; '.join(affiliations_list)
+    
+    # Outros campos
+    autor_orcid = entry.get('orcid', '').strip()  # se disponível
+    abbrev_source_title = entry.get('abbrev_source_title', '').strip()
+    openaccess = "true" if entry.get('openaccess', False) else "false"
     
     # Gera chave BibTeX
     if doi:
@@ -82,19 +120,32 @@ def converte_para_bibtex(entry):
     bibtex_entry = (
         f"@article{{{bibtex_key},\n"
         f"  authors = {{{authors}}},\n"
-        f"  keywords = {{{keywords}}},\n"
-        f"  abstract = {{{abstract}}},\n"
         f"  title = {{{title}}},\n"
         f"  year = {{{year}}},\n"
-        f"  type_publication = {{{type_publication}}},\n"
         f"  publication = {{{publication}}},\n"
-        f"  publisher = {{{publisher}}},\n"
         f"  doi = {{{doi}}},\n"
         f"  url_html = {{{url_html}}},\n"
-        f"  url_pdf = {{{url_pdf}}}\n"
+        f"  url_pdf = {{{url_pdf}}},\n"
+        f"  abstract = {{{abstract}}},\n"
+        f"  type_publication = {{{entry.get('content_type', 'Article').strip()}}},\n"
+        f"  publisher = {{{publisher}}},\n"
+        f"  isbn = {{{isbn}}},\n"
+        f"  issn = {{{issn}}},\n"
+        f"  volume = {{{volume}}},\n"
+        f"  number = {{{number}}},\n"
+        f"  pages = {{{pages}}},\n"
+        f"  source = {{{source}}},\n"
+        f"  journal = {{{journal}}},\n"
+        f"  conference = {{{conference}}},\n"
+        f"  keywords = {{{keywords}}},\n"
+        f"  author_keywords = {{{author_keywords}}},\n"
+        f"  cited_by_count_source = {{{cited_by_count_source}}},\n"
+        f"  affiliations = {{{affiliations}}},\n"
+        f"  autor_orcid = {{{autor_orcid}}},\n"
+        f"  abbrev_source_title = {{{abbrev_source_title}}},\n"
+        f"  openaccess = {{{openaccess}}}\n"
         f"}}\n"
     )
-    
     
     return bibtex_entry
 

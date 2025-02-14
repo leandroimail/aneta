@@ -30,18 +30,21 @@ def extrai_ano(data_str):
 
 def converte_para_bibtex(entry):
     """
-    Converte um registro da API WoS para formato BibTeX.
+    Converte um registro da API WoS para formato BibTeX, incluindo novas tags.
     
     Campos mapeados:
     - authors: Lista de autores (campo 'names.authors')
-    - title: title
+    - title: Título
     - year: source.publishYear
+    - type_publication: types
     - publication: source.sourceTitle
     - doi: identifiers.doi
     - url_html: links.record
     - abstract: Não disponível na API WoS Starter
-    - keywords: keywords.authorKeywords
-    - type_publication: types
+    - publisher, isbn, issn, volume, number, pages, source,
+      journal, conference, keywords (publisher ou journal),
+      author_keywords, cited_by_count_source, affiliations,
+      autor_orcid, abbrev_source_title, openaccess
     """
     # Autores
     authors_list = entry.get('names', {}).get('authors', [])
@@ -53,26 +56,66 @@ def converte_para_bibtex(entry):
     # Título
     title = entry.get('title', '').strip().replace('\n', ' ')
     
-    # Data e ano
+    # Ano de publicação
     publication_year = entry.get('source', {}).get('publishYear', '')
     year = publication_year if publication_year else ""
     
-    # Fonte de publicação
-    publication = entry.get('source', {}).get('sourceTitle', '').strip()
+    # Fonte de publicação (sourceTitle)
+    source_title = entry.get('source', {}).get('sourceTitle', '').strip()
+    publication = source_title
     
     # Identificadores
     doi = entry.get('identifiers', {}).get('doi', '').strip()
     
-    # URL
+    # URL do registro
     url = entry.get('links', {}).get('record', '').strip()
     
-    # Campos adicionais
+    # Campo já existente
     abstract = ""  # Não disponível na API WoS Starter
-    keywords = '; '.join(entry.get('keywords', {}).get('authorKeywords', []))
-    type_publication = entry.get('types', [])
-    if type_publication:
-        type_publication = type_publication[0]
-    publisher = ""  # Não disponível na resposta WoS Starter
+    keywords_original = entry.get('keywords', {}).get('authorKeywords', [])
+    author_keywords = '; '.join(keywords_original)
+    
+    # Novas tags adicionais
+    publisher = entry.get('source', {}).get('publisher', '')
+    
+    isbn = entry.get('identifiers', {}).get('isbn', '')
+    if not isbn:
+        isbn = entry.get('identifiers', {}).get('eisbn', '')
+    issn = entry.get('identifiers', {}).get('issn', '')
+    
+    volume = entry.get('source', {}).get('volume', '')
+    number = entry.get('source', {}).get('issue', '')
+    
+    pages_data = entry.get('source', {}).get('pages', {})
+    pages = pages_data.get('range', '') if 'range' in pages_data else ""
+    
+    # Determina o tipo de publicação e atribui journal ou conference
+    type_publication_list = entry.get('types', [])
+    type_publication = type_publication_list[0] if type_publication_list else ""
+    
+    if type_publication == "Article":
+        journal = source_title
+        conference = ""
+    elif type_publication in ["Meeting", "Proceedings Paper"]:
+        conference = source_title
+        journal = ""
+    else:
+        journal = ""
+        conference = ""
+    
+    # Keywords referentes ao publisher ou journal (não disponível na API; deixado em branco)
+    key_words_publisher = ""
+    
+    # Valor padrão para tags não disponíveis
+    cited_by_count_source = 0  # Valor padrão, pois não há informação
+    affiliations = ""  # Não disponível na API WoS Starter
+    autor_orcid = ""   # Não disponível na API WoS Starter
+    
+    # Abreviação do título da fonte
+    abbrev_source_title = ''.join([word[0].upper() for word in source_title.split()]) if source_title else ""
+    
+    # Openaccess, valor padrão
+    openaccess = "false"
     
     # Gera chave BibTeX
     if doi:
@@ -83,7 +126,8 @@ def converte_para_bibtex(entry):
     bibtex_entry = (
         f"@article{{{bibtex_key},\n"
         f"  authors = {{{authors}}},\n"
-        f"  keywords = {{{keywords}}},\n"
+        f"  author_keywords = {{{author_keywords}}},\n"
+        f"  keywords = {{{key_words_publisher}}},\n"
         f"  abstract = {{{abstract}}},\n"
         f"  title = {{{title}}},\n"
         f"  year = {{{year}}},\n"
@@ -91,7 +135,20 @@ def converte_para_bibtex(entry):
         f"  publication = {{{publication}}},\n"
         f"  publisher = {{{publisher}}},\n"
         f"  doi = {{{doi}}},\n"
-        f"  url_html = {{{url}}}\n"
+        f"  url_html = {{{url}}},\n"
+        f"  isbn = {{{isbn}}},\n"
+        f"  issn = {{{issn}}},\n"
+        f"  volume = {{{volume}}},\n"
+        f"  number = {{{number}}},\n"
+        f"  pages = {{{pages}}},\n"
+        f"  source = {{{source_title}}},\n"
+        f"  journal = {{{journal}}},\n"
+        f"  conference = {{{conference}}},\n"
+        f"  cited_by_count_source = {{{cited_by_count_source}}},\n"
+        f"  affiliations = {{{affiliations}}},\n"
+        f"  autor_orcid = {{{autor_orcid}}},\n"
+        f"  abbrev_source_title = {{{abbrev_source_title}}},\n"
+        f"  openaccess = {{{openaccess}}}\n"
         f"}}\n"
     )
     return bibtex_entry

@@ -35,33 +35,75 @@ def extrai_ano(data_str):
 
 def converte_para_bibtex(record):
     """
-    Converte um registro retornado pela API Elsevier para o formato BibTeX.
-    
-    Campos mapeados:
-      - authors: lista de autores (campo "authors", extraindo o atributo "name")
-      - title: título do artigo (campo "title")
-      - year: ano de publicação (extraído de "publicationDate")
-      - publication: título da revista ou fonte (campo "sourceTitle")
-      - doi: DOI do artigo (campo "doi")
-      - url_html: URL do artigo (campo "uri")
-    
-    Outros campos (keywords, abstract, publisher) não estão disponíveis na resposta.
+    Converte um registro retornado pela API Elsevier para o formato BibTeX,
+    adicionando as novas tags:
+        - publisher
+        - isbn
+        - issn
+        - volume
+        - number
+        - pages
+        - source
+        - journal
+        - conference
+        - keywords : key words of the publisher or journal
+        - author_keywords : key words of authors
+        - cited_by_count_source : cited in this search file
+        - affiliations
+        - autor_orcid
+        - abbrev_source_title : short container title
+        - openaccess : true or false
     """
-    # Obtém a lista de autores e monta a string separada por "; "
+    # Autores
     authors_list = record.get("authors", [])
     authors = "; ".join([autor.get("name", "").strip() for autor in authors_list if autor.get("name")])
     
+    # Campos principais
     title = record.get("title", "").strip()
     publication_date = record.get("publicationDate", "")
     year = extrai_ano(publication_date)
-    publication = record.get("sourceTitle", "").strip()
     doi = record.get("doi", "").strip()
     uri = record.get("uri", "").strip()
     
-    # Campos não disponíveis na resposta
-    keywords = ""
-    abstract = ""
-    publisher = ""
+    # Campos adicionais
+    publisher = record.get("publisher", "").strip()
+    isbn = record.get("isbn", "").strip()
+    issn = record.get("issn", "").strip()
+    
+    # Para volume, tenta primeiro o campo "volume" se existir, senão utiliza "volumeIssue"
+    volume = record.get("volume", record.get("volumeIssue", "")).strip()
+    number = record.get("number", "").strip()
+    
+    # Processa o campo pages: verifica se há "first" e "last" ou só "first"
+    pages_info = record.get("pages", {})
+    if isinstance(pages_info, dict):
+        first = pages_info.get("first", "").strip()
+        last = pages_info.get("last", "").strip()
+        pages = f"{first}--{last}" if first and last else first
+    else:
+        pages = str(pages_info).strip()
+    
+    # Outros campos
+    source = record.get("source", record.get("sourceTitle", "")).strip()
+    journal = record.get("journal", "").strip()
+    conference = record.get("conference", "").strip()
+    keywords_api = record.get("keywords", "").strip()  # key words of publisher or journal
+    author_keywords = record.get("author_keywords", "").strip()
+    cited_by_count_source = record.get("cited_by_count_source", "")
+    # Se "cited_by_count_source" for numérico, converte para string
+    cited_by_count_source = str(cited_by_count_source).strip() if cited_by_count_source is not None else ""
+    
+    # Affiliations: se for lista, junta por "; "
+    affiliations_data = record.get("affiliations", [])
+    if isinstance(affiliations_data, list):
+        affiliations = "; ".join([aff.strip() for aff in affiliations_data if aff])
+    else:
+        affiliations = str(affiliations_data).strip()
+    
+    autor_orcid = record.get("autor_orcid", "").strip()
+    abbrev_source_title = record.get("abbrev_source_title", "").strip()
+    openaccess = str(record.get("openAccess", False)).lower()
+    abstract = record.get("abstract", "").strip()
     
     # Define a chave do BibTeX utilizando o DOI (se disponível) ou parte do título
     if doi:
@@ -75,15 +117,28 @@ def converte_para_bibtex(record):
     bibtex_entry = (
         f"@article{{{bibtex_key},\n"
         f"  authors = {{{authors}}},\n"
-        f"  keywords = {{{keywords}}},\n"
-        f"  abstract = {{{abstract}}},\n"
         f"  title = {{{title}}},\n"
+        f"  abstract = {{{abstract}}},\n"
         f"  year = {{{year}}},\n"
-        f"  type_publication = {{{type_publication}}},\n"
-        f"  publication = {{{publication}}},\n"
-        f"  publisher = {{{publisher}}},\n"
         f"  doi = {{{doi}}},\n"
-        f"  url_html = {{{uri}}}\n"
+        f"  url_html = {{{uri}}},\n"
+        f"  publisher = {{{publisher}}},\n"
+        f"  isbn = {{{isbn}}},\n"
+        f"  issn = {{{issn}}},\n"
+        f"  volume = {{{volume}}},\n"
+        f"  number = {{{number}}},\n"
+        f"  pages = {{{pages}}},\n"
+        f"  source = {{{source}}},\n"
+        f"  journal = {{{journal}}},\n"
+        f"  conference = {{{conference}}},\n"
+        f"  keywords = {{{keywords_api}}},\n"
+        f"  author_keywords = {{{author_keywords}}},\n"
+        f"  cited_by_count_source = {{{cited_by_count_source}}},\n"
+        f"  affiliations = {{{affiliations}}},\n"
+        f"  autor_orcid = {{{autor_orcid}}},\n"
+        f"  abbrev_source_title = {{{abbrev_source_title}}},\n"
+        f"  openaccess = {{{openaccess}}},\n"
+        f"  type_publication = {{{type_publication}}}\n"
         f"}}\n"
     )
     return bibtex_entry
@@ -161,6 +216,12 @@ def main(query, path_data):
                 print("Menos registros retornados que o esperado para a página. Finalizando a coleta.\n")
                 break
         else:
+            if response.status_code in [401, 403]:
+                print("**************************************************")
+                print("*               ERRO DE ACESSO                 *")
+                print("**************************************************")
+                print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
+
             print(f"Erro na requisição: código de status {response.status_code}.")
             try:
                 error_info = response.json()
@@ -170,9 +231,12 @@ def main(query, path_data):
             erro_ocorrido = True
             break
 
-    if erro_ocorrido or not records_agregados:
+    if erro_ocorrido:
         print("\nHouve um erro durante a coleta ou nenhum registro foi encontrado. Nenhum arquivo será salvo.")
         sys.exit(1)
+    elif not records_agregados:
+        print("\nNenhum registro foi encontrado. Nenhum arquivo será salvo.")
+        return None
 
     # Salvando os resultados brutos em arquivo JSON
     try:

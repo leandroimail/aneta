@@ -27,20 +27,59 @@ def converte_para_bibtex(record):
     # Obtém autores
     authors_list = record.get('creators', [])
     authors = "; ".join([creator['creator'] for creator in authors_list])
-
-    keywords = record.get('keyword', '')
-    if isinstance(keywords, list):
-        keywords = "; ".join(keywords)
-    elif isinstance(keywords, str):
-        keywords = keywords.strip()
+    
+    # Processa as keywords já existentes
+    keywords_original = record.get('subjects', '')
+    if isinstance(keywords_original, list):
+        journal_keywords = "; ".join(keywords_original)
+    elif isinstance(keywords_original, str):
+        journal_keywords = keywords_original.strip()
     else:
-        keywords = ""
-
+        journal_keywords = ""
+    
+    # Novas tags: tenta obter do record ou deixa vazio se não existir
+    isbn = record.get("isbn", record.get("printIsbn", ""))
+    issn = record.get("issn", "")
+    volume = record.get("volume", "")
+    number = record.get("number", "")
+    starting_page = record.get("startingPage", "")
+    ending_page = record.get("endingPage", "")
+    pages = f"{starting_page}--{ending_page}" if starting_page and ending_page else ""
+    source = record.get("source", "")
+    author_keywords = record.get('keyword', '')
+    if isinstance(author_keywords, list):
+        author_keywords = "; ".join(author_keywords)
+    
+    cited_by_count_source = record.get("cited_by_count_source", "")
+    affiliations = record.get("affiliations", "")
+    autor_orcid = record.get("autor_orcid", "")
+    abbrev_source_title = record.get("abbrev_source_title", "")
+    openaccess = record.get("openaccess", "").lower()
+    
     abstract = record.get('abstract', '').strip()
     title = record.get('title', '').strip()
     cover_date = record.get('publicationDate', '')
     year = extrai_ano(cover_date)
     type_publication = record.get('contentType', '').strip()
+
+    journal = ""
+    if "article" in  type_publication.lower():
+        journal = record.get("publicationName", "")
+
+    conference = record.get("conferenceInfo", [])
+    if conference:
+        conference = conference[0].get("confSeriesName", "")
+    else:
+        conference = ""
+    conf_abrev = record.get("conferenceInfo", [])
+    if conf_abrev:
+        conf_abrev = conf_abrev[0].get("confEventAbbreviation", "")
+    else:
+        conf_abrev = ""
+        
+    if conference and conf_abrev:
+        conference = f"{conference} - {conf_abrev}"
+
     publication = record.get('publicationName', '').strip()
     publisher = record.get('publisherName', '').strip()  # Nome da editora responsável pela publicação
     doi = record.get('doi', '').strip()
@@ -57,44 +96,72 @@ def converte_para_bibtex(record):
                     url_pdf = link.get("value", "")
                 elif fmt == "html":
                     url_html = link.get("value", "")
-
+    
     # Cria uma chave única para o BibTeX; utiliza o DOI se disponível, senão utiliza parte do título
     if doi:
         bibtex_key = doi.replace('/', '_')
     else:
         bibtex_key = re.sub(r'\W+', '', title)[:20] if title else "sem_titulo"
-
-    # Constrói a entrada BibTeX com os novos campos url_pdf e url_html
+    
+    # Cria a entrada BibTeX com as novas tags
     if type_publication == "Chapter ConferencePaper":
         bibtex_entry = (
             f"@inproceedings{{{bibtex_key},\n"
             f"  authors = {{{authors}}},\n"
-            f"  keywords = {{{keywords}}},\n"
+            f"  keywords = {{}},\n"
+            f"  author_keywords = {{{journal_keywords}}},\n"
             f"  abstract = {{{abstract}}},\n"
             f"  title = {{{title}}},\n"
             f"  year = {{{year}}},\n"
             f"  type_publication = {{{type_publication}}},\n"
             f"  publication = {{{publication}}},\n"
             f"  publisher = {{{publisher}}},\n"
+            f"  isbn = {{{isbn}}},\n"
+            f"  issn = {{{issn}}},\n"
+            f"  volume = {{{volume}}},\n"
+            f"  number = {{{number}}},\n"
+            f"  pages = {{{pages}}},\n"
+            f"  source = {{{source}}},\n"
+            f"  journal = {{{journal}}},\n"
+            f"  conference = {{{conference}}},\n"
+            f"  cited_by_count_source = {{{cited_by_count_source}}},\n"
+            f"  affiliations = {{{affiliations}}},\n"
+            f"  autor_orcid = {{{autor_orcid}}},\n"
+            f"  abbrev_source_title = {{{abbrev_source_title}}},\n"
             f"  doi = {{{doi}}},\n"
             f"  url_pdf = {{{url_pdf}}},\n"
-            f"  url_html = {{{url_html}}}\n"
+            f"  url_html = {{{url_html}}},\n"
+            f"  openaccess = {{{openaccess}}}\n"
             f"}}\n"
         )
     else:  # Default para tipo "Article"
         bibtex_entry = (
             f"@article{{{bibtex_key},\n"
             f"  authors = {{{authors}}},\n"
-            f"  keywords = {{{keywords}}},\n"
+            f"  keywords = {{{journal_keywords}}},\n"
+            f"  author_keywords = {{{author_keywords}}},\n"
             f"  abstract = {{{abstract}}},\n"
             f"  title = {{{title}}},\n"
             f"  year = {{{year}}},\n"
             f"  type_publication = {{{type_publication}}},\n"
             f"  publication = {{{publication}}},\n"
             f"  publisher = {{{publisher}}},\n"
+            f"  isbn = {{{isbn}}},\n"
+            f"  issn = {{{issn}}},\n"
+            f"  volume = {{{volume}}},\n"
+            f"  number = {{{number}}},\n"
+            f"  pages = {{{pages}}},\n"
+            f"  source = {{{source}}},\n"
+            f"  journal = {{{journal}}},\n"
+            f"  conference = {{{conference}}},\n"
+            f"  cited_by_count_source = {{{cited_by_count_source}}},\n"
+            f"  affiliations = {{{affiliations}}},\n"
+            f"  autor_orcid = {{{autor_orcid}}},\n"
+            f"  abbrev_source_title = {{{abbrev_source_title}}},\n"
             f"  doi = {{{doi}}},\n"
             f"  url_pdf = {{{url_pdf}}},\n"
-            f"  url_html = {{{url_html}}}\n"
+            f"  url_html = {{{url_html}}},\n"
+            f"  openaccess = {{{openaccess}}}\n"
             f"}}\n"
         )
     return bibtex_entry

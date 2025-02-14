@@ -161,6 +161,12 @@ def main(query, path_data):
             results = data.get('search-results', {}).get('entry', [])
             
             if not results:
+                if response.status_code in [401, 403]:
+                    print("**************************************************")
+                    print("*                ERRO DE ACESSO                  *")
+                    print("**************************************************")
+                    print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
+                    break
                 print("Nenhum resultado encontrado. Encerrando...")
                 break
                 
@@ -172,6 +178,11 @@ def main(query, path_data):
                 break
                 
         except requests.exceptions.HTTPError as errh:
+            if errh.response is not None and errh.response.status_code in [401, 403]:
+                print("**************************************************")
+                print("*                ERRO DE ACESSO                  *")
+                print("**************************************************")
+                print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
             print(f"Erro HTTP: {errh}")
             print(f"Resposta: {response.text}")
             sys.exit(1)

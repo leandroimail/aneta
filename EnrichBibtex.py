@@ -30,13 +30,11 @@ def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn):
     return best_candidate
 
 
-def get_doi_by_title_in_openalex(dict_val):
+def get_doi_by_title_from_openalex(dict_val):
     url = "https://api.openalex.org/works"
     params = {
         "search": f'"{dict_val['title']}"',
         "filter": "has_doi:true",  # Filtra apenas resultados com DOI
-        # Atualizado: removido "author" e incluído "authorships"
-        "select": "doi,title,authorships,publication_year",  
         "per-page": 10  # Tenta trazer mais opções para filtragem
     }
     
@@ -65,7 +63,7 @@ def get_doi_by_title_in_openalex(dict_val):
         return None
 
 
-def get_doi_by_title_in_unpaywall(dict_val, email):
+def get_doi_by_title_from_unpaywall(dict_val, email):
     url = "https://api.unpaywall.org/v2/search"
     params = {
         "query": f'"{dict_val['title']}"',
@@ -95,12 +93,11 @@ def get_doi_by_title_in_unpaywall(dict_val, email):
         return None
 
 
-def get_doi_by_title_in_crossref(dict_val):
+def get_doi_by_title_from_crossref(dict_val):
     url = "https://api.crossref.org/works"
     params = {
         "query.bibliographic": f'"{dict_val['title']}"',
         "rows": 10,  # Tenta trazer mais opções
-        "select": "DOI,title,issued,author"  # Campos retornados
     }
     
     try:
@@ -144,14 +141,8 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
         return
 
     # Monta o caminho para o arquivo de configuração search_config.yaml
-    config_path = os.path.join(
-        os.path.dirname(__file__),
-        "SeachDataBases",
-        "config",
-        "search_config.yaml"
-    )
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         print(f"Erro ao ler o arquivo de configuração: {e}")
@@ -182,11 +173,11 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
                             "authors": entry.get("authors", entry.get("author", "")),
                             "year": entry.get("year", "")
                         }
-                        new_doi = get_doi_by_title_in_unpaywall(search_data, email)
+                        new_doi = get_doi_by_title_from_unpaywall(search_data, email)
                         if not new_doi:
-                            new_doi = get_doi_by_title_in_crossref(search_data)
+                            new_doi = get_doi_by_title_from_crossref(search_data)
                         if not new_doi:
-                            new_doi = get_doi_by_title_in_openalex(search_data)
+                            new_doi = get_doi_by_title_from_openalex(search_data)
                         if new_doi:
                             entry["doi"] = new_doi
                             updated = True
@@ -196,67 +187,112 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
                     write_bibtex(bib_file, entries)
                     print(f"Arquivo salvo: {bib_file}")
 
+def get_abstract_by_doi_from_openalex(doi: str) -> str:
+    if doi:
+        doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
+        doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
+    url = f"https://api.openalex.org/works/https://doi.org/{doi}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        abstract_inverted_index = data.get("abstract_inverted_index", {})
+        if not abstract_inverted_index:
+            return ""
+        abstract = " ".join(abstract_inverted_index.keys()).strip()
+        return abstract
+    except Exception as e:
+        print(f"Erro ao obter abstract do OpenAlex: {e}")
+        return ""
+
+def get_abstract_by_doi_from_semanticscholar(doi: str) -> str:
+    if doi:
+        doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
+        doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
+    try:
+        url = f"https://api.semanticscholar.org/v1/paper/{doi}"
+        response = requests.get(url).json()
+        abstract = response.get("abstract", "")
+        return abstract
+    except Exception as e:
+        print(f"Erro ao obter abstract do Semantic Scholar: {e}")
+        return ""
+
+def get_abstract_by_doi_from_crossref(doi: str) -> str:
+    if doi:
+        doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
+        doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
+    try:
+        url = f"https://api.crossref.org/works/{doi}"
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        abstract = data.get("message", {}).get("abstract", "")
+        return abstract
+    except Exception as e:
+        print(f"Erro ao obter abstract do Crossref: {e}")
+        return ""
+
+def enrich_bibtex_abstract():
+    """
+    Atualiza os registros BibTeX que não possuem abstract.
+    Para cada base habilitada em search_config.yaml, procura os arquivos .bib
+    no diretório definido pela variável de ambiente PATH_DATA. Para cada registro
+    com DOI mas sem abstract, utiliza o DOI para buscar o abstract nas APIs do
+    Crossref, Semantic Scholar e OpenAlex (nessa ordem).
+    """
+    path_data = os.environ.get("PATH_DATA")
+    if not path_data:
+        print("Variável de ambiente PATH_DATA não definida.")
+        return
+
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
+            search_config = yaml.safe_load(f)
+    except Exception as e:
+        print(f"Erro ao ler o arquivo de configuração: {e}")
+        return
+
+    for base, enabled in search_config.items():
+        if enabled:
+            base_path = os.path.join(path_data, base)
+            if not os.path.isdir(base_path):
+                print(f"Diretório para a base '{base}' não encontrado: {base_path}")
+                continue
+
+            bib_files = glob.glob(os.path.join(base_path, "**", "*.bib"), recursive=True)
+            for bib_file in bib_files:
+                print(f"Processando arquivo: {bib_file}")
+                entries = read_bibtex(bib_file)
+                updated = False
+
+                for entry in entries:
+                    if not entry.get("abstract") and entry.get("doi"):
+                        doi = entry["doi"].strip()
+                        if doi:
+                            doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
+                            doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
+                        
+                        # Tenta obter o abstract do Crossref
+                        abstract = get_abstract_by_doi_from_crossref(doi)
+                        
+                        # Se não encontrou, tenta do Semantic Scholar
+                        if not abstract:
+                            abstract = get_abstract_by_doi_from_semanticscholar(doi)
+                        
+                        # Se ainda não encontrou, tenta do OpenAlex
+                        if not abstract:
+                            abstract = get_abstract_by_doi_from_openalex(doi)
+                        
+                        if abstract:
+                            entry["abstract"] = abstract
+                            updated = True
+                            print(f"Abstract atualizado para o DOI '{doi}'")
+
+                if updated:
+                    write_bibtex(bib_file, entries)
+                    print(f"Arquivo salvo: {bib_file}")
+
 if __name__ == "__main__":
     enrich_bibtex_dois()
-
-
-
-
-# # Dicionário de exemplos mantido
-# dict_doi = {
-#     "ieee": {
-#         "title": "In Situ Neural Relational Schema Matcher",
-#         "authors": "Du, Xingyu e Yuan, Gongsheng e Wu, Sai e Chen, Gang e Lu, Peng",
-#         "year": 2024
-#     }, 
-#     "acm": {
-#         "title": "Lingua manga: A generic large language model centric system for data curation",
-#         "authors": "Chen, Zui e Cao, Lei e Madden, Sam",
-#         "year": 2023
-#     },
-#     "scopus": {
-#         "title": "Semantic-similarity-based schema matching for management of building energy data",
-#         "authors": "Pan, Zhiyu, Guanchen Pan, e Antonello Monti",
-#         "year": 2022
-#     }, 
-#     "springer": {
-#         "authors": "Rinaldi, Antonio Maria e Russo, Cristiano e Tommasino, Cristian",
-#         "title": "A semantic approach for cultural heritage ontology matching and integration based on textual and multimedia information",
-#         "year": 2025
-#     },
-#     "science_direct": {
-#         "authors": "Hodorog, Andrei e Petri, Ioan e Rezgui, Yacine",
-#         "title": "Machine learning and Natural Language Processing of social media data for event detection in smart cities",
-#         "year": 2022,
-#     },
-#     "web_of_science": {
-#         "authors": "Du, Xiaokun e Zhu, Rongbo e Li, Yanhong e Anjum, Ashiq",
-#         "title": "Language model-based automatic prefix abbreviation expansion method for biomedical big data analysis",
-#         "year": 2019
-#     }
-# }
-
-
-
-
-
-# # Loop de teste para testar a função para cada doi
-# for key, dict_doi_values in dict_doi.items():
-#     print("Iniciando a busca...\n")
-#     print("Resultado da busca:")
-#     doi_open_alx = get_doi_by_title_in_openalex(dict_doi_values)
-#     doi_unpaywall = get_doi_by_title_in_unpaywall(dict_doi_values, email="leandroimail@gmail.com")
-#     doi_crossref = get_doi_by_title_in_crossref(dict_doi_values)
-    
-#     if doi_open_alx:
-#         print(f"DOI encontrado no OpenAlex: {doi_open_alx}")
-#     else:
-#         print("DOI não encontrado no OpenAlex.")
-#     if doi_unpaywall:
-#         print(f"DOI encontrado no Unpaywall: {doi_unpaywall}")
-#     else:
-#         print("DOI não encontrado no Unpaywall.")
-#     if doi_crossref:
-#         print(f"DOI encontrado no Crossref: {doi_crossref}")
-#     else:
-#         print("DOI não encontrado no Crossref.")
+    enrich_bibtex_abstract()
