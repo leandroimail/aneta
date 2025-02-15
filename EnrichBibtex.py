@@ -130,17 +130,13 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
     Para cada base habilitada em search_config.yaml, procura os arquivos .bib
     no diretório definido pela variável de ambiente PATH_DATA. Para cada registro
     sem DOI, utiliza os campos 'title', 'authors' (ou 'author') e 'year' para buscar
-    o DOI, utilizando as funções get_doi_by_title_in_unpaywall, get_doi_by_title_in_crossref e
-    get_doi_by_title_in_openalex (nessa ordem). Caso um DOI seja encontrado, o registro é atualizado
-    e o arquivo BibTeX é salvo.
+    o DOI.
     """
-    # Obtém o caminho base dos arquivos BibTeX a partir da variável de ambiente PATH_DATA
     path_data = os.environ.get("PATH_DATA")
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
 
-    # Monta o caminho para o arquivo de configuração search_config.yaml
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
@@ -148,7 +144,6 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
         print(f"Erro ao ler o arquivo de configuração: {e}")
         return
 
-    # Para cada base habilitada na configuração
     for base, enabled in search_config.items():
         if enabled:
             base_path = os.path.join(path_data, base)
@@ -156,36 +151,46 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
                 print(f"Diretório para a base '{base}' não encontrado: {base_path}")
                 continue
 
-            # Procura recursivamente por arquivos .bib no diretório da base
             bib_files = glob.glob(os.path.join(base_path, "**", "*.bib"), recursive=True)
             for bib_file in bib_files:
-                print(f"Processando arquivo: {bib_file}")
+                print(f"\nProcessando arquivo: {bib_file}")
                 entries = read_bibtex(bib_file)
-                updated = False
+                updated_file = False
 
-                # Verifica cada registro para atualizar o DOI se necessário
                 for entry in entries:
+                    title = entry.get("title", "Título não disponível")
                     doi = entry.get("doi", "").strip()
+                    # Apenas tenta enriquecer se não houver DOI
                     if not doi:
-                        # Utiliza os campos 'title', 'authors' ou 'author' e 'year' para a busca
+                        print(f"Registro '{title}': Sem DOI, iniciando enriquecimento.")
                         search_data = {
                             "title": entry.get("title", ""),
                             "authors": entry.get("authors", entry.get("author", "")),
                             "year": entry.get("year", "")
                         }
                         new_doi = get_doi_by_title_from_unpaywall(search_data, email)
-                        if not new_doi:
+                        if new_doi:
+                            print(f"Registro '{title}': DOI enriquecido via Unpaywall -> {new_doi}\n")
+                        else:
                             new_doi = get_doi_by_title_from_crossref(search_data)
-                        if not new_doi:
-                            new_doi = get_doi_by_title_from_openalex(search_data)
+                            if new_doi:
+                                print(f"Registro '{title}': DOI enriquecido via Crossref -> {new_doi}\n")
+                            else:
+                                new_doi = get_doi_by_title_from_openalex(search_data)
+                                if new_doi:
+                                    print(f"Registro '{title}': DOI enriquecido via OpenAlex -> {new_doi}\n")
+                                else:
+                                    print(f"Registro '{title}': Não foi possível enriquecer o DOI. \n")
                         if new_doi:
                             entry["doi"] = new_doi
-                            updated = True
-                            print(f"DOI atualizado para '{new_doi}' no registro '{search_data.get('title')}'")
-                # Se houve atualização, salva o arquivo BibTeX com os registros atualizados
-                if updated:
+                            updated_file = True
+
+                if updated_file:
                     write_bibtex(bib_file, entries)
                     print(f"Arquivo salvo: {bib_file}")
+                else:
+                    print(f"Arquivo {bib_file} não sofreu alterações no DOI.")
+
 
 def get_abstract_by_doi_from_openalex(doi: str) -> str:
     if doi:
@@ -262,37 +267,46 @@ def enrich_bibtex_abstract():
 
             bib_files = glob.glob(os.path.join(base_path, "**", "*.bib"), recursive=True)
             for bib_file in bib_files:
-                print(f"Processando arquivo: {bib_file}")
+                print(f"\nProcessando arquivo: {bib_file}")
                 entries = read_bibtex(bib_file)
-                updated = False
+                updated_file = False
 
                 for entry in entries:
-                    if not entry.get("abstract") and entry.get("doi"):
-                        doi = entry["doi"].strip()
-                        if doi:
-                            doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
-                            doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
-                        
-                        # Tenta obter o abstract do Crossref
-                        abstract = get_abstract_by_doi_from_crossref(doi)
-                        
-                        # Se não encontrou, tenta do Semantic Scholar
-                        if not abstract:
-                            abstract = get_abstract_by_doi_from_semanticscholar(doi)
-                        
-                        # Se ainda não encontrou, tenta do OpenAlex
-                        if not abstract:
-                            abstract = get_abstract_by_doi_from_openalex(doi)
-                        
-                        if abstract:
-                            entry["abstract"] = abstract
-                            updated = True
-                            print(f"Abstract atualizado para o DOI '{doi}'")
+                    title = entry.get("title", "Título não disponível")
+                    abstract = entry.get("abstract", "")
+                    doi = entry.get("doi", "").strip()
+                    # Apenas tenta enriquecer se abstract não existir
+                    if not abstract:
+                        if not doi:
+                            print(f"Registro '{title}': Sem DOI, impossível enriquecer abstract. \n")
+                        else:
+                            print(f"Registro '{title}': Iniciando enriquecimento do abstract para DOI '{doi}'.")
+                            abstract_new = get_abstract_by_doi_from_crossref(doi)
+                            if abstract_new:
+                                print(f"Registro '{title}': Abstract enriquecido via Crossref. \n")
+                            else:
+                                abstract_new = get_abstract_by_doi_from_semanticscholar(doi)
+                                if abstract_new:
+                                    print(f"Registro '{title}': Abstract enriquecido via Semantic Scholar. \n")
+                                else:
+                                    abstract_new = get_abstract_by_doi_from_openalex(doi)
+                                    if abstract_new:
+                                        print(f"Registro '{title}': Abstract enriquecido via OpenAlex. \n")
+                                    else:
+                                        print(f"Registro '{title}': Não foi possível enriquecer o abstract. \n")
+                            if abstract_new:
+                                entry["abstract"] = abstract_new
+                                updated_file = True
 
-                if updated:
+                if updated_file:
                     write_bibtex(bib_file, entries)
                     print(f"Arquivo salvo: {bib_file}")
+                else:
+                    print(f"Arquivo {bib_file} não sofreu alterações no abstract.")
 
 if __name__ == "__main__":
     enrich_bibtex_dois()
     enrich_bibtex_abstract()
+    print("\n\n==============================================")
+    print("EnrichBibtex completed successfully!")
+    print("============================================== \n\n")
