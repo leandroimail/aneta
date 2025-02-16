@@ -39,6 +39,6 @@ if config.get("spring_nature", False):
 if config.get("web_of_science", False):    
     wos_search.main(SEARCH_QUERY, PATH_DATA)
 
-print("\n\n==============================================")
-print("Search process completed successfully!")
-print("============================================== \n\n")
+print("\n\n++++++++++++++++++++++++++++++++++++++++++++++")
+print("     Search process completed successfully!")
+print("++++++++++++++++++++++++++++++++++++++++++++++ \n\n")
