@@ -7,6 +7,8 @@ import yaml
 from BibTex import read_bibtex, write_bibtex
 
 load_dotenv()
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+
 
 def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn):
     # Se houver somente 1 candidato, retorna-o
@@ -29,17 +31,57 @@ def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn):
             best_candidate = c
     return best_candidate
 
+def get_doi_by_title_from_scopus(dict_val) -> str:
+    """
+    Busca o DOI de um artigo no Scopus usando o título.
+    Requer que a variável de ambiente ELSEVIER_API_KEY esteja definida.
+    """
+    
+    title = dict_val['title'].strip().strip('"').strip("'").strip(".")
+    scopus_api_key = os.environ.get("ELSEVIER_API_KEY")
+    if not scopus_api_key:
+        print("ELSEVIER_API_KEY não definida.")
+        return ""
+    url = "https://api.elsevier.com/content/search/scopus"
+    headers = {
+        "Accept": "application/json",
+        "X-ELS-APIKey": scopus_api_key
+    }
+    headers = {**headers, **HEADERS}
+    params = {
+        "query": f"TITLE({title})"
+    }
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 404:
+            return ""
+        response.raise_for_status()
+        data = response.json()
+        entries = data.get("search-results", {}).get("entry", [])
+        if not entries:
+            return ""
+        # Seleciona o primeiro resultado e extrai o DOI
+        doi = entries[0].get("prism:doi", "")
+        if doi:
+            doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
+            doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
+        return doi
+    except Exception as e:
+        print(f"Erro ao buscar DOI pelo título no Scopus: {e}")
+        return ""
 
 def get_doi_by_title_from_openalex(dict_val):
     url = "https://api.openalex.org/works"
     params = {
-        "search": f'"{dict_val['title']}"',
+        "search": f'"{dict_val['title'].strip().strip('"').strip("'").strip(".")}"',
         "filter": "has_doi:true",  # Filtra apenas resultados com DOI
         "per-page": 10  # Tenta trazer mais opções para filtragem
     }
-    
+    headers = HEADERS.copy()
     try:
-        response = requests.get(url, params=params, headers={'User-Agent': 'SeuApp/1.0'})
+        response = requests.get(url, params=params, headers=headers)
+        if response.status_code == 404:
+            return None
         if response.status_code == 200:
             results = response.json().get('results', [])
             if results:
@@ -62,16 +104,18 @@ def get_doi_by_title_from_openalex(dict_val):
         print(f"Erro: {e}")
         return None
 
-
 def get_doi_by_title_from_unpaywall(dict_val, email):
     url = "https://api.unpaywall.org/v2/search"
     params = {
-        "query": f'"{dict_val['title']}"',
+        "query": f'"{dict_val['title'].strip().strip('"').strip("'").strip(".")}"',
         "email": email,
         "rows": 10  
     }
+    headers = HEADERS.copy()
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, headers=headers)
+        if response.status_code == 404:
+            return None
         if response.status_code == 200:
             results = response.json().get('results', [])
             if results:
@@ -92,16 +136,17 @@ def get_doi_by_title_from_unpaywall(dict_val, email):
         print(f"Erro: {e}")
         return None
 
-
 def get_doi_by_title_from_crossref(dict_val):
     url = "https://api.crossref.org/works"
     params = {
-        "query.bibliographic": f'"{dict_val['title']}"',
+        "query.bibliographic": f'"{dict_val['title'].strip().strip('"').strip("'").strip(".")}"',
         "rows": 10,  # Tenta trazer mais opções
     }
-    
+    headers = HEADERS.copy()
     try:
-        response = requests.get(url, params=params, headers={'User-Agent': 'SeuApp/1.0'})
+        response = requests.get(url, params=params, headers=headers)
+        if response.status_code == 404:
+            return None
         if response.status_code == 200:
             items = response.json().get("message", {}).get("items", [])
             if items:
@@ -123,6 +168,53 @@ def get_doi_by_title_from_crossref(dict_val):
         print(f"Erro: {e}")
         return None
 
+def get_doi_by_title_from_datacite(dict_val) -> str:
+    """
+    Busca o DOI de um artigo no DataCite usando o título.
+    """
+    title = dict_val['title'].strip().strip('"').strip("'").strip(".")
+    url = "https://api.datacite.org/dois"
+    
+    params = {
+        "query": f"titles.title:({title})"
+    }
+    headers = HEADERS.copy()
+    try:
+        response = requests.get(url, params=params, headers=headers)
+        if response.status_code == 404:
+            return ""
+        response.raise_for_status()
+        data = response.json()
+        
+        # Verifica se há resultados
+        items = data.get("data", [])
+        if not items:
+            return ""
+        
+        if len(items) == 1:
+            doi = items[0].get("attributes", {}).get("doi", "")
+            return doi.strip()
+        
+        # Filtra os candidatos usando a função existente
+        def get_year(item):
+            return item.get("attributes", {}).get("publicationYear")
+            
+        def get_authors(item):
+            creators = item.get("attributes", {}).get("creators", [])
+            return [f"{c.get('givenName', '')} {c.get('familyName', '')}".strip() 
+                    for c in creators]
+        
+        best_match = filter_candidates(items, dict_val, get_year, get_authors)
+        
+        if best_match:
+            doi = best_match.get("attributes", {}).get("doi", "")
+            return doi.strip()
+            
+        return ""
+        
+    except Exception as e:
+        print(f"Erro ao buscar DOI pelo título no DataCite: {e}")
+        return ""
 
 def enrich_bibtex_dois(email="leandroimail@gmail.com"):
     """
@@ -136,27 +228,26 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
-
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
-        print(f"Erro ao ler o arquivo de configuração: {e}")
-        return
-
+        raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
     for base, enabled in search_config.items():
+        if "arxiv" in base.lower() and os.environ.get("ENRICH_ARXIV", "False").lower() != "true":
+            print(f"\n\nBase '{base}' não suportada para busca de DOIs.")
+            continue
         if enabled:
             base_path = os.path.join(path_data, base)
             if not os.path.isdir(base_path):
                 print(f"Diretório para a base '{base}' não encontrado: {base_path}")
                 continue
-
             bib_files = glob.glob(os.path.join(base_path, "**", "*.bib"), recursive=True)
             for bib_file in bib_files:
-                print(f"\nProcessando arquivo: {bib_file}")
+                print(f"\n\nProcessando arquivo: {bib_file}")
+                print(f"{90 * '-'}\n\n")
                 entries = read_bibtex(bib_file)
                 updated_file = False
-
                 for entry in entries:
                     title = entry.get("title", "Título não disponível")
                     doi = entry.get("doi", "").strip()
@@ -180,25 +271,34 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
                                 if new_doi:
                                     print(f"Registro '{title}': DOI enriquecido via OpenAlex -> {new_doi}\n")
                                 else:
-                                    print(f"Registro '{title}': Não foi possível enriquecer o DOI. \n")
+                                    new_doi = get_doi_by_title_from_datacite(search_data)
+                                    if new_doi:
+                                        print(f"Registro '{title}': DOI enriquecido via DataCite -> {new_doi}\n")   
+                                    else:
+                                        new_doi = get_doi_by_title_from_scopus(search_data)
+                                        if new_doi:
+                                            print(f"Registro '{title}': DOI enriquecido via Scopus -> {new_doi}\n")
+                                        else:
+                                            print(f"Registro '{title}': Não foi possível enriquecer o DOI. \n")
                         if new_doi:
                             entry["doi"] = new_doi
                             updated_file = True
-
                 if updated_file:
                     write_bibtex(bib_file, entries)
                     print(f"Arquivo salvo: {bib_file}")
                 else:
-                    print(f"Arquivo {bib_file} não sofreu alterações no DOI.")
-
+                    print(f"Arquivo {bib_file} não sofreu alterações no DOI. \n\n")
 
 def get_abstract_by_doi_from_openalex(doi: str) -> str:
     if doi:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
         doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
     url = f"https://api.openalex.org/works/https://doi.org/{doi}"
+    headers = HEADERS.copy()
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
+        if response.status_code == 404:
+            return ""
         response.raise_for_status()
         data = response.json()
         abstract_inverted_index = data.get("abstract_inverted_index", {})
@@ -216,8 +316,12 @@ def get_abstract_by_doi_from_semanticscholar(doi: str) -> str:
         doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
     try:
         url = f"https://api.semanticscholar.org/v1/paper/{doi}"
-        response = requests.get(url).json()
-        abstract = response.get("abstract", "")
+        response = requests.get(url)
+        if response.status_code == 404:
+            return ""
+        response.raise_for_status()
+        data = response.json()
+        abstract = data.get("abstract", "")
         return abstract
     except Exception as e:
         print(f"Erro ao obter abstract do Semantic Scholar: {e}")
@@ -229,7 +333,10 @@ def get_abstract_by_doi_from_crossref(doi: str) -> str:
         doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
     try:
         url = f"https://api.crossref.org/works/{doi}"
-        response = requests.get(url)
+        headers = HEADERS.copy()
+        response = requests.get(url, headers=headers)
+        if response.status_code == 404:
+            return ""
         response.raise_for_status()
         data = response.json()
         abstract = data.get("message", {}).get("abstract", "")
@@ -248,12 +355,17 @@ def get_abstract_by_doi_from_scopus(doi: str) -> str:
         return ""
     url = f"https://api.elsevier.com/content/abstract/doi/{doi}?apiKey={scopus_api_key}"
     headers = {"Accept": "application/json"}
+    headers = {**headers, **HEADERS}
     try:
         response = requests.get(url, headers=headers)
+        if response.status_code == 404:
+            return ""
         response.raise_for_status()
         data = response.json()
-        # Extrai o abstract do campo indicado pela API
-        abstract = data.get("dc:description", "")
+        abstract = data.get("abstracts-retrieval-response", {}).get("coredata", {}).get("dc:description", "")
+        if abstract:
+            return abstract
+        abstract = data.get("abstracts-retrieval-response", {}).get("bibrecord", {}).get("head", {}).get("abstracts", "") 
         return abstract
     except Exception as e:
         print(f"Erro ao obter abstract do Scopus: {e}")
@@ -276,19 +388,22 @@ def enrich_bibtex_abstract():
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
-        print(f"Erro ao ler o arquivo de configuração: {e}")
-        return
+        raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
 
     for base, enabled in search_config.items():
+        if "arxiv" in base.lower() and os.environ.get("ENRICH_ARXIV", "False").lower() != "true":
+            print(f"\n\nBase '{base}' não suportada para busca de DOIs.")
+            continue
         if enabled:
             base_path = os.path.join(path_data, base)
             if not os.path.isdir(base_path):
                 print(f"Diretório para a base '{base}' não encontrado: {base_path}")
                 continue
-
+            
             bib_files = glob.glob(os.path.join(base_path, "**", "*.bib"), recursive=True)
             for bib_file in bib_files:
-                print(f"\nProcessando arquivo: {bib_file}")
+                print(f"\n\nProcessando arquivo: {bib_file}")
+                print(f"{90 * '-'}\n\n")
                 entries = read_bibtex(bib_file)
                 updated_file = False
 
@@ -322,14 +437,11 @@ def enrich_bibtex_abstract():
                             if abstract_new:
                                 entry["abstract"] = abstract_new
                                 updated_file = True
-
                 if updated_file:
                     write_bibtex(bib_file, entries)
                     print(f"Arquivo salvo: {bib_file}")
                 else:
                     print(f"Arquivo {bib_file} não sofreu alterações no abstract.")
-
-
 
 def get_keywords_by_doi_from_openalex(doi: str) -> dict:
     """
@@ -342,17 +454,19 @@ def get_keywords_by_doi_from_openalex(doi: str) -> dict:
     if doi:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
     url = f"https://api.openalex.org/works/https://doi.org/{doi}"
+    headers = HEADERS.copy()
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
+        if response.status_code == 404:
+            return ""
         response.raise_for_status()
         data = response.json()
-
+        
         # Extração de author_keywords a partir de "keywords"
         openalex_keywords = data.get("keywords", [])
         author_keywords = ", ".join(
             [kw.get("display_name", "") for kw in openalex_keywords if kw.get("display_name", "")]
         )
-
         # Extração de keywords a partir de "concepts" (apenas os 10 com maiores score)
         concepts = data.get("concepts", [])
         sorted_concepts = sorted(concepts, key=lambda c: c.get("score", 0), reverse=True)
@@ -360,12 +474,10 @@ def get_keywords_by_doi_from_openalex(doi: str) -> dict:
         keywords = ", ".join(
             [c.get("display_name", "") for c in top_concepts if c.get("display_name", "")]
         )
-
         return {"author_keywords": author_keywords, "keywords": keywords}
     except Exception as e:
         print(f"Erro ao obter keywords do OpenAlex: {e}")
         return {"author_keywords": "", "keywords": ""}
-
 
 def get_keywords_by_doi_from_crossref(doi: str) -> dict:
     """
@@ -375,8 +487,11 @@ def get_keywords_by_doi_from_crossref(doi: str) -> dict:
     if doi:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
     url = f"https://api.crossref.org/works/{doi}"
+    headers = HEADERS.copy()
     try:
-        response = requests.get(url, headers={'User-Agent': 'SeuApp/1.0'})
+        response = requests.get(url, headers=headers)
+        if response.status_code == 404:
+            return ""
         if response.status_code == 200:
             data = response.json().get("message", {})
             subjects = data.get("subject", [])
@@ -390,14 +505,13 @@ def get_keywords_by_doi_from_crossref(doi: str) -> dict:
         print(f"Erro ao obter keywords do Crossref: {e}")
         return {"author_keywords": "", "keywords": ""}
 
-
 def get_keywords_by_doi_from_scopus(doi: str) -> dict:
     """
     Retorna as keywords a partir do Scopus.
 
     Mapeamentos:
-    - author_keywords: de response["authkeywords"]["author-keyword"], extraindo o valor em "$".
-    - keywords: de response["idxterms"]["mainterm"], extraindo o valor em "$" dos termos cujo score (se informado) seja > 0.10.
+    - author_keywords: de response["abstracts-retrieval-response"]["authkeywords"]["author-keyword"], extraindo o valor em "$".
+    - keywords: de response["abstracts-retrieval-response"]["idxterms"]["mainterm"], extraindo o valor em "$" dos termos cujo score (se informado) seja > 0.10.
     """
     if doi:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
@@ -407,51 +521,64 @@ def get_keywords_by_doi_from_scopus(doi: str) -> dict:
         return {"author_keywords": "", "keywords": ""}
     url = f"https://api.elsevier.com/content/abstract/doi/{doi}?apiKey={scopus_api_key}"
     headers = {"Accept": "application/json"}
+    headers = {**headers, **HEADERS}
     try:
         response = requests.get(url, headers=headers)
+        if response.status_code == 404:
+            return {"author_keywords": "", "keywords": ""}
         response.raise_for_status()
         data = response.json()
-
+        root = data.get("abstracts-retrieval-response", {})
         # Extração de author_keywords
         auth_keywords = ""
-        if "authkeywords" in data:
-            ak = data["authkeywords"].get("author-keyword", [])
-            if isinstance(ak, list):
-                auth_keywords = ", ".join([item.get("$", "") for item in ak if item.get("$", "")])
-            elif isinstance(ak, dict):
-                auth_keywords = ak.get("$", "")
-
+        ak = root.get("authkeywords", {})
+        if ak is None:
+            ak = []
+        elif not isinstance(ak, dict):
+            ak = ak.get("author-keyword", [])
+        if isinstance(ak, list):
+            auth_keywords = ", ".join([item.get("$", "") for item in ak if item.get("$", {})])
+        elif isinstance(ak, dict):
+            auth_keywords = ak.get("$", "")
         # Extração de keywords a partir de idxterms.mainterm
         keywords = ""
-        if "idxterms" in data:
-            main_terms = data["idxterms"].get("mainterm", [])
-            terms_list = []
-            if isinstance(main_terms, list):
-                for term in main_terms:
-                    # Se existir um campo "score", utiliza-o para filtrar; caso contrário, inclui o termo
-                    score = term.get("score")
-                    if score is None or float(score) > 0.10:
-                        term_text = term.get("$", "")
-                        if term_text:
-                            terms_list.append(term_text)
-            elif isinstance(main_terms, dict):
-                score = main_terms.get("score")
+        mt = root.get("idxterms", {})
+        if mt is None:
+            mt = []
+        elif not isinstance(mt, dict):
+            mt = mt.get("mainterm", [])
+        terms_list = []
+        if isinstance(mt, list):
+            for term in mt:
+                score = term.get("score")
                 if score is None or float(score) > 0.10:
-                    term_text = main_terms.get("$", "")
+                    term_text = ""
+                    if isinstance(term, dict):                    
+                        term_text = term.get("$", "")
+                    elif isinstance(term, str):
+                        term_text = term
                     if term_text:
                         terms_list.append(term_text)
-            keywords = ", ".join(terms_list)
+        elif isinstance(mt, dict):
+            score = mt.get("score")
+            if score is None or float(score) > 0.10:
+                term_text = ""
+                if isinstance(mt, dict):
+                    term_text = mt.get("$", "")
+                elif isinstance(mt, str):
+                    term_text = mt
+                if term_text:
+                    terms_list.append(term_text)
+        keywords = ", ".join(terms_list)
 
         return {"author_keywords": auth_keywords, "keywords": keywords}
     except Exception as e:
         print(f"Erro ao obter keywords do Scopus: {e}")
         return {"author_keywords": "", "keywords": ""}
 
-
 def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
     """
     Atualiza os registros BibTeX que não possuem author_keywords preenchidas.
-
     - Se o registro não possui author_keywords e keywords também, ambos serão enriquecidos.
     - Se o registro não possui author_keywords mas já possui keywords preenchidas, apenas author_keywords será enriquecido e keywords não será sobrescrito.
     """
@@ -459,70 +586,75 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
-
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
-        print(f"Erro ao ler o arquivo de configuração: {e}")
-        return
-
+        raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
     for base, enabled in search_config.items():
+        if "arxiv" in base.lower() and os.environ.get("ENRICH_ARXIV", "False").lower() != "true":
+            print(f"\n\nBase '{base}' não suportada para busca de DOIs.")
+            continue
         if enabled:
             base_path = os.path.join(path_data, base)
             if not os.path.isdir(base_path):
                 print(f"Diretório para a base '{base}' não encontrado: {base_path}")
                 continue
-
             bib_files = glob.glob(os.path.join(base_path, "**", "*.bib"), recursive=True)
             for bib_file in bib_files:
-                print(f"\nProcessando arquivo: {bib_file}")
+                print(f"\n\nProcessando arquivo: {bib_file}")
+                print(f"{90 * '-'}\n\n")
                 entries = read_bibtex(bib_file)
                 updated_file = False
-
                 for entry in entries:
                     title = entry.get("title", "Título não disponível")
                     doi = entry.get("doi", "").strip()
+                    result = {
+                        "author_keywords":entry.get("author_keywords", "").strip(), 
+                        "keywords": entry.get("keywords", "").strip()
+                    }    
 
                     if not doi:
                         print(f"Registro '{title}': Sem DOI, impossível enriquecer keywords.\n")
                         continue
-
-                    # Apenas enriquece se author_keywords estiver vazio
                     if entry.get("author_keywords"):
-                        print(f"Registro '{title}': author_keywords já preenchido, pulando enriquecimento.")
                         continue
 
                     print(f"Registro '{title}': Iniciando enriquecimento para DOI '{doi}'.")
-                    # Remoção de prefixos do DOI
                     doi_tratado = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
 
-                    # Primeiro tenta via OpenAlex
-                    res = get_keywords_by_doi_from_openalex(doi_tratado)
-                    result = {"author_keywords": "", "keywords": ""}
-                    if res["author_keywords"]:
-                        result["author_keywords"] = res["author_keywords"]
-                    if res["keywords"]:
-                        result["keywords"] = res["keywords"]
-
-                    # Se necessário, tenta via Scopus
-                    if not result["author_keywords"] or (not result["keywords"] and not entry.get("keywords")):
-                        res_scopus = get_keywords_by_doi_from_scopus(doi_tratado)
-                        if not result["author_keywords"] and res_scopus["author_keywords"]:
-                            result["author_keywords"] = res_scopus["author_keywords"]
-                        if not result["keywords"] and not entry.get("keywords") and res_scopus["keywords"]:
-                            result["keywords"] = res_scopus["keywords"]
-
+                    res_keywords_enrich = get_keywords_by_doi_from_openalex(doi_tratado)
+                    if res_keywords_enrich["author_keywords"]:
+                        result["author_keywords"] = res_keywords_enrich["author_keywords"]
+                        print(f"Registro '{title}': author_keywords enriquecidas via OpenAlex.")
+                    if res_keywords_enrich["keywords"]:
+                        result["keywords"] = res_keywords_enrich["keywords"]
+                        print(f"Registro '{title}': keywords enriquecidas via OpenAlex.")
+                    
+                    if not result["author_keywords"] or not result["keywords"]:
+                        res_keywords_enrich = get_keywords_by_doi_from_scopus(doi_tratado)
+                        if not result["author_keywords"] and res_keywords_enrich["author_keywords"]:
+                            result["author_keywords"] = res_keywords_enrich["author_keywords"]
+                            print(f"Registro '{title}': author_keywords enriquecidas via Scopus.")
+                        if not result["keywords"] and res_keywords_enrich["keywords"]:
+                            result["keywords"] = res_keywords_enrich["keywords"]
+                            print(f"Registro '{title}': keywords enriquecidas via Scopus.")
+                            
                     # Atualiza entry
                     if result["author_keywords"]:
                         entry["author_keywords"] = result["author_keywords"]
-                        print(f"Registro '{title}': author_keywords enriquecidas.")
                         updated_file = True
                     if result["keywords"]:
                         entry["keywords"] = result["keywords"]
-                        print(f"Registro '{title}': keywords enriquecidas.")
                         updated_file = True
-                    if result["author_keywords"] or result["keywords"]:
+                    if res_keywords_enrich["author_keywords"] or res_keywords_enrich["keywords"]:
+                        print(f"\n")
+                    
+                    if not res_keywords_enrich["author_keywords"]:
+                        print(f"Registro '{title}': Não foi possível enriquecer author_keywords.") 
+                    if not res_keywords_enrich["keywords"]:
+                        print(f"Registro '{title}': Não foi possível enriquecer keywords.")
+                    if not res_keywords_enrich["author_keywords"] and not res_keywords_enrich["keywords"]:
                         print(f"\n")
 
                 if updated_file:
@@ -531,31 +663,45 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
                 else:
                     print(f"Arquivo {bib_file} não sofreu alterações nas keywords.")
 
-
-
+def ernich_bibtex():
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "config/enrich_config.yaml"), "r", encoding="utf-8") as f:
+            enrich_config = yaml.safe_load(f)
+            os.environ["ENRICH_ARXIV"] = str(enrich_config.get("enrich_arxiv", False))
+            
+    except Exception as e:
+        raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
+    
+    run_enrich = False
+    if enrich_config.get("enrich_bibtex_doi"):
+        print("\n\n\n==============================================")
+        print("EnrichBibtex DOIS Started!")
+        print("==============================================\n\n")
+        enrich_bibtex_dois()
+        run_enrich = True
+    
+    if enrich_config.get("enrich_bibtex_abstract"):
+        print("\n\n\n==============================================")
+        print("EnrichBibtex abstract  Started!")
+        print("==============================================\n\n")
+        enrich_bibtex_abstract()
+        run_enrich = True
+    
+    if enrich_config.get("enrich_bibtex_keywords"):
+        print("\n\n\n==============================================")
+        print("EnrichBibtex keywords Started!")
+        print("==============================================\n\n")
+        enrich_bibtex_keywords()
+        run_enrich = True
+    
+    if run_enrich:
+        print("\n\n++++++++++++++++++++++++++++++++++++++++++++++")
+        print("EnrichBibtex completed successfully!")
+        print("++++++++++++++++++++++++++++++++++++++++++++++\n\n")    
 
 
 if __name__ == "__main__":
-    print("\n\n==============================================")
-    print("EnrichBibtex DOIS Started!")
-    enrich_bibtex_dois()
-    
-    print("\n\n==============================================")
-    print("EnrichBibtex abstract  Started!")
-    enrich_bibtex_abstract()
-    
-    print("\n\n==============================================")
-    print("EnrichBibtex completed successfully!")
-    print("============================================== \n\n")
-    
-    
-    print("\n\n==============================================")
-    print("EnrichBibtex keywords Started!")
-    enrich_bibtex_keywords()
-    
-    
-    
-    
+    ernich_bibtex()
     
     # TODO: Verificar a busca de abstract via Scopus, ver se tá pegando certo
     # TODO: Verificar a buscas de keywords, ver se tah pegando via crossref
