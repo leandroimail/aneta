@@ -90,13 +90,13 @@ def converte_para_bibtex(entry):
     pages = pages_data.get('range', '') if 'range' in pages_data else ""
     
     # Determina o tipo de publicação e atribui journal ou conference
-    type_publication_list = entry.get('types', [])
+    type_publication_list = entry.get('sourceTypes', [])
     type_publication = type_publication_list[0] if type_publication_list else ""
     
     if type_publication == "Article":
         journal = source_title
         conference = ""
-    elif type_publication in ["Meeting", "Proceedings Paper"]:
+    elif type_publication in ["Meeting", "Proceedings Paper", "Proceedings Paper"]:
         conference = source_title
         journal = ""
     else:

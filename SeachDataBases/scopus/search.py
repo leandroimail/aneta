@@ -57,7 +57,7 @@ def converte_para_bibtex(entry):
     # Campos adicionais
     abstract = entry.get('dc:description', '').strip().replace('\n', ' ')
     keywords_auth = '; '.join(entry.get('authkeywords', '').strip().split('|'))
-    type_publication = entry.get('subtypeDescription', 'not informed').strip()
+    type_publication = entry.get('subtypeDescription', '').strip()
     
     # Novas tags extraídas do JSON
     publisher = entry.get('publisher', '')

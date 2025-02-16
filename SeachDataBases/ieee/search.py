@@ -116,6 +116,8 @@ def converte_para_bibtex(entry):
         bibtex_key = doi.replace('/', '_')
     else:
         bibtex_key = re.sub(r'\W+', '', title)[:20] if title else "sem_titulo"
+        
+    type_publication = entry.get('content_type', '').strip()
     
     bibtex_entry = (
         f"@article{{{bibtex_key},\n"
@@ -127,7 +129,7 @@ def converte_para_bibtex(entry):
         f"  url_html = {{{url_html}}},\n"
         f"  url_pdf = {{{url_pdf}}},\n"
         f"  abstract = {{{abstract}}},\n"
-        f"  type_publication = {{{entry.get('content_type', 'Article').strip()}}},\n"
+        f"  type_publication = {{{type_publication}}},\n"
         f"  publisher = {{{publisher}}},\n"
         f"  isbn = {{{isbn}}},\n"
         f"  issn = {{{issn}}},\n"
