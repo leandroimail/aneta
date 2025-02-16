@@ -377,16 +377,15 @@ def main(query, path_data):
         print(f"Error saving BibTeX file: {e}")
         sys.exit(1)
 
+    print("\nData collection and saving process completed successfully.")
+    print("Please note: Keywords are extracted directly from arXiv API categories.")
+    print("If specific keyword classification or filtering is desired, further processing needs to be implemented.")
+
     # Log final
     print("\n==============================================")
     print("         BUSCA FINALIZADA: ARXIV               ")
     print(f"       Artigos encontros e adicionados: {len(records_agregados)}")
     print("==============================================\n")
-
-    print("\nData collection and saving process completed successfully.")
-    print("Please note: Keywords are extracted directly from arXiv API categories.")
-    print("If specific keyword classification or filtering is desired, further processing needs to be implemented.")
-
 
 if __name__ == "__main__":
     import sys
