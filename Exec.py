@@ -2,8 +2,6 @@ from Config import path_SPRINGER, path_ACM, path_directory_bibs
 from DonwloadPapers import download_all_papers
 import os
 from dotenv import load_dotenv
-
-# Carrega as variáveis do .env
 load_dotenv()
 
 
