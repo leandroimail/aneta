@@ -1,7 +1,6 @@
 import os
 import yaml
 from dotenv import load_dotenv
-# from config.api_config import *
 from SeachDataBases.arxiv import search as arxiv_search
 from SeachDataBases.ieee import search as ieee_search
 from SeachDataBases.science_direct import search_metadata as sd_search
@@ -13,8 +12,11 @@ from SeachDataBases.web_of_science import search_start as wos_search
 load_dotenv()
 
 # Parâmetros principais
-PATH_DATA = os.getenv("PATH_DATA", "/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl/Sandbox/Data")
-SEARCH_QUERY = os.getenv("SEARCH_QUERY", '("Schema Matching" AND ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))')
+PATH_DATA = os.getenv("PATH_DATA", "./Sandbox/Data")
+SEARCH_QUERY = os.getenv("SEARCH_QUERY", '')
+
+if not SEARCH_QUERY:
+    raise ValueError("SEARCH_QUERY não foi definido no .env.")
 
 # Lê config YAML para definir quais buscas executar
 with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
