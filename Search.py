@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 # from config.api_config import *
 from SeachDataBases.arxiv import search as arxiv_search
 from SeachDataBases.ieee import search as ieee_search
-from SeachDataBases.science_direct import search as sd_search
+from SeachDataBases.science_direct import search_metadata as sd_search
 from SeachDataBases.scopus import search as scopus_search
 from SeachDataBases.spring_nature import search as spring_search
 from SeachDataBases.web_of_science import search_start as wos_search

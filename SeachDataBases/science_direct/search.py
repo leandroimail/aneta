@@ -180,6 +180,7 @@ def main(query, path_data):
             "display": {
                 "offset": offset,
                 "show": PAGE_SIZE,
+                "view": "COMPLETE",
                 "sortBy": "relevance"
             }
         }
