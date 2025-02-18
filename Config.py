@@ -237,7 +237,19 @@ list_keywords = ["keyword", "Keyword", "KEYWORD", "Keywords", "keywords", "KEYWO
 list_author = ["author", "Author", "AUTHOR", "authors", "Authors", "AUTHORS"]
 list_year = ["year", "Year", "YEAR", "Publication Year", "publication year", "PUBLICATION YEAR", "Date", "DATE", "date"]
 list_publication = ["journal", "Journal", "JOURNAL", "booktitle", "Booktitle", "BOOKTITLE", "Publication Title",
-                    "publication title", "PUBLICATION TITLE"]
+                    "publication title", "PUBLICATION TITLE", "publication","Publication","PUBLICATION", "source", "Source", "SOURCE",
+                    "publicationName", "PublicationName", "Publication Name", "publication name", "Publication name", "publicationname"]
+list_type_publication = ["ENTRYTYPE", "type", "Type", "TYPE", "Content Type", "content type", "CONTENT TYPE", 
+                        "Publication Type", "publication type", "PUBLICATION TYPE"]
+list_publisher = ["publisher", "Publisher", "PUBLISHER", "publisherName", "PublisherName", "Publisher Name", "publisher name", "Publisher name", "publishername",
+                    "Publisher-Name", "PUBLISHER NAME", "PUBLISHERNAME",]
+list_abbreviated_publication = ["abbrev_source_title", "abbrev_source_title", "Abbrev Source Title", "Abbrev Source Title", "Abbrev Source Title",
+                                "abbreviated", "Abbreviated", "ABBREVIATED", "Abbreviated Source Title", "abbreviated source title", "Abbreviated Source Title",]
+
+
+
+
+
 
 
 def webdriver ():
