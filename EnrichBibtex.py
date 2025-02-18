@@ -675,28 +675,48 @@ def read_csv_data(path_csv):
         return None
 
 
+def preprocess_df(df):
+    """Pré-processa o DataFrame adicionando colunas com os valores já limpos."""
+    if "ISSN" in df.columns:
+        df["ISSN_lower"] = df["ISSN"].str.replace("-", "").str.lower()
+    if "Full Journal Title" in df.columns:
+        df["Full Journal Title_lower"] = (
+            df["Full Journal Title"]
+            .str.lower()
+            .apply(lambda x: re.sub(r"[^a-z0-9 ]", " ", x))
+        )
+    if "Abbreviated Title" in df.columns:
+        df["Abbreviated Title_lower"] = (
+            df["Abbreviated Title"]
+            .str.lower()
+            .apply(lambda x: re.sub(r"[^a-z0-9 ]", " ", x))
+        )
+    return df
+
+
 def get_metric_from_df(df, publication, issn, abbrev, metric_column):
     """
-    Busca o valor da métrica (ex.: Journal Impact Factor ou Total Cites) no DataFrame,
-    considerando a ordem de precedência: ISSN, publication e abbrev_source_title.
-    Os DataFrames possuem as colunas: ISSN, Full Journal Title e Abbreviated Title.
+    Busca o valor da métrica usando as colunas pré-limpa.
+    Prioriza: ISSN, Full Journal Title e Abbreviated Title.
     """
-    result = None
-    if issn and "ISSN" in df.columns:
-        match = df[df["ISSN"].str.lower() == issn.lower()]
+    if issn and "ISSN_lower" in df.columns:
+        match = df[df["ISSN_lower"] == issn.replace("-", "").lower()]
         if not match.empty:
-            result = match.iloc[0].get(metric_column, None)
-    if result is None and publication and "Full Journal Title" in df.columns:
-        cleaned_publication = re.sub(r"[^a-zA-Z0-9 ]", " ", publication.lower())
-        match = df[df["Full Journal Title"].str.lower() == cleaned_publication]
+            return match.iloc[0].get(metric_column, None)
+    
+    cleaned_publication = re.sub(r"[^a-z0-9 ]", " ", publication.lower()) if publication else ""
+    if publication and "Full Journal Title_lower" in df.columns:
+        match = df[df["Full Journal Title_lower"] == cleaned_publication]
         if not match.empty:
-            result = match.iloc[0].get(metric_column, None)
-    if result is None and abbrev and "Abbreviated Title" in df.columns:
-        cleaned_abbrev = re.sub(r"[^a-zA-Z0-9 ]", " ", abbrev.lower())
-        match = df[df["Abbreviated Title"].str.lower() == cleaned_abbrev]
+            return match.iloc[0].get(metric_column, None)
+    
+    if abbrev and "Abbreviated Title_lower" in df.columns:
+        cleaned_abbrev = re.sub(r"[^a-z0-9 ]", " ", abbrev.lower())
+        match = df[df["Abbreviated Title_lower"] == cleaned_abbrev]
         if not match.empty:
-            result = match.iloc[0].get(metric_column, None)
-    return result
+            return match.iloc[0].get(metric_column, None)
+    
+    return None
 
 
 def enrich_bibtex_file(bibtex_path, df_jcr, df_scimago, output_path):
@@ -718,6 +738,10 @@ def enrich_bibtex_file(bibtex_path, df_jcr, df_scimago, output_path):
 
     # Percorre cada entrada e insere os campos de métrica se disponíveis
     for entry in bib_data:
+        
+        if entry.get("jcr") or entry.get("scimago"):
+            # print(f"Registro já enriquecido com JCR e Scimago. Pulando.")
+            continue
         
         # Preparando dados para a mensagem informativa
         doi_val = entry.get("doi", "N/A")
@@ -785,6 +809,9 @@ def enrich_bibtex_jcr_scimago():
         print("Erro ao ler os arquivos CSV do JCR ou Scimago.")
         return
 
+    df_jcr = preprocess_df(df_jcr)
+    df_scimago = preprocess_df(df_scimago)
+    
     # Itera sobre as bases configuradas
     for base, enabled in search_config.items():
         if not enabled:
@@ -808,7 +835,6 @@ def enrich_bibtex_jcr_scimago():
             # Neste exemplo, o arquivo enriquecido sobrescreve o original.
             enrich_bibtex_file(bib_file, df_jcr, df_scimago, bib_file)
 
-
 def enrich_bibtex():
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/enrich_config.yaml"), "r", encoding="utf-8") as f:
@@ -819,26 +845,26 @@ def enrich_bibtex():
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
     
     run_enrich = False
-    if enrich_config.get("enrich_bibtex_doi"):
-        print("\n\n\n==============================================")
-        print("EnrichBibtex DOIS Started!")
-        print("==============================================\n\n")
-        enrich_bibtex_dois()
-        run_enrich = True
+    # if enrich_config.get("enrich_bibtex_doi"):
+    #     print("\n\n\n==============================================")
+    #     print("EnrichBibtex DOIS Started!")
+    #     print("==============================================\n\n")
+    #     enrich_bibtex_dois()
+    #     run_enrich = True
     
-    if enrich_config.get("enrich_bibtex_abstract"):
-        print("\n\n\n==============================================")
-        print("EnrichBibtex abstract  Started!")
-        print("==============================================\n\n")
-        enrich_bibtex_abstract()
-        run_enrich = True
+    # if enrich_config.get("enrich_bibtex_abstract"):
+    #     print("\n\n\n==============================================")
+    #     print("EnrichBibtex abstract  Started!")
+    #     print("==============================================\n\n")
+    #     enrich_bibtex_abstract()
+    #     run_enrich = True
     
-    if enrich_config.get("enrich_bibtex_keywords"):
-        print("\n\n\n==============================================")
-        print("EnrichBibtex keywords Started!")
-        print("==============================================\n\n")
-        enrich_bibtex_keywords()
-        run_enrich = True
+    # if enrich_config.get("enrich_bibtex_keywords"):
+    #     print("\n\n\n==============================================")
+    #     print("EnrichBibtex keywords Started!")
+    #     print("==============================================\n\n")
+    #     enrich_bibtex_keywords()
+    #     run_enrich = True
     
     if enrich_config.get("enrich_bibtex_jcr_scimago"):
         print("\n\n\n==============================================")
