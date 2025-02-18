@@ -1,14 +1,15 @@
-import requests
 import json
 import os
-from dotenv import load_dotenv
 import glob
+import re
 import yaml
+import requests
+import pandas as pd
+from dotenv import load_dotenv
 from BibTex import read_bibtex, write_bibtex
 
 load_dotenv()
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-
 
 def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn):
     # Se houver somente 1 candidato, retorna-o
@@ -663,7 +664,152 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
                 else:
                     print(f"Arquivo {bib_file} não sofreu alterações nas keywords.")
 
-def ernich_bibtex():
+
+def read_csv_data(path_csv):
+    """Lê o CSV e aplica a função de limpeza."""
+    try:
+        df = pd.read_csv(path_csv)
+        return df
+    except Exception as e:
+        print(f"Erro ao ler o CSV ({path_csv}): {e}")
+        return None
+
+
+def get_metric_from_df(df, publication, issn, abbrev, metric_column):
+    """
+    Busca o valor da métrica (ex.: Journal Impact Factor ou Total Cites) no DataFrame,
+    considerando a ordem de precedência: ISSN, publication e abbrev_source_title.
+    Os DataFrames possuem as colunas: ISSN, Full Journal Title e Abbreviated Title.
+    """
+    result = None
+    if issn and "ISSN" in df.columns:
+        match = df[df["ISSN"].str.lower() == issn.lower()]
+        if not match.empty:
+            result = match.iloc[0].get(metric_column, None)
+    if result is None and publication and "Full Journal Title" in df.columns:
+        cleaned_publication = re.sub(r"[^a-zA-Z0-9 ]", " ", publication.lower())
+        match = df[df["Full Journal Title"].str.lower() == cleaned_publication]
+        if not match.empty:
+            result = match.iloc[0].get(metric_column, None)
+    if result is None and abbrev and "Abbreviated Title" in df.columns:
+        cleaned_abbrev = re.sub(r"[^a-zA-Z0-9 ]", " ", abbrev.lower())
+        match = df[df["Abbreviated Title"].str.lower() == cleaned_abbrev]
+        if not match.empty:
+            result = match.iloc[0].get(metric_column, None)
+    return result
+
+
+def enrich_bibtex_file(bibtex_path, df_jcr, df_scimago, output_path):
+    """
+    Lê um arquivo BibTeX utilizando read_bibtex, insere os campos de JCR e Scimago
+    usando os DataFrames e salva o resultado no arquivo de saída utilizando write_bibtex.
+    Os campos dos BibTeX são: publication, issn e abbrev_source_title.
+    
+    Para o CSV do JCR, usamos a coluna "Journal Impact Factor" e para o Scimago, a coluna "Total Cites".
+    Após o enriquecimento, imprime o DOI e o título do artigo, informando com qual métrica foi enriquecido.
+    Caso não haja enriquecimento, insere jcr e scimago vazios.
+    """
+    try:
+        # Lê o arquivo BibTeX e retorna um JSON (lista de dicionários)
+        bib_data = read_bibtex(bibtex_path)
+    except Exception as e:
+        print(f"Erro ao ler o arquivo BibTeX ({bibtex_path}): {e}")
+        return
+
+    # Percorre cada entrada e insere os campos de métrica se disponíveis
+    for entry in bib_data:
+        
+        # Preparando dados para a mensagem informativa
+        doi_val = entry.get("doi", "N/A")
+        # Assume que o título do artigo esteja no campo 'title'; se não, utiliza publication
+        title_val = entry.get("title", "")
+        
+        print(f"Enriquecendo JCR e SCIMA no artigo '{title_val}' (DOI: {doi_val})...")
+        
+        publication_val = entry.get("publication", "")
+        issn_val = entry.get("issn", "").replace("-", "")
+        abbrev_val = entry.get("abbrev_source_title", "")
+
+        jcr_metric = get_metric_from_df(df_jcr, publication_val, issn_val, abbrev_val, "Journal Impact Factor")
+        scimago_metric = get_metric_from_df(df_scimago, publication_val, issn_val, abbrev_val, "Journal Impact Factor")
+
+        # Define os campos de enriquecimento ou insere string vazia caso não encontrado
+        if jcr_metric is not None:
+            entry["jcr"] = str(jcr_metric)
+        else:
+            entry["jcr"] = ""
+
+        if scimago_metric is not None:
+            entry["scimago"] = str(scimago_metric)
+        else:
+            entry["scimago"] = ""
+
+        if entry["jcr"] or entry["scimago"]:
+            print(f"Artigo '{title_val}' (DOI: {doi_val}) enriquecido com: {', '.join([str(entry["jcr"]), str(entry["scimago"])])} \n")
+        else:
+            print(f"Não foi possivel enriquecer JCR e SCIMAGO no artigo '{title_val}' (DOI: {doi_val}) \n")
+
+    try:
+        # Escreve o arquivo enriquecido utilizando write_bibtex que recebe path e entries
+        write_bibtex(output_path, bib_data)
+        print(f"Arquivo BibTeX enriquecido salvo em: {output_path}")
+    except Exception as e:
+        print(f"Erro ao escrever o arquivo enriquecido ({output_path}): {e}")
+
+
+def enrich_bibtex_jcr_scimago():
+    """
+    Percorre as bases configuradas em config/enrich_config.yaml (chave: nome da base, valor: booleano habilitado)
+    e enriquece todos os arquivos BibTeX encontrados (no diretório definido por PATH_DATA) com os dados de JCR e Scimago.
+    """
+    path_data = os.environ.get("PATH_DATA")
+    if not path_data:
+        print("Variável de ambiente PATH_DATA não definida.")
+        return
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
+            search_config = yaml.safe_load(f)
+    except Exception as e:
+        raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
+
+    # Obtém os caminhos dos CSVs a partir das variáveis de ambiente
+    path_jcr = os.environ.get("PATH_JCR")
+    path_scimago = os.environ.get("PATH_SCIMAGO")
+    if not path_jcr or not path_scimago:
+        print("Erro: As variáveis de ambiente PATH_JCR e PATH_SCIMAGO precisam estar definidas.")
+        return
+
+    df_jcr = read_csv_data(path_jcr)
+    df_scimago = read_csv_data(path_scimago)
+    if df_jcr is None or df_scimago is None:
+        print("Erro ao ler os arquivos CSV do JCR ou Scimago.")
+        return
+
+    # Itera sobre as bases configuradas
+    for base, enabled in search_config.items():
+        if not enabled:
+            print(f"Base '{base}' desabilitada. Pulando.")
+            continue
+
+        base_path = os.path.join(path_data, base)
+        if not os.path.isdir(base_path):
+            print(f"Diretório para a base '{base}' não encontrado: {base_path}")
+            continue
+
+        # Procura recursivamente por arquivos .bib dentro do diretório da base
+        bib_files = glob.glob(os.path.join(base_path, "**", "*.bib"), recursive=True)
+        if not bib_files:
+            print(f"Nenhum arquivo .bib encontrado na base '{base}'.")
+            continue
+
+        for bib_file in bib_files:
+            print(f"\nProcessando arquivo: {bib_file}")
+            print(f"{90 * '-'}\n\n")
+            # Neste exemplo, o arquivo enriquecido sobrescreve o original.
+            enrich_bibtex_file(bib_file, df_jcr, df_scimago, bib_file)
+
+
+def enrich_bibtex():
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/enrich_config.yaml"), "r", encoding="utf-8") as f:
             enrich_config = yaml.safe_load(f)
@@ -694,6 +840,13 @@ def ernich_bibtex():
         enrich_bibtex_keywords()
         run_enrich = True
     
+    if enrich_config.get("enrich_bibtex_jcr_scimago"):
+        print("\n\n\n==============================================")
+        print("EnrichBibtex JCR e SCIMAGO Started!")
+        print("==============================================\n\n")
+        enrich_bibtex_jcr_scimago()
+        run_enrich = True
+    
     if run_enrich:
         print("\n\n++++++++++++++++++++++++++++++++++++++++++++++")
         print("EnrichBibtex completed successfully!")
@@ -701,8 +854,4 @@ def ernich_bibtex():
 
 
 if __name__ == "__main__":
-    ernich_bibtex()
-    
-    # TODO: Verificar a busca de abstract via Scopus, ver se tá pegando certo
-    # TODO: Verificar a buscas de keywords, ver se tah pegando via crossref
-    # TODOS: Verificar a busca de keywords, retirar print desnecessários (keywords que já existem)
+    enrich_bibtex()

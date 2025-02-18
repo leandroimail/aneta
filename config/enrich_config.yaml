@@ -1,6 +1,7 @@
 enrich_bibtex_doi: true
 enrich_bibtex_abstract: true
 enrich_bibtex_keywords: true
+enrich_bibtex_jcr_scimago: true
 
 
 enrich_arxiv: false
