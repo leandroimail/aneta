@@ -845,26 +845,26 @@ def enrich_bibtex():
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
     
     run_enrich = False
-    # if enrich_config.get("enrich_bibtex_doi"):
-    #     print("\n\n\n==============================================")
-    #     print("EnrichBibtex DOIS Started!")
-    #     print("==============================================\n\n")
-    #     enrich_bibtex_dois()
-    #     run_enrich = True
+    if enrich_config.get("enrich_bibtex_doi"):
+        print("\n\n\n==============================================")
+        print("EnrichBibtex DOIS Started!")
+        print("==============================================\n\n")
+        enrich_bibtex_dois()
+        run_enrich = True
     
-    # if enrich_config.get("enrich_bibtex_abstract"):
-    #     print("\n\n\n==============================================")
-    #     print("EnrichBibtex abstract  Started!")
-    #     print("==============================================\n\n")
-    #     enrich_bibtex_abstract()
-    #     run_enrich = True
+    if enrich_config.get("enrich_bibtex_abstract"):
+        print("\n\n\n==============================================")
+        print("EnrichBibtex abstract  Started!")
+        print("==============================================\n\n")
+        enrich_bibtex_abstract()
+        run_enrich = True
     
-    # if enrich_config.get("enrich_bibtex_keywords"):
-    #     print("\n\n\n==============================================")
-    #     print("EnrichBibtex keywords Started!")
-    #     print("==============================================\n\n")
-    #     enrich_bibtex_keywords()
-    #     run_enrich = True
+    if enrich_config.get("enrich_bibtex_keywords"):
+        print("\n\n\n==============================================")
+        print("EnrichBibtex keywords Started!")
+        print("==============================================\n\n")
+        enrich_bibtex_keywords()
+        run_enrich = True
     
     if enrich_config.get("enrich_bibtex_jcr_scimago"):
         print("\n\n\n==============================================")
