@@ -32,7 +32,7 @@ def create_lancedb_instance(path_db: str = "") -> lancedb.LanceDBConnection:
     return db
 
 
-def save_bibliographic_database( type_source: str,
+def save_bibliographic_database(type_source: str,
                 doi: str, 
                 json_data: Union[str, Dict], 
                 db: lancedb.LanceDBConnection) -> None:
@@ -96,11 +96,14 @@ def fetch_bibliographic_database(type_source: str, doi: str, db: lancedb.LanceDB
       dict: Dados do registro JSON.
     """
     
-    records = []
+    records = {}
     try:
         table = db.open_table("enriched_data")
         where = f"type_source='{type_source}' AND doi='{doi}'"
-        records = table.search().where(where=where).to_list()
+        records = table.search().limit(1).where(where=where).to_list()
+        
+        if records:
+            records = json.loads(records[0]["json_text"])
     except Exception as e:
         print(f"Error: {e}")
         raise ValueError(f"Erro ao buscar registro: {e}")
