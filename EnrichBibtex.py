@@ -7,7 +7,9 @@ import requests
 import pandas as pd
 from dotenv import load_dotenv
 from BibTex import read_bibtex, write_bibtex
+from Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
+db = create_lancedb_instance()
 load_dotenv()
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
@@ -297,11 +299,24 @@ def get_abstract_by_doi_from_openalex(doi: str) -> str:
     url = f"https://api.openalex.org/works/https://doi.org/{doi}"
     headers = HEADERS.copy()
     try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 404:
-            return ""
-        response.raise_for_status()
-        data = response.json()
+        type_source = "openalex"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         abstract_inverted_index = data.get("abstract_inverted_index", {})
         if not abstract_inverted_index:
             return ""
@@ -316,12 +331,25 @@ def get_abstract_by_doi_from_semanticscholar(doi: str) -> str:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
         doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
     try:
-        url = f"https://api.semanticscholar.org/v1/paper/{doi}"
-        response = requests.get(url)
-        if response.status_code == 404:
-            return ""
-        response.raise_for_status()
-        data = response.json()
+        type_source = "semanticscholar"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            url = f"https://api.semanticscholar.org/v1/paper/{doi}"
+            response = requests.get(url)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         abstract = data.get("abstract", "")
         return abstract
     except Exception as e:
@@ -333,13 +361,26 @@ def get_abstract_by_doi_from_crossref(doi: str) -> str:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
         doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
     try:
-        url = f"https://api.crossref.org/works/{doi}"
-        headers = HEADERS.copy()
-        response = requests.get(url, headers=headers)
-        if response.status_code == 404:
-            return ""
-        response.raise_for_status()
-        data = response.json()
+        type_source = "crossref"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            url = f"https://api.crossref.org/works/{doi}"
+            headers = HEADERS.copy()
+            response = requests.get(url, headers=headers)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         abstract = data.get("message", {}).get("abstract", "")
         return abstract
     except Exception as e:
@@ -358,14 +399,27 @@ def get_abstract_by_doi_from_scopus(doi: str) -> str:
     headers = {"Accept": "application/json"}
     headers = {**headers, **HEADERS}
     try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 404:
-            return ""
-        response.raise_for_status()
-        data = response.json()
+        type_source = "crossref"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
         abstract = data.get("abstracts-retrieval-response", {}).get("coredata", {}).get("dc:description", "")
         if abstract:
             return abstract
+        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         abstract = data.get("abstracts-retrieval-response", {}).get("bibrecord", {}).get("head", {}).get("abstracts", "") 
         return abstract
     except Exception as e:
@@ -457,12 +511,24 @@ def get_keywords_by_doi_from_openalex(doi: str) -> dict:
     url = f"https://api.openalex.org/works/https://doi.org/{doi}"
     headers = HEADERS.copy()
     try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 404:
-            return ""
-        response.raise_for_status()
-        data = response.json()
-        
+        type_source = "openalex"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         # Extração de author_keywords a partir de "keywords"
         openalex_keywords = data.get("keywords", [])
         author_keywords = ", ".join(
@@ -490,18 +556,30 @@ def get_keywords_by_doi_from_crossref(doi: str) -> dict:
     url = f"https://api.crossref.org/works/{doi}"
     headers = HEADERS.copy()
     try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 404:
-            return ""
-        if response.status_code == 200:
+        type_source = "openalex"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
             data = response.json().get("message", {})
-            subjects = data.get("subject", [])
-            if subjects and isinstance(subjects, list):
-                pub_kw = ", ".join(subjects)
-            else:
-                pub_kw = ""
-            return {"author_keywords": "", "keywords": pub_kw}
-        return {"author_keywords": "", "keywords": ""}
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
+        subjects = data.get("subject", [])
+        if subjects and isinstance(subjects, list):
+            pub_kw = ", ".join(subjects)
+        else:
+            pub_kw = ""
+        return {"author_keywords": "", "keywords": pub_kw}
     except Exception as e:
         print(f"Erro ao obter keywords do Crossref: {e}")
         return {"author_keywords": "", "keywords": ""}
@@ -524,11 +602,24 @@ def get_keywords_by_doi_from_scopus(doi: str) -> dict:
     headers = {"Accept": "application/json"}
     headers = {**headers, **HEADERS}
     try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 404:
-            return {"author_keywords": "", "keywords": ""}
-        response.raise_for_status()
-        data = response.json()
+        type_source = "openalex"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 404:
+                return {"author_keywords": "", "keywords": ""}
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         root = data.get("abstracts-retrieval-response", {})
         # Extração de author_keywords
         auth_keywords = ""
@@ -770,8 +861,8 @@ def enrich_bibtex_file(bibtex_path, df_jcr, df_scimago, output_path):
 
         if entry["jcr"] or entry["scimago"]:
             print(f"Artigo '{title_val}' (DOI: {doi_val}) enriquecido com: {', '.join([str(entry["jcr"]), str(entry["scimago"])])} \n")
-        else:
-            print(f"Não foi possivel enriquecer JCR e SCIMAGO no artigo '{title_val}' (DOI: {doi_val}) \n")
+        # else:
+        #     print(f"Não foi possivel enriquecer JCR e SCIMAGO no artigo '{title_val}' (DOI: {doi_val}) \n")
 
     try:
         # Escreve o arquivo enriquecido utilizando write_bibtex que recebe path e entries
