@@ -399,7 +399,7 @@ def get_abstract_by_doi_from_scopus(doi: str) -> str:
     headers = {"Accept": "application/json"}
     headers = {**headers, **HEADERS}
     try:
-        type_source = "crossref"
+        type_source = "scopus"
         try:
             data = fetch_bibliographic_database(type_source, doi, db)
         except Exception as e:
@@ -556,7 +556,7 @@ def get_keywords_by_doi_from_crossref(doi: str) -> dict:
     url = f"https://api.crossref.org/works/{doi}"
     headers = HEADERS.copy()
     try:
-        type_source = "openalex"
+        type_source = "crossref"
         try:
             data = fetch_bibliographic_database(type_source, doi, db)
         except Exception as e:
@@ -602,7 +602,7 @@ def get_keywords_by_doi_from_scopus(doi: str) -> dict:
     headers = {"Accept": "application/json"}
     headers = {**headers, **HEADERS}
     try:
-        type_source = "openalex"
+        type_source = "scopus"
         try:
             data = fetch_bibliographic_database(type_source, doi, db)
         except Exception as e:
