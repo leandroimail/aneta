@@ -10,10 +10,9 @@ load_dotenv()
 # Obtém a chave e removemos a constante fixa
 API_KEY = os.getenv("SPRINGER_API_KEY", "")
 BASE_URL = 'https://api.springernature.com/meta/v2/json'
-# Remova a constante QUERY fixa; será recebida como parâmetro
-# QUERY = '("Schema Matching" AND (...))'
-RESULTS_DESEJADOS = 500
-PAGE_SIZE = 25
+
+MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
+PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
 records_agregados = []
 
 def extrai_ano(data_str):
@@ -182,7 +181,7 @@ def main(query, path_data):
 
     print("Iniciando a coleta dos registros da API Springer Nature...\n")
 
-    num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE else 0)
+    num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Será necessário realizar até {num_requisicoes} requisições (p={PAGE_SIZE}).\n")
 
     for i in range(num_requisicoes):
@@ -275,4 +274,5 @@ if __name__ == "__main__":
     import sys
     QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
     PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
+    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
     main(QUERY, PATH_DATA)

@@ -13,8 +13,8 @@ load_dotenv()
 API_KEY = os.getenv("WEB_OF_SCIENCE_KEY", "")
 BASE_URL = 'https://api.clarivate.com/apis/wos-starter/v1/documents'
 
-RESULTS_DESEJADOS = 500
-PAGE_SIZE = 25  # WoS permite até 50 por página, mas usaremos 25 para consistência
+MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))  
+PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
 records_agregados = []
 
 # ============================================================
@@ -179,7 +179,7 @@ def main(query, path_data):
     print("Query:", query)
     print("Path Data:", path_data)
     
-    num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE else 0)
+    num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
     
     # Utiliza a query passada como parâmetro na composição da consulta
@@ -255,4 +255,5 @@ def main(query, path_data):
 if __name__ == "__main__":
     QUERY = sys.argv[1] if len(sys.argv) > 1 else ""
     PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
+    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
     main(QUERY, PATH_DATA)

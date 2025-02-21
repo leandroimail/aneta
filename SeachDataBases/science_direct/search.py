@@ -14,8 +14,8 @@ API_KEY = os.getenv("ELSEVIER_API_KEY", "")
 BASE_URL = 'https://api.elsevier.com/content/search/sciencedirect'
 
 # Remova QS_QUERY fixa; use "query" que será passado
-RESULTS_DESEJADOS = 500
-PAGE_SIZE = 25  # Valores permitidos: 10, 25, 50, 100
+MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
+PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
 records_agregados = []
 
 
@@ -160,7 +160,7 @@ def main(query, path_data):
 
     print("Iniciando a coleta dos registros da API Elsevier (ScienceDirect) via PUT...\n")
 
-    num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE != 0 else 0)
+    num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE != 0 else 0)
     print(f"Será necessário realizar até {num_requisicoes} requisições (show={PAGE_SIZE}).\n")
 
     # Cabeçalhos necessários para a requisição PUT
@@ -272,4 +272,5 @@ def main(query, path_data):
 if __name__ == "__main__":
     QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
     PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
+    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
     main(QUERY, PATH_DATA)

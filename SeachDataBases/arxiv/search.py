@@ -11,8 +11,8 @@ load_dotenv()
 
 BASE_URL = 'http://export.arxiv.org/api/query'
 # Remova a query fixa; ela será definida externamente
-RESULTS_DESEJADOS = 500
-PAGE_SIZE = 25
+MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
+PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
 
 # Namespaces present in the XML returned by the API
 ns = {
@@ -285,7 +285,7 @@ def main(query, path_data):
     global records_agregados, raw_feeds
     erro_ocorrido = False
     print("Starting the collection of records from the arXiv API...\n")
-    num_requisicoes = (RESULTS_DESEJADOS // PAGE_SIZE) + (1 if RESULTS_DESEJADOS % PAGE_SIZE else 0)
+    num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Up to {num_requisicoes} requests will be made (max_results={PAGE_SIZE}).\n")
 
     for i in range(num_requisicoes):
@@ -391,6 +391,7 @@ if __name__ == "__main__":
     import sys
     QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
     PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
+    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
     # Converte a query, se necessário
     QUERY = converter_query(QUERY)
     main(QUERY, PATH_DATA)
