@@ -9,6 +9,7 @@ bib_file = os.getenv("BIB_FILE", "OUTPUTS/select_bibs.bib")
 doi_file = os.environ.get("DOI_FILE", "OUTPUTS/DOIs.txt")
 folder_save_pdf = os.getenv("FOLDER_SAVE_PDF", "OUTPUTS/PDFs")
 path_data = os.getenv("PATH_DATA", "./Sandbox/Data")
+path_data = os.path.join(path_data, ".bibs")
 
 bib_file = os.path.join(path_data, bib_file)
 doi_file = os.path.join(path_data, doi_file)
@@ -21,7 +22,7 @@ run_deprecated_abstract = False
 
 ###################  Informe se deve-se rodar o download dos papers
 ###################  run_download_papers seja falso, rodará a Análise dos Bibtex
-run_download_papers = False
+run_download_papers = True
 
 
 

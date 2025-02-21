@@ -7,7 +7,7 @@
 
 ### ----------- Path of Bibs Directory  ----------- ###
 # path_directory_bibs = r"/home/leandro/ProjetosLeandro/python/asrl/Example"
-path_directory_bibs = r"/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Documentos/USP/Doutorado/RSL/SchemaMatching/RSL"
+path_directory_bibs = r"/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl/Sandbox/Data/.bibs"
 
 ### ----------- Path and    ----------- ###
 ### Set path of csv/bib and name of base to scrape Abstract and Keywords.
@@ -162,20 +162,7 @@ def condition_include(keywords, abstract, title, jcr, scimago, year, type_public
             ("retrieval augmented generation" in keywords.lower()  or
             "retrieval augmented generation" in abstract.lower()  or
             "retrieval augmented generation" in title.lower())
-        )
-        
-        # and 
-        # (   
-        #     ("book" not in type_publication.lower() or
-        #     "inbook" not in type_publication.lower() or
-        #     "techreport" not in type_publication.lower() or
-        #     "incollection" not in type_publication.lower() or
-        #     "misc" not in type_publication.lower())
-        # )
-        
-        # and 
-        # str(year) in ['2011','2020','2021']
-        
+        )        
     )
 
     return bool_general

@@ -13,6 +13,7 @@ load_dotenv()
 
 # Parâmetros principais
 PATH_DATA = os.getenv("PATH_DATA", "./Sandbox/Data")
+PATH_DATA = os.path.join(PATH_DATA, ".bibs")
 SEARCH_QUERY = os.getenv("SEARCH_QUERY", '')
 
 if not SEARCH_QUERY:

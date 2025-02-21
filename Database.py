@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def create_lancedb_instance(path_db: str = "") -> lancedb.LanceDBConnection:
+def create_lancedb_instance(path_db: str = ".db") -> lancedb.LanceDBConnection:
     """
     Conecta a um banco de dados LanceDB.
 
@@ -16,14 +16,13 @@ def create_lancedb_instance(path_db: str = "") -> lancedb.LanceDBConnection:
     Retorna:
       LanceDB: Instância do banco de dados.
     """
+    path_db = ".db"
+    path_data = os.getenv("PATH_DATA")
     if not path_db:
-        path_db = os.getenv("PATH_DB")
-        path_data = os.getenv("PATH_DATA")
-        if not path_db:
-            raise ValueError("Caminho do banco de dados não informado")
-        if not path_data:
-            raise ValueError("Caminho dos dados não informado")
-        path_db = os.path.join(path_data, path_db)
+        raise ValueError("Caminho do banco de dados não informado")
+    if not path_data:
+        raise ValueError("Caminho dos dados não informado")
+    path_db = os.path.join(path_data, path_db)
     try:
         db = lancedb.connect(path_db)
     except Exception as e:

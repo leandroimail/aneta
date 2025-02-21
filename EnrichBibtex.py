@@ -231,6 +231,7 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
+    path_data = os.path.join(path_data, ".bibs")
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
@@ -438,7 +439,8 @@ def enrich_bibtex_abstract():
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
-
+    path_data = os.path.join(path_data, ".bibs")
+    
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
@@ -678,6 +680,8 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
+    path_data = os.path.join(path_data, ".bibs")
+    
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
@@ -881,6 +885,7 @@ def enrich_bibtex_jcr_scimago():
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
+    path_data = os.path.join(path_data, ".bibs")
     try:
         with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
