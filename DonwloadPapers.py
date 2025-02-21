@@ -18,6 +18,8 @@ import argparse
 import time  
 import random 
 from dotenv import load_dotenv
+from Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
+
 
 try:
     import bibtexparser
@@ -42,6 +44,7 @@ except ImportError:
 # Funções utilitárias
 # =====================================================================
 
+db = create_lancedb_instance()
 load_dotenv()
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
@@ -208,32 +211,44 @@ def get_crossref_pdf_link(doi, timeout=10):
     url = f"https://api.crossref.org/works/{doi}"
 
     try:
-        headers = HEADERS
-        headers['Accept'] = 'application/json'
-        response = requests.get(url, headers=headers, timeout=timeout)
-
-        if response.status_code == 200:
+        type_source = "crossref"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+            if data: print(f"Registro encontrado no banco de dados: {doi}")
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            headers = HEADERS
+            headers['Accept'] = 'application/json'
+            response = requests.get(url, headers=headers, timeout=timeout)
+            if response.status_code == 404:
+                print(f"Erro ao buscar PDF no Crossref. Status code: {response.status_code}")
+                return None
+            response.raise_for_status()
             data = response.json()
-
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                    print(f"Registro salvo no banco de dados: {doi}")
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+        if data:    
             if 'link' in data['message']:
                 for link in data['message']['link']:
                     if link.get('content-type') == 'application/pdf':
                         pdf_url = link['URL']
                         print(f"Link PDF encontrado via Crossref: {pdf_url}")
                         return pdf_url
-
             if 'link' in data['message'] and data['message']['link']:
                 pdf_url = data['message']['link'][0]['URL']
                 print(f"Link PDF encontrado via Crossref (outro formato): {pdf_url}")
                 return pdf_url
-
             print("Link PDF não encontrado via Crossref.")
             return None
-
         else:
             print(f"Erro ao buscar PDF no Crossref. Status code: {response.status_code}")
             return None
-
     except requests.exceptions.Timeout:
         print(f"Timeout ao buscar PDF no Crossref para DOI: {doi}")
         return None
@@ -265,56 +280,68 @@ def get_openalex_pdf_link(doi, timeout=10, email=""):
             print("Consulte  para mais informações")
             print("Obtenção de PDFs pode ser limitada sem e-mail se o uso unpaywall")
             return None
-            return None
-    
-    # Formata o DOI para a URL da API conforme documentação
-    encoded_doi = doi.replace('/', '%2F')
-    url = f"https://api.openalex.org/works/https://doi.org/{encoded_doi}"
-    
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': 'application/json',
-            'From': email  # Melhora prioridade na API :cite[3]
-        }
+    try:        
+        type_source = "openalex"
+        try:
+            data = fetch_bibliographic_database(type_source, doi, db)
+            if data: print(f"Registro encontrado no banco de dados: {doi}")
+        except Exception as e:
+            print(f"Erro ao buscar registro no banco de dados: {e}")
+            data = None
+        if not data:
+            headers = {
+                'Accept': 'application/json',
+                'From': email  # Melhora prioridade na API :cite[3]
+            }
+            headers = {**headers, **HEADERS}
+            url = f"https://api.openalex.org/works/https://doi.org/{doi}"
+            response = requests.get(url, headers=headers, timeout=timeout)
+            if response.status_code == 200:
+                data = response.json()
+            if data:
+                try:
+                    save_bibliographic_database(type_source, doi, data, db)
+                    print(f"Registro salvo no banco de dados: {doi}")
+                except Exception as e:
+                    print(f"Erro ao salvar registro no banco de dados: {e}")
+            elif response.status_code == 403:
+                print("Erro 403: Acesso negado. Verifique o formato do DOI")
+                return None
+            
+            elif response.status_code == 404:
+                print("Erro 404: DOI não encontrado no OpenAlex")
+                return None
+                
+            else:
+                print(f"Erro na requisição. Status code: {response.status_code}")
+                return None
         
-        response = requests.get(url, headers=headers, timeout=timeout)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Primeira verificação: Open Access direct URL :cite[9]
-            if data.get('open_access'):
-                oa_info = data['open_access']
-                if oa_info.get('is_oa') and oa_info.get('oa_url'):
-                    pdf_url = oa_info['oa_url']
-                    print(f"Link OA encontrado via OpenAlex: {pdf_url}")
-                    return pdf_url
-            
-            # Segunda verificação: Locations com PDF :cite[9]
-            for location in data.get('locations') or []:
-                if location.get('pdf_url'):
-                    pdf_url = location['pdf_url']
-                    print(f"Link PDF em locations encontrado: {pdf_url}")
-                    return pdf_url
-            
-            # Terceira verificação: Versão mais recente :cite[9]
-            best_oa = data.get('best_oa_location') or {}
-            if best_oa.get('pdf_url'):
-                pdf_url = best_oa['pdf_url']
-                print(f"Link PDF em best_oa_location: {pdf_url}")
+        # Primeira verificação: Open Access direct URL :cite[9]
+        if data.get('open_access'):
+            oa_info = data['open_access']
+            if oa_info.get('is_oa') and oa_info.get('oa_url'):
+                pdf_url = oa_info['oa_url']
+                print(f"Link OA encontrado via OpenAlex: {pdf_url}")
                 return pdf_url
-            
-            print("Nenhum link PDF encontrado via OpenAlex")
-            return None
         
-        elif response.status_code == 403:
-            print("Erro 403: Acesso negado. Verifique o formato do DOI")
-            return None
+        # Segunda verificação: Locations com PDF :cite[9]
+        for location in data.get('locations') or []:
+            if location.get('pdf_url'):
+                pdf_url = location['pdf_url']
+                print(f"Link PDF em locations encontrado: {pdf_url}")
+                return pdf_url
+        
+        # Terceira verificação: Versão mais recente :cite[9]
+        best_oa = data.get('best_oa_location') or {}
+        if best_oa.get('pdf_url'):
+            pdf_url = best_oa['pdf_url']
+            print(f"Link PDF em best_oa_location: {pdf_url}")
+            return pdf_url
+        
+        print("Nenhum link PDF encontrado via OpenAlex")
+        return None
             
-        else:
-            print(f"Erro na requisição. Status code: {response.status_code}")
-            return None
+
             
     except requests.exceptions.Timeout:
         print(f"Timeout ao buscar DOI {doi} no OpenAlex")
@@ -444,12 +471,7 @@ def download_doi_entry(entry, pdf_dir, logs):
     """
     Faz o download de um artigo identificado por DOI.
     Estratégia:
-      1. Tenta o download direto via DOI (usando resolvedor em https://doi.org/).
-         Se o conteúdo retornado for PDF, salva-o.
-      2. Se falhar, tenta baixar o HTML e converter para Markdown.
-      3. Se persistir a falha, tenta buscar PDF via Crossref API.
-      4. Se persistir a falha, tenta buscar no Google Scholar (por DOI e, se disponível, por título).
-      5. Se ainda não obtiver sucesso, tenta integrar com o PyPaperBot.
+      #TODO Melhor esse comentário posteriormente 
     Registra no log o método utilizado ou a falha.
     """
     doi = entry.get("doi", "").strip()
@@ -458,8 +480,25 @@ def download_doi_entry(entry, pdf_dir, logs):
         return False
     filename = sanitize_filename(doi) + ".pdf"
     pdf_path = os.path.join(pdf_dir, filename)
+    
+    # 1. Verificar se o PDF já foi baixado
+    if os.path.exists(pdf_path):
+        print(f"PDF já baixado: {pdf_path}\n")
+        logs["downloaded"].append(f"{doi} -> PDF já baixado")
+        return True
+    
+    # 2. Tentando baixar via campo url_pdf
+    url_pdf = entry.get("url_pdf", "")
+    print(f"Tentando download via campo url_pdf: {url_pdf}")
+    if url_pdf:
+        if download_file(url_pdf, pdf_path):
+            print(f"PDF salvo: {pdf_path}\n")
+            logs["downloaded"].append(f"{doi} -> PDF via campo url_pdf")
+            return True
+    else:
+        print("Falha ao baixar via campo url_pdf. Tentando baixar via DOI...")
 
-    # 1. Download direto via DOI
+    # 3. Download direto via DOI
     doi_url = "https://doi.org/" + doi
     print(f"Tentando download direto via DOI: {doi_url}")
     try:
@@ -472,11 +511,11 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via DOI direto")
             return True
         else:
-            print("Download direto não retornou PDF. Tentando baixar HTML e converter para Markdown...")
+            print("Download direto não retornou PDF. Tentando encontrar link de PDF em bases acadêmicas...")
     except Exception as e:
         print(f"Erro no download direto via DOI: {e}")
 
-    # 2. Buscar PDF via Crossref API
+    # 4. Buscar PDF via Crossref API
     print("Tentando busca PDF via Crossref API...")
     pdf_url = get_crossref_pdf_link(doi)
     if pdf_url:
@@ -485,7 +524,7 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via Crossref API")
             return True
         
-    # 3. Buscar PDF via OpenAlex
+    # 5. Buscar PDF via OpenAlex
     print("Tentando buscar PDF via OpenAlex...")
     pdf_url = get_openalex_pdf_link(doi)
     if pdf_url:
@@ -494,7 +533,7 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via OpenAlex")
             return True
 
-    # 4. Buscar PDF via Unpaywall
+    # 6. Buscar PDF via Unpaywall
     print("Tentando buscar PDF via Unpaywall...")
     pdf_url = get_unpaywall_pdf_link(doi)
     if pdf_url:
@@ -503,7 +542,7 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via Unpaywall")
             return True
 
-    # 5. Busca no Google Scholar por DOI
+    # 7. Busca no Google Scholar por DOI
     print("Tentando buscar PDF via Google Scholar (por DOI)...")
     pdf_url = fetch_article_by_doi(doi)
     if pdf_url and pdf_url != 'PDF não encontrado.' and pdf_url != "Artigo não encontrado." and not pdf_url.startswith("Erro ao buscar artigo"): # Check for error messages from scholarly
@@ -512,7 +551,7 @@ def download_doi_entry(entry, pdf_dir, logs):
             logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por DOI)")
             return True
 
-    # 6. Busca no Google Scholar por título (se disponível)
+    # 8. Busca no Google Scholar por título (se disponível)
     title = entry.get("title", "")
     if title:
         print("Tentando buscar PDF via Google Scholar (por título)...")
@@ -523,7 +562,7 @@ def download_doi_entry(entry, pdf_dir, logs):
                 logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por título)")
                 return True
 
-    # 7. Tentar integração com PyPaperBot
+    # 9. Tentar integração com PyPaperBot
     print("Tentando utilizar o PyPaperBot...")
     if run_pypaperbot_for_doi(doi, pdf_dir):
         print(f"PyPaperBot conseguiu baixar o PDF para {doi}\n")
