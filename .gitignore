@@ -27,6 +27,10 @@ Data/
 Data/*
 data/
 data/*
+.Data/
+.Data/*
+.data/
+.data/*
 
 
 
