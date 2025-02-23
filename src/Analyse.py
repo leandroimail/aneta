@@ -176,8 +176,6 @@ def standardize_bib(path):
     return list_return
 
 
-# def clean_duplicate(path):
-#     bibs = standardize_bib(path)
 def clean_duplicate(bibs_clear, type_deduplication):
     def isnone(y):
         x = str(y)
@@ -288,8 +286,8 @@ def clean_duplicate(bibs_clear, type_deduplication):
                 df[name_col] = df[col].apply(lambda x : str(x).lower())
 
         df["dedup_doi"] = df["dedup_doi"].apply(dedup_ramdom_value)      
-        df["dedup_doi"] = df["dedup_issn"].apply(dedup_ramdom_value) 
-        df["dedup_doi"] = df["dedup_isbn"].apply(dedup_ramdom_value) 
+        df["dedup_issn"] = df["dedup_issn"].apply(dedup_ramdom_value) 
+        df["dedup_isbn"] = df["dedup_isbn"].apply(dedup_ramdom_value) 
         df["dedup_publication"] = df["dedup_publication"].apply(dedup_ramdom_value)  
 
         df["dedup_new_abstract"] = df["dedup_abstract"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x))))
@@ -298,7 +296,7 @@ def clean_duplicate(bibs_clear, type_deduplication):
         df["dedup_new_issn"] = df["dedup_issn"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x)))) 
         df["dedup_new_isbn"] = df["dedup_isbn"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x)))) 
         df["dedup_new_publication"] = df["dedup_publication"].apply(lambda x : ''.join(sorted(re.sub('[^a-zA-Z0-9]', ' ', x))))   
-        df["dedup_duplicate_doi"] = df.duplicated(subset=['dedup_title', 'dedup_doi'])
+        df["dedup_duplicate_doi"] = df.duplicated(subset=['dedup_doi'])
         df["dedup_duplicate_title"] = df.duplicated(subset=['dedup_title', 'dedup_author'])  
         df["dedup_duplicate_abstract"] = df.duplicated(subset=['dedup_title', 'dedup_abstract'])
         df["dedup_duplicate_issn"] = df.duplicated(subset=['dedup_title', 'dedup_issn'])  
@@ -408,8 +406,6 @@ def pre_include(bib):
     else:
         year = 1900
 
-
-
     if condition_include(keywords, abstract, title, jcr, scimago, year, type_publication, publication):
         return True
 
@@ -450,6 +446,7 @@ def pre_exclude(bib):
 
 def pre_exclude_sample(bib):
     return not pre_exclude(bib)
+
 
 def select_final(bib):
     if path_exlude_manual_file:
@@ -672,8 +669,6 @@ def call_results(bibs, bib_duplicate={}, type="select"):
             display_results(count_base_duplicate, type + "_" + "bases_duplicates", "bases")
 
 
-
-
 def analyzer(path):
     print("Loading and standardize Bibs")
     bibs = standardize_bib(path)
@@ -765,6 +760,7 @@ def analyzer(path):
         for bib in select_bibs:
             if bib["doi"].strip().replace("\n", "").replace(" ", ""):
                 file.writelines(bib["doi"] + "\n")
+
 
 def get_analyse():
     create_folder(path_directory_bibs)

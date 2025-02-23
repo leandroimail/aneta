@@ -25,13 +25,13 @@ type_deduplication = r"default"
 
 
 ### ----------- Parh to inclue and exclude criterius  ----------- ###
-path_include_file = r"./IncludeExclude/Incluede_Title.txt"
+path_include_file = r"./IncludeExclude/Include_Title.txt"
 #path_include_file = "./IncludeExclude/Incluede_Title.txt"
 
 path_exlude_file = r"./IncludeExclude/Exclude_Words.txt"
 # path_exlude_file = "./IncludeExclude/Exclude_Words.txt"
 
-path_exlude_manual_file = r"./IncludeExclude/Exlude_Manually.txt"
+path_exlude_manual_file = r"./IncludeExclude/Exclude_Manually.txt"
 #path_exlude_manual_file = "./IncludeExclude/Exlude_Manually.txt"
 
 
@@ -232,11 +232,6 @@ list_publisher = ["publisher", "Publisher", "PUBLISHER", "publisherName", "Publi
                     "Publisher-Name", "PUBLISHER NAME", "PUBLISHERNAME",]
 list_abbreviated_publication = ["abbrev_source_title", "abbrev_source_title", "Abbrev Source Title", "Abbrev Source Title", "Abbrev Source Title",
                                 "abbreviated", "Abbreviated", "ABBREVIATED", "Abbreviated Source Title", "abbreviated source title", "Abbreviated Source Title",]
-
-
-
-
-
 
 
 def webdriver ():
