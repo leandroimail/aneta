@@ -567,31 +567,29 @@ def download_doi_entry(entry, pdf_dir, logs):
     if run_pypaperbot_for_doi(doi, pdf_dir):
         print(f"PyPaperBot conseguiu baixar o PDF para {doi}\n")
         logs["downloaded"].append(f"{doi} -> PDF via PyPaperBot")
+        return True        
         
-        # Tentar baixar o HTML e converter para Markdown
-        try:
-            response = requests.get(doi_url, timeout=20, headers = HEADERS)
-            if response.status_code == 200:
-                temp_html = os.path.join(tempfile.gettempdir(), sanitize_filename(doi) + ".html")
-                with open(temp_html, "w", encoding="utf-8") as f:
-                    f.write(response.text)
-                markdown_content = md(response.text, heading_style="ATX")
-                markdown_dir = os.path.join(pdf_dir, "markdown")
-                os.makedirs(markdown_dir, exist_ok=True)
-                md_filename = sanitize_filename(doi) + ".md"
-                md_path = os.path.join(markdown_dir, md_filename)
-                with open(md_path, "w", encoding="utf-8") as f_md:
-                    f_md.write(markdown_content)
-                print(f"Arquivo markdown salvo: {md_path}\n")
-                logs["downloaded"].append(f"{doi} -> HTML convertido para Markdown via DOI")
-                os.remove(temp_html)
-                # return True
-        except Exception as e:
-            print(f"Erro ao baixar/converter HTML via DOI: {e}")
-        
-        
-        
-        return True
+    # Tentar baixar o HTML e converter para Markdown
+    try:
+        response = requests.get(doi_url, timeout=20, headers = HEADERS)
+        if response.status_code == 200:
+            temp_html = os.path.join(tempfile.gettempdir(), sanitize_filename(doi) + ".html")
+            with open(temp_html, "w", encoding="utf-8") as f:
+                f.write(response.text)
+            markdown_content = md(response.text, heading_style="ATX")
+            markdown_dir = os.path.join(pdf_dir, "markdown")
+            os.makedirs(markdown_dir, exist_ok=True)
+            md_filename = sanitize_filename(doi) + ".md"
+            md_path = os.path.join(markdown_dir, md_filename)
+            with open(md_path, "w", encoding="utf-8") as f_md:
+                f_md.write(markdown_content)
+            print(f"Arquivo markdown salvo: {md_path}\n")
+            logs["downloaded"].append(f"{doi} -> HTML convertido para Markdown via DOI")
+            os.remove(temp_html)
+            # return True
+    except Exception as e:
+        print(f"Erro ao baixar/converter HTML via DOI: {e}")
+    return True
 
     print(f"Não foi possível baixar o PDF para {doi}\n")
     logs["failed"].append(f"{doi} -> Falha em todas as estratégias")
