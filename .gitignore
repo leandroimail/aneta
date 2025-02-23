@@ -23,6 +23,12 @@ _zSanBoox/
 _zSanBoox/*
 
 
+Data/
+Data/*
+data/
+data/*
+
+
 
 ### RStudio ###
 .Rproj.user
