@@ -1,12 +1,12 @@
 import os
 import yaml
 from dotenv import load_dotenv
-from SeachDataBases.arxiv import search as arxiv_search
-from SeachDataBases.ieee import search as ieee_search
-from SeachDataBases.science_direct import search_metadata as sd_search
-from SeachDataBases.scopus import search as scopus_search
-from SeachDataBases.spring_nature import search as spring_search
-from SeachDataBases.web_of_science import search_start as wos_search
+from src.SeachDataBases.arxiv import search as arxiv_search
+from src.SeachDataBases.ieee import search as ieee_search
+from src.SeachDataBases.science_direct import search_metadata as sd_search
+from src.SeachDataBases.scopus import search as scopus_search
+from src.SeachDataBases.spring_nature import search as spring_search
+from src.SeachDataBases.web_of_science import search_start as wos_search
 
 # Carrega as variáveis do .env
 load_dotenv()
@@ -20,7 +20,7 @@ if not SEARCH_QUERY:
     raise ValueError("SEARCH_QUERY não foi definido no .env.")
 
 # Lê config YAML para definir quais buscas executar
-with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
+with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
 
 # Orquestração das buscas conforme flags do YAML

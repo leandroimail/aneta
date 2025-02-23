@@ -7,7 +7,7 @@ import requests
 import pandas as pd
 from dotenv import load_dotenv
 from BibTex import read_bibtex, write_bibtex
-from Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
+from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
 db = create_lancedb_instance()
 load_dotenv()
@@ -233,7 +233,7 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
         return
     path_data = os.path.join(path_data, ".bibs")
     try:
-        with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -442,7 +442,7 @@ def enrich_bibtex_abstract():
     path_data = os.path.join(path_data, ".bibs")
     
     try:
-        with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -683,7 +683,7 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
     path_data = os.path.join(path_data, ".bibs")
     
     try:
-        with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -887,7 +887,7 @@ def enrich_bibtex_jcr_scimago():
         return
     path_data = os.path.join(path_data, ".bibs")
     try:
-        with open(os.path.join(os.path.dirname(__file__), "config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")

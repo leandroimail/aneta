@@ -18,7 +18,7 @@ import argparse
 import time  
 import random 
 from dotenv import load_dotenv
-from Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
+from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
 
 try:

@@ -13,10 +13,10 @@ import numpy as np
 
 from time import sleep
 
-from Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi
-from Config import condition_include, condition_exclude, path_exlude_file, path_include_file, path_directory_bibs
-from Config import path_jcr, path_scimago, path_exlude_manual_file, regex_expression_include, regex_expression_exclude, type_deduplication
-from BibTex import join_bib, write_bibtex, bibtex_to_csv
+from src.Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi
+from src.Config import condition_include, condition_exclude, path_exlude_file, path_include_file, path_directory_bibs
+from src.Config import path_jcr, path_scimago, path_exlude_manual_file, regex_expression_include, regex_expression_exclude, type_deduplication
+from src.BibTex import join_bib, write_bibtex, bibtex_to_csv
 
 
 def loop_json(list_dic, bib):
