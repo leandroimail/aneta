@@ -7,15 +7,6 @@ from bibtexparser.customization import convert_to_unicode
 import os
 
 
-
-# def read_bibtex(path):
-#     path = os.path.abspath(path)
-#     with open(path, "r", encoding='utf-8') as bibtex_file:
-#         parser = BibTexParser()
-#         parser.customization = convert_to_unicode
-#         bib_database = bibtexparser.load(bibtex_file, parser=parser)
-
-#         return bib_database.entries
 def read_bibtex(path):
     path = os.path.abspath(path)
 

@@ -22,6 +22,14 @@ run_download_papers = False
 
 if __name__ == "__main__":
     if run_deprecated_abstract:
+        if not os.getenv("RUN_DEPRECATED_JOBS", 0):
+            print("A variável de ambiente RUN_DEPRECATED_JOBS não foi definida como 1")
+            print("Por favor, defina a variável de ambiente RUN_DEPRECATED_JOBS=1 para rodar a função de leitura do abstract")
+            exit(1)
+        if not os.getenv("PATH_SPRINGER") and not os.getenv("PATH_ACM"):
+            print("A variável de ambiente PATH_SPRINGER ou PATH_ACM não foi definida")
+            print("Por favor, defina a variável de ambiente PATH_SPRINGER ou PATH_ACM para rodar a função de leitura do abstract")
+            exit(1)
         from src.Deprecated.Abstract import get_abstract
         from src.Config import path_SPRINGER, path_ACM
         if path_SPRINGER:

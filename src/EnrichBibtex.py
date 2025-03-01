@@ -545,7 +545,6 @@ def get_keywords_by_doi_from_openalex(doi: str) -> dict:
                     save_bibliographic_database(type_source, doi, data, db)
                 except Exception as e:
                     print(f"Erro ao salvar registro no banco de dados: {e}")
-        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         # Extração de author_keywords a partir de "keywords"
         openalex_keywords = data.get("keywords", [])
         author_keywords = ", ".join(
@@ -591,7 +590,6 @@ def get_keywords_by_doi_from_crossref(doi: str) -> dict:
                     save_bibliographic_database(type_source, doi, data, db)
                 except Exception as e:
                     print(f"Erro ao salvar registro no banco de dados: {e}")
-        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         subjects = data.get("subject", [])
         if subjects and isinstance(subjects, list):
             pub_kw = ", ".join(subjects)
@@ -638,7 +636,6 @@ def get_keywords_by_doi_from_scopus(doi: str) -> dict:
                     save_bibliographic_database(type_source, doi, data, db)
                 except Exception as e:
                     print(f"Erro ao salvar registro no banco de dados: {e}")
-        # else: print(f"Registro encontrado no banco de dados. type_source: {type_source}, doi: {doi} \n")
         root = data.get("abstracts-retrieval-response", {})
         # Extração de author_keywords
         auth_keywords = ""
@@ -753,8 +750,7 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
                         if not result["keywords"] and res_keywords_enrich["keywords"]:
                             result["keywords"] = res_keywords_enrich["keywords"]
                             print(f"Registro '{title}': keywords enriquecidas via Scopus.")
-                            
-                    # Atualiza entry
+                    
                     if result["author_keywords"]:
                         entry["author_keywords"] = result["author_keywords"]
                         updated_file = True
@@ -883,9 +879,6 @@ def enrich_bibtex_file(bibtex_path, df_jcr, df_scimago, output_path):
 
         if entry["jcr"] or entry["scimago"]:
             print(f"Artigo '{title_val}' (DOI: {doi_val}) enriquecido com: {', '.join([str(entry["jcr"]), str(entry["scimago"])])} \n")
-        # else:
-        #     print(f"Não foi possivel enriquecer JCR e SCIMAGO no artigo '{title_val}' (DOI: {doi_val}) \n")
-
     try:
         # Escreve o arquivo enriquecido utilizando write_bibtex que recebe path e entries
         write_bibtex(output_path, bib_data)

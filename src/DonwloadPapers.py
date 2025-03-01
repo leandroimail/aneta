@@ -697,10 +697,3 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
         print(f"Erro ao salvar os logs: {e}")
 
     print("Processamento concluído.\n")
-
-# =====================================================================
-# Permite chamada via linha de comando ou importação
-# =====================================================================
-
-if __name__ == "__main__":
-    download_all_papers()

@@ -352,8 +352,6 @@ def clean_duplicate(bibs_clear, type_deduplication):
     path_directory_bibs_bib_deduplicate = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_deduplicate.bib")
     write_bibtex(path_directory_bibs_bib_duplicate, list_duplicate)
     write_bibtex(path_directory_bibs_bib_deduplicate, list_bib)
-    # write_bibtex(path_directory_bibs + "/OUTPUTS/bib_duplicate.bib", list_duplicate)
-    # write_bibtex(path_directory_bibs + "/OUTPUTS/bib_deduplicate.bib", list_bib)
 
     return list_bib, list_duplicate
 
@@ -642,7 +640,7 @@ def call_results(bibs, bib_duplicate={}, type="select"):
     display_results(count_base, type + "_" +"bases", "base")
 
     print("\n")
-    print(r"--- Contagem Base\Type ---")
+    print(r"--- Contagem Base\\Type ---")
     display_results(count_base_type, type + "_" +"base_type", "base_type")
 
     print("\n")
@@ -682,31 +680,36 @@ def call_results(bibs, bib_duplicate={}, type="select"):
 def analyzer(path):
     print("Loading and standardize Bibs")
     bibs = standardize_bib(path)
-    summary = {}
+    summary = {"total_bibs": len(bibs)}
     include_bib = []
     exclude_bib = []
     bibs_without_exclude = []
+    deduplicate = []
+    duplicate = []
+    select_bibs = []
 
     # word_count_keywords(bibs)
+    if os.getenv("RUN_DEPRECATED_JOBS", 0):
+        print("Select Includes Bibs")
+        include_bib = list(filter(pre_include, bibs))
+        summary["total_include"] = len(include_bib)
 
-    print("Select Includes Bibs")
-    include_bib = list(filter(pre_include, bibs))
+        print("Exludes Bibs")
+        bibs_without_exclude = list(filter(pre_exclude, include_bib))
+        summary["bibs_without_exclude"] = len(bibs_without_exclude)
 
-    print("Exludes Bibs")
-    bibs_without_exclude = list(filter(pre_exclude, include_bib))
+        print("Get Excludes Bibs")
+        exclude_bib = list(filter(pre_exclude_sample, include_bib))
 
-    print("Get Excludes Bibs")
-    exclude_bib = list(filter(pre_exclude_sample, include_bib))
+        print("Deduplicate Include Bibs")
+        deduplicate, duplicate = clean_duplicate(bibs_without_exclude, type_deduplication)
 
-    print("Deduplicate Include Bibs")
-    deduplicate, duplicate = clean_duplicate(bibs_without_exclude, type_deduplication)
+        print("Select Manual Bibs")
+        select_bibs = list(filter(select_final, deduplicate))
 
-    print("Select Manual Bibs")
-    select_bibs = list(filter(select_final, deduplicate))
-    exclude_bib = exclude_bib + list(filter(select_final_not, deduplicate))
-
-    print("Deduplicate Excludes Bibs")
-    exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib, type_deduplication)
+        print("Deduplicate Excludes Bibs")
+        exclude_bib = exclude_bib + list(filter(select_final_not, deduplicate))
+        exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib, type_deduplication)
 
     summary_bibs = {
         "total_bibs": len(bibs),
@@ -739,9 +742,6 @@ def analyzer(path):
     path_directory_bibs_exclude_bib = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_exclude.bib")
     write_bibtex(path_directory_bibs_select_bibs, select_bibs)
     write_bibtex(path_directory_bibs_exclude_bib, exclude_bib)
-
-    # write_bibtex(path_directory_bibs + "/OUTPUTS/select_bibs.bib", select_bibs)
-    # write_bibtex(path_directory_bibs + "/OUTPUTS/bib_exclude.bib", exclude_bib_deduplicate)
 
     summary_bibs["select"] = len(select_bibs)
 
