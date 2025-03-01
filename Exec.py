@@ -8,7 +8,7 @@ load_dotenv(os.path.abspath("Config/.env"))
 run_deprecated_abstract = False
 
 ###################  Informe se deve-se rodar a busca no banco de dados academicos
-run_search_database = True
+run_search_database = False
 
 ###################  Informe se deve-se rodar a enriquecimento dos bibtex
 run_enrich_bibtex = False

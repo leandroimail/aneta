@@ -173,6 +173,12 @@ def download_arxiv_entry(entry, pdf_dir, logs):
 
     # URL para PDF (substituir 'abs' por 'pdf')
     pdf_url = url.replace("abs", "pdf")
+    
+    if os.path.exists(pdf_path):
+        print(f"PDF já baixado: {pdf_path}")
+        logs["downloaded"].append(f"{doi} -> PDF já baixado")
+        return True
+    
     print(f"Baixando PDF do arXiv: {pdf_url}")
     if download_file(pdf_url, pdf_path):
         print(f"PDF salvo: {pdf_path}\n")
@@ -484,7 +490,7 @@ def download_doi_entry(entry, pdf_dir, logs):
     
     # 1. Verificar se o PDF já foi baixado
     if os.path.exists(pdf_path):
-        print(f"PDF já baixado: {pdf_path}\n")
+        print(f"PDF já baixado: {pdf_path}")
         logs["downloaded"].append(f"{doi} -> PDF já baixado")
         return True
     
