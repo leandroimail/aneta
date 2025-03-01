@@ -4,8 +4,10 @@ import requests
 import json
 import re
 import sys
+import yaml
 
 load_dotenv()
+load_dotenv(os.path.abspath("Config/.env"))
 
 # ============================================================
 # Configurações iniciais
@@ -164,8 +166,13 @@ def main(query, path_data):
     
     # Se não houver query, utiliza a variável de ambiente SEARCH_QUERY
     if not query:
-        query = os.getenv("SEARCH_QUERY", "")
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        query = config.get("search_string", config.get("search_string", None)) 
         
+    if not query:
+        raise ValueError("A string de busca que deve ser declarada em 'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
+    
     # Cria a pasta específica para Web of Science dentro do path_data
     out_dir = os.path.join(path_data, "web_of_science")
     os.makedirs(out_dir, exist_ok=True)
@@ -249,11 +256,3 @@ def main(query, path_data):
     print(f"   Artigos encontros e adicionados: {len(records_agregados)}")
     print("==============================================\n")
 
-# ============================================================
-# Execução principal
-# ============================================================
-if __name__ == "__main__":
-    QUERY = sys.argv[1] if len(sys.argv) > 1 else ""
-    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
-    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
-    main(QUERY, PATH_DATA)

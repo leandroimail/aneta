@@ -10,8 +10,12 @@ import shutil
 import math
 import pandas as pd
 import numpy as np
-
 from time import sleep
+from dotenv import load_dotenv
+
+
+load_dotenv()
+load_dotenv(os.path.abspath("Config/.env"))
 
 from src.Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi
 from src.Config import condition_include, condition_exclude, path_exlude_file, path_include_file, path_directory_bibs
@@ -32,8 +36,8 @@ def loop_json(list_dic, bib):
 
 
 def create_folder(path):
-
-    path_exit = path + "/OUTPUTS/"
+    path_exit = path.replace(".bibs", "OUTPUTS")
+    
     if os.path.exists(path_exit):
         shutil.rmtree(path_exit)
     os.makedirs(path_exit)
@@ -41,11 +45,13 @@ def create_folder(path):
 
 def read_impact_factor(path_impact_factor):
     df_impact = pd.read_csv(path_impact_factor, usecols=[1,2,3,5])
-    df_impact.rename(columns={'Rank': 'rank',
-                           'Full Journal Title': 'title',
-                           'Abbreviated Title' : 'abbreviated',
-                           'ISSN' : 'issn',
-                           'Journal Impact Factor' : 'jcr'}, inplace=True)
+    df_impact.rename(columns={
+                                'Rank': 'rank',
+                                'Full Journal Title': 'title',
+                                'Abbreviated Title' : 'abbreviated',
+                                'ISSN' : 'issn',
+                                'Journal Impact Factor' : 'jcr'
+                            }, inplace=True)
 
     df_impact["title"] = df_impact["title"].str.lower()
     df_impact["title"] = df_impact["title"].map(lambda x: re.sub('[^a-zA-Z0-9 ]', ' ',x))
@@ -341,9 +347,13 @@ def clean_duplicate(bibs_clear, type_deduplication):
         list_duplicate = df_duplicated.to_dict('records')    
     else:
         raise ValueError("Value of 'type_deduplication' need be 'default' or 'fuzze'. Please set in Config.py file")
-        
-    write_bibtex(path_directory_bibs + "/OUTPUTS/bib_duplicate.bib", list_duplicate)
-    write_bibtex(path_directory_bibs + "/OUTPUTS/bib_deduplicate.bib", list_bib)
+    
+    path_directory_bibs_bib_duplicate = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_duplicate.bib")
+    path_directory_bibs_bib_deduplicate = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_deduplicate.bib")
+    write_bibtex(path_directory_bibs_bib_duplicate, list_duplicate)
+    write_bibtex(path_directory_bibs_bib_deduplicate, list_bib)
+    # write_bibtex(path_directory_bibs + "/OUTPUTS/bib_duplicate.bib", list_duplicate)
+    # write_bibtex(path_directory_bibs + "/OUTPUTS/bib_deduplicate.bib", list_bib)
 
     return list_bib, list_duplicate
 
@@ -467,8 +477,8 @@ def display_results(dictionary, name_file, column_key, column_value="value", sor
 
     if sort_by_value:
         sort_index = 1
-
-    path = path_directory_bibs + "/OUTPUTS/" + name_file +".csv"
+    path = path_directory_bibs.replace(".bibs", "OUTPUTS/" + name_file +".csv")
+    # path = path_directory_bibs + "/OUTPUTS/" + name_file +".csv"
     with open(path, "w") as file:
         file.writelines(column_key + ";" + column_value + "\n" )
         dict_order = OrderedDict(sorted(dictionary.items(), key=lambda t: t[sort_index], reverse=reverse))
@@ -725,8 +735,13 @@ def analyzer(path):
     else:
         summary_bibs["'precente_include_over_total"] = "0%"
 
-    write_bibtex(path_directory_bibs + "/OUTPUTS/select_bibs.bib", select_bibs)
-    write_bibtex(path_directory_bibs + "/OUTPUTS/bib_exclude.bib", exclude_bib_deduplicate)
+    path_directory_bibs_select_bibs = path_directory_bibs.replace(".bibs", "OUTPUTS/select_bibs.bib")
+    path_directory_bibs_exclude_bib = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_exclude.bib")
+    write_bibtex(path_directory_bibs_select_bibs, select_bibs)
+    write_bibtex(path_directory_bibs_exclude_bib, exclude_bib)
+
+    # write_bibtex(path_directory_bibs + "/OUTPUTS/select_bibs.bib", select_bibs)
+    # write_bibtex(path_directory_bibs + "/OUTPUTS/bib_exclude.bib", exclude_bib_deduplicate)
 
     summary_bibs["select"] = len(select_bibs)
 
@@ -748,14 +763,16 @@ def analyzer(path):
 
     print("\n")
     print("--- Gravando Titles ---")
-    path = path_directory_bibs + "/OUTPUTS/title.txt"
+    path = path_directory_bibs.replace(".bibs", "OUTPUTS/title.txt")
+    # path = path_directory_bibs + "/OUTPUTS/title.txt"
     with open(path, "w", encoding="utf-8") as file:
         for bib in select_bibs:
             file.writelines(bib["title"] + "\n")
 
     print("\n")
     print("--- Gravando DOIs ---")
-    path = path_directory_bibs + "/OUTPUTS/DOIs.txt"
+    path = path_directory_bibs.replace(".bibs", "OUTPUTS/DOIs.txt")
+    # path = path_directory_bibs + "/OUTPUTS/DOIs.txt"
     with open(path, "w", encoding="utf-8") as file:
         for bib in select_bibs:
             if bib["doi"].strip().replace("\n", "").replace(" ", ""):

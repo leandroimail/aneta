@@ -6,12 +6,15 @@ import yaml
 import requests
 import pandas as pd
 from dotenv import load_dotenv
-from BibTex import read_bibtex, write_bibtex
+from src.BibTex import read_bibtex, write_bibtex
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
-db = create_lancedb_instance()
 load_dotenv()
+load_dotenv(os.path.abspath("Config/.env"))
+
+db = create_lancedb_instance()
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+
 
 def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn):
     # Se houver somente 1 candidato, retorna-o
@@ -33,6 +36,7 @@ def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn):
             best_match_count = match_count
             best_candidate = c
     return best_candidate
+
 
 def get_doi_by_title_from_scopus(dict_val) -> str:
     """
@@ -73,6 +77,7 @@ def get_doi_by_title_from_scopus(dict_val) -> str:
         print(f"Erro ao buscar DOI pelo título no Scopus: {e}")
         return ""
 
+
 def get_doi_by_title_from_openalex(dict_val):
     url = "https://api.openalex.org/works"
     params = {
@@ -107,6 +112,7 @@ def get_doi_by_title_from_openalex(dict_val):
         print(f"Erro: {e}")
         return None
 
+
 def get_doi_by_title_from_unpaywall(dict_val, email):
     url = "https://api.unpaywall.org/v2/search"
     params = {
@@ -139,6 +145,7 @@ def get_doi_by_title_from_unpaywall(dict_val, email):
         print(f"Erro: {e}")
         return None
 
+
 def get_doi_by_title_from_crossref(dict_val):
     url = "https://api.crossref.org/works"
     params = {
@@ -170,6 +177,7 @@ def get_doi_by_title_from_crossref(dict_val):
     except Exception as e:
         print(f"Erro: {e}")
         return None
+
 
 def get_doi_by_title_from_datacite(dict_val) -> str:
     """
@@ -219,6 +227,7 @@ def get_doi_by_title_from_datacite(dict_val) -> str:
         print(f"Erro ao buscar DOI pelo título no DataCite: {e}")
         return ""
 
+
 def enrich_bibtex_dois(email="leandroimail@gmail.com"):
     """
     Atualiza os registros BibTeX que não possuem DOI.
@@ -227,13 +236,13 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
     sem DOI, utiliza os campos 'title', 'authors' (ou 'author') e 'year' para buscar
     o DOI.
     """
-    path_data = os.environ.get("PATH_DATA")
+    path_data = os.path.abspath(os.getenv("PATH_DATA", "Data"))
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
     path_data = os.path.join(path_data, ".bibs")
     try:
-        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -293,6 +302,7 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
                 else:
                     print(f"Arquivo {bib_file} não sofreu alterações no DOI. \n\n")
 
+
 def get_abstract_by_doi_from_openalex(doi: str) -> str:
     if doi:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
@@ -327,6 +337,7 @@ def get_abstract_by_doi_from_openalex(doi: str) -> str:
         print(f"Erro ao obter abstract do OpenAlex: {e}")
         return ""
 
+
 def get_abstract_by_doi_from_semanticscholar(doi: str) -> str:
     if doi:
         doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
@@ -356,6 +367,7 @@ def get_abstract_by_doi_from_semanticscholar(doi: str) -> str:
     except Exception as e:
         print(f"Erro ao obter abstract do Semantic Scholar: {e}")
         return ""
+
 
 def get_abstract_by_doi_from_crossref(doi: str) -> str:
     if doi:
@@ -387,6 +399,7 @@ def get_abstract_by_doi_from_crossref(doi: str) -> str:
     except Exception as e:
         print(f"Erro ao obter abstract do Crossref: {e}")
         return ""
+
 
 def get_abstract_by_doi_from_scopus(doi: str) -> str:
     if doi:
@@ -427,6 +440,7 @@ def get_abstract_by_doi_from_scopus(doi: str) -> str:
         print(f"Erro ao obter abstract do Scopus: {e}")
         return ""
 
+
 def enrich_bibtex_abstract():
     """
     Atualiza os registros BibTeX que não possuem abstract.
@@ -435,14 +449,14 @@ def enrich_bibtex_abstract():
     com DOI mas sem abstract, utiliza o DOI para buscar o abstract nas APIs do
     Crossref, Semantic Scholar, Scopus e OpenAlex (nessa ordem).
     """
-    path_data = os.environ.get("PATH_DATA")
+    path_data = os.path.abspath(os.getenv("PATH_DATA", "Data"))
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
     path_data = os.path.join(path_data, ".bibs")
     
     try:
-        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -500,6 +514,7 @@ def enrich_bibtex_abstract():
                 else:
                     print(f"Arquivo {bib_file} não sofreu alterações no abstract.")
 
+
 def get_keywords_by_doi_from_openalex(doi: str) -> dict:
     """
     Retorna as keywords a partir do OpenAlex.
@@ -548,6 +563,7 @@ def get_keywords_by_doi_from_openalex(doi: str) -> dict:
         print(f"Erro ao obter keywords do OpenAlex: {e}")
         return {"author_keywords": "", "keywords": ""}
 
+
 def get_keywords_by_doi_from_crossref(doi: str) -> dict:
     """
     Retorna keywords do Crossref, utilizando o campo "subject"
@@ -585,6 +601,7 @@ def get_keywords_by_doi_from_crossref(doi: str) -> dict:
     except Exception as e:
         print(f"Erro ao obter keywords do Crossref: {e}")
         return {"author_keywords": "", "keywords": ""}
+
 
 def get_keywords_by_doi_from_scopus(doi: str) -> dict:
     """
@@ -670,20 +687,21 @@ def get_keywords_by_doi_from_scopus(doi: str) -> dict:
         print(f"Erro ao obter keywords do Scopus: {e}")
         return {"author_keywords": "", "keywords": ""}
 
+
 def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
     """
     Atualiza os registros BibTeX que não possuem author_keywords preenchidas.
     - Se o registro não possui author_keywords e keywords também, ambos serão enriquecidos.
     - Se o registro não possui author_keywords mas já possui keywords preenchidas, apenas author_keywords será enriquecido e keywords não será sobrescrito.
     """
-    path_data = os.environ.get("PATH_DATA")
+    path_data = os.path.abspath(os.getenv("PATH_DATA", "Data"))
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
     path_data = os.path.join(path_data, ".bibs")
     
     try:
-        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -881,13 +899,13 @@ def enrich_bibtex_jcr_scimago():
     Percorre as bases configuradas em config/enrich_config.yaml (chave: nome da base, valor: booleano habilitado)
     e enriquece todos os arquivos BibTeX encontrados (no diretório definido por PATH_DATA) com os dados de JCR e Scimago.
     """
-    path_data = os.environ.get("PATH_DATA")
+    path_data = os.path.abspath(os.getenv("PATH_DATA", "Data"))
     if not path_data:
         print("Variável de ambiente PATH_DATA não definida.")
         return
     path_data = os.path.join(path_data, ".bibs")
     try:
-        with open(os.path.join(os.path.dirname(__file__), "Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -931,9 +949,10 @@ def enrich_bibtex_jcr_scimago():
             # Neste exemplo, o arquivo enriquecido sobrescreve o original.
             enrich_bibtex_file(bib_file, df_jcr, df_scimago, bib_file)
 
+
 def enrich_bibtex():
     try:
-        with open(os.path.join(os.path.dirname(__file__), "config/enrich_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("Config/enrich_config.yaml"), "r", encoding="utf-8") as f:
             enrich_config = yaml.safe_load(f)
             os.environ["ENRICH_ARXIV"] = str(enrich_config.get("enrich_arxiv", False))
             
@@ -974,6 +993,3 @@ def enrich_bibtex():
         print("EnrichBibtex completed successfully!")
         print("++++++++++++++++++++++++++++++++++++++++++++++\n\n")    
 
-
-if __name__ == "__main__":
-    enrich_bibtex()

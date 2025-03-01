@@ -3,9 +3,11 @@ import json
 import re
 import sys
 import os
+import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(os.path.abspath("Config/.env"))
 
 # Obtém a chave e removemos a constante fixa
 API_KEY = os.getenv("SPRINGER_API_KEY", "")
@@ -171,6 +173,14 @@ def main(query, path_data):
     print("       INICIANDO BUSCA: SPRING NATURE           ")
     print("==============================================\n")
     
+    if not query:
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        query = config.get("search_string", config.get("search_string", None)) 
+    
+    if not query:
+        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
+    
     out_dir = os.path.join(path_data, "spring_nature")
     if os.path.exists(out_dir):
         import shutil
@@ -269,10 +279,3 @@ def main(query, path_data):
     print("     BUSCA FINALIZADA: SPRING NATURE            ")
     print(f"      Artigos encontros e adicionados: {total}")
     print("==============================================\n")
-
-if __name__ == "__main__":
-    import sys
-    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
-    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
-    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
-    main(QUERY, PATH_DATA)

@@ -6,6 +6,7 @@ import sys
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(os.path.abspath("Config/.env"))
 
 # ============================================================
 # Configurações iniciais
@@ -265,12 +266,3 @@ def main(query, path_data):
     print(f"   Artigos encontros e adicionados: {len(records_agregados)}")
     print("==============================================\n")
 
-
-# ============================================================
-# Execução principal
-# ============================================================
-if __name__ == "__main__":
-    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
-    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
-    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
-    main(QUERY, PATH_DATA)

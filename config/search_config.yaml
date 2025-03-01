@@ -1,7 +1,17 @@
+# Description: Configuration file for search engines - set it to true if you want to search in that engine
+# Databases Engines Supported: arxiv, ieee, science_direct, scopus, spring_nature, web_of_science
 arxiv: true
 ieee: true
 science_direct: true
 scopus: true
 spring_nature: true
+acm: true                   # ACM Digital Library not supported yet. Engine not has Rest API (only to enrich file)
 web_of_science: true
-acm: true
+
+
+# Generic Search String for all search engines (arxiv, ieee, science_direct, scopus, spring_nature, acm, web_of_science)
+search_string: >
+  ("Schema Matching" AND
+  ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))
+
+

@@ -3,9 +3,11 @@ import requests
 import json
 import re
 import sys
+import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(os.path.abspath("Config/.env"))
 
 API_KEY = os.getenv("ELSEVIER_API_KEY", "")
 BASE_URL = 'https://api.elsevier.com/content/search/scopus'
@@ -128,6 +130,14 @@ def main(query, path_data):
     os.makedirs(out_dir, exist_ok=True)
     global records_agregados
     
+    if not query:
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        query = config.get("search_string", config.get("search_string", None))
+        
+    if not query:
+        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
+    
     print("Iniciando coleta de registros da API Scopus...\n")
     # Use o parâmetro "query" para construir a requisição, por exemplo:
     query_param = f"TITLE-ABS-KEY({query})"
@@ -224,10 +234,3 @@ def main(query, path_data):
     print("         BUSCA FINALIZADA: SCOPUS             ")
     print(f"       Artigos encontros e adicionados: {total}")
     print("==============================================\n")
-
-if __name__ == "__main__":
-    import sys
-    QUERY = sys.argv[1] if len(sys.argv) > 1 else os.getenv("SEARCH_QUERY", "")
-    PATH_DATA = sys.argv[2] if len(sys.argv) > 2 else os.getenv("PATH_DATA", "../Sandbox/Data")
-    PATH_DATA = os.path.join(PATH_DATA, ".bibs")
-    main(QUERY, PATH_DATA)

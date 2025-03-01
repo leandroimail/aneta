@@ -8,7 +8,7 @@ from Config.Deprecated.DeprecatedConfigPythonFile.Config import condition_includ
 from Config.Deprecated.DeprecatedConfigPythonFile.Config import condition_exclude as condition_exclude_deprecated
 
 load_dotenv()
-
+load_dotenv(os.path.abspath("Config/.env"))
 
 #####################  SYSTEM CONFIG #####################
 #####################  SYSTEM CONFIG #####################

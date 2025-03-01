@@ -5,6 +5,7 @@ from typing import Union, Dict
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(os.path.abspath("Config/.env"))
 
 def create_lancedb_instance(path_db: str = ".db") -> lancedb.LanceDBConnection:
     """
@@ -17,7 +18,7 @@ def create_lancedb_instance(path_db: str = ".db") -> lancedb.LanceDBConnection:
       LanceDB: Instância do banco de dados.
     """
     path_db = ".db"
-    path_data = os.getenv("PATH_DATA")
+    path_data = os.path.abspath(os.getenv("PATH_DATA", "Data"))
     if not path_db:
         raise ValueError("Caminho do banco de dados não informado")
     if not path_data:
