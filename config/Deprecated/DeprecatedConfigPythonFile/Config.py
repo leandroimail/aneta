@@ -83,7 +83,7 @@ def condition_exclude(keywords, abstract, title, jcr, scimago, year, type_public
     :param jcr: term containing float value. Initial in 0
     :param scimago: term containing float value. Initial in 0
     :param year: term containing containing int value with a date(year) of publication
-    :param type_publication: term containing string type of publication. Ex: proceedings, article, book
+    :param term containing string type of publication. Can be: proceedings, article, book or misc
     :param publication: term containing string with name of publication. Can be the name of proceedings, article, book, etc
 
     :return: this condition return a Boolean term for bool_conditional

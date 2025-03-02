@@ -23,16 +23,16 @@ search_string: >
 # Can be used any valide SQL statement to where clause on duckdb database
 # The SQL statement is applied to the results of the search engines
 
-# filds available in the database:
+# fields available in the database:
 
-# keywords: terme containing string with keywords split for semicolon
-# abstract: terme containing string with abstract of publication
-# title: terme containing string with title of publication
-# jcr: terme containing float value. Initial in 0
-# scimago: terme containing float value. Initial in 0
-# year: terme containing containing int value with a date(year) of publication
-# type_publication: terme containing string type of publication. Ex: proceedings, article, book
-# publication: terme containing string with name of publication. Can be the name of proceedings, article, book, etc
+# keywords: term containing string with keywords split for semicolon
+# abstract: term containing string with abstract of publication
+# title: term containing string with title of publication
+# jcr: term containing float value. Initial in 0
+# scimago: term containing float value. Initial in 0
+# year: term containing containing int value with a date(year) of publication
+# type_publication: term containing string type of publication. Can be: proceedings, article, book or misc
+# publication: term containing string with name of publication. Can be the name of proceedings, article, book, etc
 
 # fields content not are case sensitive. 
 ##########. DON'T USE lower() and upper() function in the SQL statement. 
