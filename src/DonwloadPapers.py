@@ -1,17 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Script para download de artigos científicos a partir de arquivo BibTeX e lista de DOIs.
-Suporta download de PDFs (ou conversão do HTML para Markdown) para:
-    - Artigos arXiv (via substituição na URL)
-    - Artigos com DOI (tentando download direto, fallback para busca no Google Scholar e PyPaperBot)
-As estratégias de fallback são tentadas em sequência e o log de arquivos baixados e não baixados é gerado.
-"""
-
 import os
 import sys
 import re
-import shutil
 import tempfile
 import requests
 import argparse
