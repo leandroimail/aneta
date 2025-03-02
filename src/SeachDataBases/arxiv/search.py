@@ -354,9 +354,9 @@ def main(query, path_data):
     # -----------------------------------------------------------------------------
     registros_json = [simplifica_entry(record) for record in records_agregados]
     try:
-        with open(os.path.join(out_dir, "resultados_api.json"), "w", encoding="utf-8") as f_json:
+        with open(os.path.join(out_dir, "arxiv.json"), "w", encoding="utf-8") as f_json:
             json.dump(registros_json, f_json, ensure_ascii=False, indent=4)
-        print("Simplified results saved in 'resultados_api.json'\n")
+        print("Simplified results saved in 'arxiv.json'\n")
     except Exception as e:
         print(f"Error saving JSON file: {e}")
         sys.exit(1)
@@ -369,9 +369,9 @@ def main(query, path_data):
         for feed in raw_feeds:
             root_agg.append(feed)
         tree = ET.ElementTree(root_agg)
-        with open(os.path.join(out_dir, "resultados_api.xml"), "wb") as f_xml:
+        with open(os.path.join(out_dir, "arxiv.xml"), "wb") as f_xml:
             tree.write(f_xml, encoding="utf-8", xml_declaration=True)
-        print("Aggregated XML feeds saved in 'resultados_api.xml'\n")
+        print("Aggregated XML feeds saved in 'arxiv.xml'\n")
     except Exception as e:
         print(f"Error saving XML file: {e}")
         sys.exit(1)
@@ -381,9 +381,9 @@ def main(query, path_data):
     # -----------------------------------------------------------------------------
     bibtex_entries = [converte_para_bibtex(record) for record in records_agregados]
     try:
-        with open(os.path.join(out_dir, "resultados_api.bib"), "w", encoding="utf-8") as f_bib:
+        with open(os.path.join(out_dir, "arxiv.bib"), "w", encoding="utf-8") as f_bib:
             f_bib.write("\n".join(bibtex_entries))
-        print("BibTeX entries saved in 'resultados_api.bib'")
+        print("BibTeX entries saved in 'arxiv.bib'")
     except Exception as e:
         print(f"Error saving BibTeX file: {e}")
         sys.exit(1)
