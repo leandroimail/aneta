@@ -110,8 +110,9 @@ list_year = ["year", "Year", "YEAR", "Publication Year", "publication year", "PU
 list_publication = ["journal", "Journal", "JOURNAL", "booktitle", "Booktitle", "BOOKTITLE", "Publication Title",
                     "publication title", "PUBLICATION TITLE", "publication","Publication","PUBLICATION", "source", "Source", "SOURCE",
                     "publicationName", "PublicationName", "Publication Name", "publication name", "Publication name", "publicationname"]
-list_type_publication = ["ENTRYTYPE", "type", "Type", "TYPE", "Content Type", "content type", "CONTENT TYPE", 
-                        "Publication Type", "publication type", "PUBLICATION TYPE"]
+list_type_publication = ["ENTRYTYPE", "entrytype", "type", "Type", "TYPE", "Content Type", "content type", "CONTENT TYPE", 
+                        "Publication Type", "publication type", "PUBLICATION TYPE", "content_type", "CONTENT_TYPE", "Content Type",
+                        "Type Publication", "type publication", "TYPE PUBLICATION", "TypePublication", "type_publication", "TYPE_PUBLICATION",]
 list_publisher = ["publisher", "Publisher", "PUBLISHER", "publisherName", "PublisherName", "Publisher Name", "publisher name", "Publisher name", "publishername",
                     "Publisher-Name", "PUBLISHER NAME", "PUBLISHERNAME",]
 list_abbreviated_publication = ["abbrev_source_title", "abbrev_source_title", "Abbrev Source Title", "Abbrev Source Title", "Abbrev Source Title",
