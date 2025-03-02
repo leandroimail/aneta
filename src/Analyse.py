@@ -9,13 +9,15 @@ import os
 import shutil
 import pandas as pd
 import numpy as np
+import duckdb
+import yaml
 from dotenv import load_dotenv
 
 
 load_dotenv()
 load_dotenv(os.path.abspath("Config/.env"))
 
-from src.Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi
+from src.Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi, list_type_publication
 from src.Config import condition_include, condition_exclude, path_exlude_file, path_include_file, path_directory_bibs
 from src.Config import path_jcr, path_scimago, path_exlude_manual_file, regex_expression_include, regex_expression_exclude, type_deduplication
 from src.BibTex import join_bib, write_bibtex, bibtex_to_csv
@@ -83,6 +85,23 @@ def get_impact_factor(df_impact_factor, title, issn=""):
         return None
 
 
+def get_type_of_publication(type_publication):
+    list_proceedingsstrings = ["conf", "proceed", "congress", "confer", "worksh", "simpos", "summit", "colloq", "sympo", "meet", "conv", "forum"]
+    list_article_strings = ["arti", "jour", "period", "revi", "magaz"]
+    list_book_strings = ["book", "chap", "edit", "manu", "booklet", "inbook", "incollection", "inproceedings", "manual", "mastersthesis", "phdthesis", "techreport", "unpublished"]
+
+    if any(x in type_publication.lower() for x in list_proceedingsstrings):
+        return "proceedings"
+    elif any(x in type_publication.lower() for x in list_article_strings):
+        return "article"
+    elif any(x in type_publication.lower() for x in list_book_strings):
+        return "book"
+    else:
+        return "misc"
+    
+    
+
+
 def standardize_bib(path):
     list_bib = join_bib(path)
     list_return = []
@@ -101,6 +120,9 @@ def standardize_bib(path):
             publication = loop_json(list_publication, bib)
             issn = loop_json(list_issn, bib)
             doi = loop_json(list_doi, bib)
+            original_type_publication = bib.get("type_publication", "")
+            ENTRYTYPE = loop_json(list_type_publication, bib)
+            ENTRYTYPE = get_type_of_publication(ENTRYTYPE)
 
 
             if not issn or issn == 'None':
@@ -143,25 +165,27 @@ def standardize_bib(path):
             if not publication or publication == 'None':
                 publication = ""
 
-            jcr = ""
-            if bib["ENTRYTYPE"] == "article":
-                jcr = get_impact_factor(df_jcr_impact_factor,
-                                        re.sub('[^a-zA-Z0-9 ]', ' ',publication.lower().strip()),
-                                        re.sub('[^a-zA-Z0-9 ]', ' ', issn.lower().strip()))
-            if not jcr or jcr == 'None':
+            if "jcr" in bib:
+                jcr = bib["jcr"]
+            else:
                 jcr = ""
+                if ENTRYTYPE == "article":
+                    jcr = get_impact_factor(df_jcr_impact_factor,
+                                            re.sub('[^a-zA-Z0-9 ]', ' ',publication.lower().strip()),
+                                            re.sub('[^a-zA-Z0-9 ]', ' ', issn.lower().strip()))
+                if not jcr or jcr == 'None':
+                    jcr = ""
 
-
-            scimago = ""
-            if bib["ENTRYTYPE"] == "article":
-                scimago = get_impact_factor(df_scimago_impact_factor,
-                                        re.sub('[^a-zA-Z0-9 ]', ' ',publication.lower().strip()),
-                                        re.sub('[^a-zA-Z0-9 ]', ' ', issn.lower().strip()))
-            if not scimago or scimago == 'None':
+            if "scimago" in bib:
+                scimago = bib["scimago"]
+            else:
                 scimago = ""
-
-            if "proceeding" in bib["ENTRYTYPE"]:
-                bib["ENTRYTYPE"] = "proceedings"
+                if ENTRYTYPE == "article":
+                    scimago = get_impact_factor(df_scimago_impact_factor,
+                                            re.sub('[^a-zA-Z0-9 ]', ' ',publication.lower().strip()),
+                                            re.sub('[^a-zA-Z0-9 ]', ' ', issn.lower().strip()))
+                if not scimago or scimago == 'None':
+                    scimago = ""
 
             bib["title"] = title.strip()
             bib["keywords"] = keywords
@@ -173,6 +197,9 @@ def standardize_bib(path):
             bib["jcr"] = jcr
             bib["scimago"] = scimago
             bib["doi"] = doi
+            bib["ENTRYTYPE"] = ENTRYTYPE
+            if original_type_publication:
+                bib["original_type_publication"] = original_type_publication
 
             list_new.append(bib)
 
@@ -424,6 +451,92 @@ def pre_include(bib):
             return True
 
     return False
+
+
+def get_database(list_bibs):
+    table_bibs = pd.DataFrame(list_bibs)
+    
+    table_bibs["old_keywords"] = table_bibs["keywords"]
+    table_bibs["old_abstract"] = table_bibs["abstract"]
+    table_bibs["old_title"] = table_bibs["title"]
+    table_bibs["old_jcr"] = table_bibs["jcr"]
+    table_bibs["old_scimago"] = table_bibs["scimago"]
+    table_bibs["old_publication"] = table_bibs["publication"]
+    table_bibs["old_year"] = table_bibs["year"]
+    
+    table_bibs["keywords"] = table_bibs["keywords"].str.lower()
+    table_bibs["abstract"] = table_bibs["abstract"].str.lower()
+    table_bibs["title"] = table_bibs["title"].str.lower()
+    table_bibs["jcr"] = table_bibs["jcr"].str.lower()
+    table_bibs["scimago"] = table_bibs["scimago"].str.lower()
+    table_bibs["type_publication"] = table_bibs["ENTRYTYPE"].str.lower()
+    table_bibs["publication"] = table_bibs["publication"].str.lower()
+    table_bibs["year"] = table_bibs["year"].str.lower()
+    
+    conn = duckdb.connect(':memory:')
+    conn.register('table_bibs', table_bibs)
+    return conn
+
+
+def remove_old_columns(df_bibs):
+    df_bibs.drop(columns=["keywords", 
+                                "abstract", 
+                                "title", 
+                                "jcr", 
+                                "scimago", 
+                                "type_publication", 
+                                "publication", 
+                                "year"], inplace=True)
+    rename_columns = {
+        "old_keywords": "keywords",
+        "old_abstract": "abstract",
+        "old_title": "title",
+        "old_jcr": "jcr",
+        "old_scimago": "scimago",
+        "old_publication": "publication",
+        "old_year": "year"
+    }
+    if "original_type_publication" in df_bibs.columns:
+        rename_columns["original_type_publication"] = "type_publication"
+    df_bibs.rename(columns=rename_columns, inplace=True)
+    return df_bibs
+
+
+def pre_include_sql(list_bib):
+    
+    if not list_bib:
+        print("List of Bibs is empty to select include by SQL in filter_string")
+        return []
+    
+    try:
+        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+            search_config = yaml.safe_load(f)
+        filter_string = search_config["filter_string"]
+    except KeyError as keyerror:
+        raise KeyError(f"KeyError: {keyerror} not found in search_config.yaml")
+    except FileNotFoundError as fileerror:
+        raise FileNotFoundError(f"FileNotFoundError: search_config.yaml not found in Config folder")
+    except Exception as e:
+        raise Exception(f"Error on read filter_string in file {os.path.abspath("Config/search_config.yaml")}. Error: {e}")
+    
+    conn = get_database(list_bib)
+    query = f"""
+        SELECT 
+            * 
+        FROM 
+            table_bibs
+        WHERE 
+            {filter_string}
+    """
+    query = query.replace("\n", " ").replace("\t", " ").replace("  ", " ").replace("  ", " ")
+    
+    try:
+        df_bibs = conn.execute(query).fetchdf()
+    except Exception as e:
+        raise Exception(f"Error on execute query in DuckDB. Error: {e}")
+    
+    df_bibs = remove_old_columns(df_bibs)
+    return df_bibs.to_dict('records')
 
 
 def pre_exclude(bib):
@@ -686,28 +799,27 @@ def analyzer(path):
     duplicate = []
     select_bibs = []
 
-    # word_count_keywords(bibs)
-    if os.getenv("RUN_DEPRECATED_JOBS", 0):
-        print("Select Includes Bibs")
-        include_bib = list(filter(pre_include, bibs))
-        summary["total_include"] = len(include_bib)
+    print("Select Includes Bibs")
+    include_bib = list(filter(pre_include, bibs.copy()))
+    include_bib = pre_include_sql(include_bib)
+    summary["total_include"] = len(include_bib)
 
-        print("Exludes Bibs")
-        bibs_without_exclude = list(filter(pre_exclude, include_bib))
-        summary["bibs_without_exclude"] = len(bibs_without_exclude)
+    print("Exludes Bibs")
+    bibs_without_exclude = list(filter(pre_exclude, include_bib))
+    summary["bibs_without_exclude"] = len(bibs_without_exclude)
 
-        print("Get Excludes Bibs")
-        exclude_bib = list(filter(pre_exclude_sample, include_bib))
+    print("Get Excludes Bibs")
+    exclude_bib = list(filter(pre_exclude_sample, include_bib))
 
-        print("Deduplicate Include Bibs")
-        deduplicate, duplicate = clean_duplicate(bibs_without_exclude, type_deduplication)
+    print("Deduplicate Include Bibs")
+    deduplicate, duplicate = clean_duplicate(bibs_without_exclude, type_deduplication)
 
-        print("Select Manual Bibs")
-        select_bibs = list(filter(select_final, deduplicate))
+    print("Select Manual Bibs")
+    select_bibs = list(filter(select_final, deduplicate))
 
-        print("Deduplicate Excludes Bibs")
-        exclude_bib = exclude_bib + list(filter(select_final_not, deduplicate))
-        exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib, type_deduplication)
+    print("Deduplicate Excludes Bibs")
+    exclude_bib = exclude_bib + list(filter(select_final_not, deduplicate))
+    exclude_bib_deduplicate, _ = clean_duplicate(exclude_bib, type_deduplication)
 
     summary_bibs = {
         "total_bibs": len(bibs),
