@@ -36,14 +36,14 @@ def run_search():
     if config.get("scopus", False):    
         scopus_search.main(SEARCH_STRING, PATH_DATA)
 
-    if config.get("ieee", False):    
-        ieee_search.main(SEARCH_STRING, PATH_DATA)
-
     if config.get("spring_nature", False):    
         spring_search.main(SEARCH_STRING, PATH_DATA)
 
     if config.get("web_of_science", False):    
         wos_search.main(SEARCH_STRING, PATH_DATA)
+    
+    if config.get("ieee", False):    
+        ieee_search.main(SEARCH_STRING, PATH_DATA)
 
     print("\n\n++++++++++++++++++++++++++++++++++++++++++++++")
     print("     Search process completed successfully!")

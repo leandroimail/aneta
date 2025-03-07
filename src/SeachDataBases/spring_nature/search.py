@@ -185,7 +185,7 @@ def main(query, path_data):
     if os.path.exists(out_dir):
         import shutil
         shutil.rmtree(out_dir)
-    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(out_dir)
     global records_agregados
     erro_ocorrido = False
 

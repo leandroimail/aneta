@@ -1,4 +1,5 @@
 import os
+import shutil
 import requests
 import json
 import re
@@ -155,7 +156,9 @@ def main(query, path_data):
     print("==============================================\n")
     
     out_dir = os.path.join(path_data, "science_direct")
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
     global records_agregados
     erro_ocorrido = False
 

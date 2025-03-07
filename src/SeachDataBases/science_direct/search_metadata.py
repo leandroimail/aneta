@@ -1,4 +1,5 @@
 import os
+import shutil
 import requests
 import json
 import re
@@ -177,7 +178,9 @@ def main(query, path_data):
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
     
     out_dir = os.path.join(path_data, "science_direct")
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
     global records_agregados
     erro_ocorrido = False
 

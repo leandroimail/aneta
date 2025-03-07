@@ -1,3 +1,4 @@
+import shutil
 from dotenv import load_dotenv
 import os
 import requests
@@ -175,7 +176,9 @@ def main(query, path_data):
     
     # Cria a pasta específica para Web of Science dentro do path_data
     out_dir = os.path.join(path_data, "web_of_science")
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
     
     global records_agregados
     headers = {

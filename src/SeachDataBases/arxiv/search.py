@@ -1,4 +1,5 @@
 import os
+import shutil
 import requests
 import xml.etree.ElementTree as ET
 import urllib.parse
@@ -292,7 +293,9 @@ def main(query, path_data):
     query = converter_query(query)
     
     out_dir = os.path.join(path_data, "arxiv")
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
     global records_agregados, raw_feeds
     erro_ocorrido = False
     print("Starting the collection of records from the arXiv API...\n")

@@ -5,6 +5,7 @@ import re
 import sys
 import yaml
 from dotenv import load_dotenv
+import shutil
 
 load_dotenv()
 load_dotenv(os.path.abspath("Config/.env"))
@@ -127,7 +128,11 @@ def main(query, path_data):
     print("==============================================\n")
     
     out_dir = os.path.join(path_data, "scopus")
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
+    
+    
     global records_agregados
     
     if not query:
