@@ -235,7 +235,7 @@ def fetch_metadata_from_scopus(doi):
 
 
 def run_R_bibliometrix():
-    path = os.path.abspath("src/Bibliometry/ReadFile.r")
+    path = os.path.abspath("src/Bibliometry/RunBibliometrix.r")
     os.system(f"Rscript {path}")
     
     path_data = os.getenv("PATH_DATA", ".data")
