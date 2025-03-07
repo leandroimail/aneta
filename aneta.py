@@ -19,8 +19,8 @@ def run_enrich():
     enrich_bibtex()
     return True
 
-def run_analyse():
-    from src.Analyse import get_analyse
+def run_selection():
+    from Selection import get_analyse
     get_analyse()
     return True
 
@@ -68,20 +68,19 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Executa diferentes funcionalidades do projeto ASRL',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='''
-                Exemplos de uso:
-                python aneta.py --search
-                python aneta.py --enrich
-                python aneta.py --download
+        epilog='''Exemplos de uso:
+                        python aneta.py --search
+                        python aneta.py --enrich
+                        python aneta.py --selection
         ''')
     
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--search', action='store_true', help='Executa a busca no banco de dados acadêmicos')
     group.add_argument('--enrich', action='store_true', help='Executa o enriquecimento dos bibtex')
-    group.add_argument('--analyse', action='store_true', help='Executa a análise dos bibtex')
-    group.add_argument('--bibliometry', action='store_true', help='Executa a bibliometria completa dos bibtex')
-    group.add_argument('--download', action='store_true', help='Executa o download dos papers')
-    group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract (Depreciado)')
+    group.add_argument('--selection', action='store_true', help='Executa a seleção dos bibtex')
+    group.add_argument('--bibliometry', action='store_true', help='Executa a bibliometria completa do bibtex selecionado')
+    group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers')
+    group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
     
     return parser.parse_args(), parser
 
@@ -89,7 +88,7 @@ if __name__ == "__main__":
     ###################  Variáveis de configuração (modo script)
     run_search_database = False
     run_enrich_bibtex = False
-    run_analyse_bibtex = False
+    run_selection_bibtex = False
     run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
@@ -104,11 +103,11 @@ if __name__ == "__main__":
         run_search()
     elif args.enrich or run_enrich_bibtex:
         run_enrich()
-    elif args.analyse or run_analyse_bibtex:
-        run_analyse()
+    elif args.selection or run_selection_bibtex:
+        run_selection()
     elif args.bibliometry or run_bibliometry:
         run_bibliometry_function()
-    elif args.download or run_download_papers:
+    elif args.download_pdf or run_download_papers:
         run_download()
     elif args.deprecated_abstract or run_deprecated_abstract:
         deprecated_abstract()
