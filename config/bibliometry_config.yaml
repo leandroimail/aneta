@@ -1,0 +1,11 @@
+
+
+bibliometry_using_openalex: true
+
+bibliometry_for_arxiv: true
+
+
+
+
+###### Not implemented yet ######
+bibliometry_using_scopus: false
