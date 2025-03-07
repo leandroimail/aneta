@@ -70,9 +70,9 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Exemplos de uso:
-  python Exec.py --search
-  python Exec.py --enrich
-  python Exec.py --download
+  python aneta.py --search
+  python aneta.py --enrich
+  python aneta.py --download
 ''')
     
     group = parser.add_mutually_exclusive_group()
