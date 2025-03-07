@@ -536,7 +536,7 @@ def get_keywords_by_doi_from_openalex(doi: str) -> dict:
         if not data:
             response = requests.get(url, headers=headers)
             if response.status_code == 404:
-                return ""
+                return {"author_keywords": "", "keywords": ""}
             response.raise_for_status()
             data = response.json()
             if data:
@@ -734,36 +734,36 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
                     doi_tratado = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
 
                     res_keywords_enrich = get_keywords_by_doi_from_openalex(doi_tratado)
-                    if res_keywords_enrich["author_keywords"]:
-                        result["author_keywords"] = res_keywords_enrich["author_keywords"]
+                    if res_keywords_enrich.get("author_keywords"):
+                        result["author_keywords"] = res_keywords_enrich.get("author_keywords")
                         print(f"Registro '{title}': author_keywords enriquecidas via OpenAlex.")
-                    if res_keywords_enrich["keywords"]:
-                        result["keywords"] = res_keywords_enrich["keywords"]
+                    if res_keywords_enrich.get("keywords"):
+                        result["keywords"] = res_keywords_enrich.get("keywords")
                         print(f"Registro '{title}': keywords enriquecidas via OpenAlex.")
                     
-                    if not result["author_keywords"] or not result["keywords"]:
+                    if not result.get("author_keywords") or not result.get("keywords"):
                         res_keywords_enrich = get_keywords_by_doi_from_scopus(doi_tratado)
-                        if not result["author_keywords"] and res_keywords_enrich["author_keywords"]:
-                            result["author_keywords"] = res_keywords_enrich["author_keywords"]
+                        if not result.get("author_keywords") and res_keywords_enrich.get("author_keywords"):
+                            result["author_keywords"] = res_keywords_enrich.get("author_keywords")
                             print(f"Registro '{title}': author_keywords enriquecidas via Scopus.")
-                        if not result["keywords"] and res_keywords_enrich["keywords"]:
-                            result["keywords"] = res_keywords_enrich["keywords"]
+                        if not result.get("keywords") and res_keywords_enrich.get("keywords"):
+                            result["keywords"] = res_keywords_enrich.get("keywords")
                             print(f"Registro '{title}': keywords enriquecidas via Scopus.")
                     
-                    if result["author_keywords"]:
-                        entry["author_keywords"] = result["author_keywords"]
+                    if result.get("author_keywords"):
+                        entry["author_keywords"] = result.get("author_keywords")
                         updated_file = True
-                    if result["keywords"]:
-                        entry["keywords"] = result["keywords"]
+                    if result.get("keywords"):
+                        entry["keywords"] = result.get("keywords")
                         updated_file = True
-                    if res_keywords_enrich["author_keywords"] or res_keywords_enrich["keywords"]:
+                    if res_keywords_enrich.get("author_keywords") or res_keywords_enrich.get("keywords"):
                         print(f"\n")
                     
-                    if not res_keywords_enrich["author_keywords"]:
+                    if not res_keywords_enrich.get("author_keywords"):
                         print(f"Registro '{title}': Não foi possível enriquecer author_keywords.") 
-                    if not res_keywords_enrich["keywords"]:
+                    if not res_keywords_enrich.get("keywords"):
                         print(f"Registro '{title}': Não foi possível enriquecer keywords.")
-                    if not res_keywords_enrich["author_keywords"] and not res_keywords_enrich["keywords"]:
+                    if not res_keywords_enrich.get("author_keywords") and not res_keywords_enrich.get("keywords"):
                         print(f"\n")
 
                 if updated_file:
