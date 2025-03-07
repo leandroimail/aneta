@@ -1,9 +1,12 @@
 import os
+import random
+import shutil
 import requests
 import json
 import re
 import sys
 import yaml
+import time  # Adicione esta importação no topo do arquivo
 from urllib.parse import quote
 from dotenv import load_dotenv
 
@@ -22,7 +25,12 @@ BASE_URL = 'https://ieeexploreapi.ieee.org/api/v1/search/articles'
 
 
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
-PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25)) 
+PAGE_SIZE = int(os.getenv("PAGE_SIZE", 50)) 
+
+if PAGE_SIZE < 50:
+    print("Tamanho da página ajustado para 50")
+    PAGE_SIZE = 50
+
 records_agregados = []
 
 # ============================================================
@@ -175,15 +183,19 @@ def main(query, path_data):
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
     
     out_dir = os.path.join(path_data, "ieee")
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
     
     print("Iniciando coleta de registros da API IEEE Xplore...\n")
     
     num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
     
+
+    
     for pagina in range(num_requisicoes):
-        start_record = (pagina * PAGE_SIZE) + 1  # IEEE começa em 1
+        start_record = (pagina * PAGE_SIZE) + 1
         
         params = {
             'querytext': query,
@@ -192,33 +204,56 @@ def main(query, path_data):
             'apikey': API_KEY
         }
         
-        print(f"Requisitando página {pagina+1} (start_record={start_record})...")
+        max_retries = 3
+        retry_delay = 5  # segundos
         
-        try:
-            response = requests.get(BASE_URL, params=params)
-            response.raise_for_status()
+        for tentativa in range(max_retries):
+            print(f"Requisitando página {pagina+1} (start_record={start_record})... Tentativa {tentativa + 1}")
             
-            data = response.json()
-            
-            if not data.get('articles'):
-                print("Nenhum resultado encontrado. Encerrando...")
+            try:
+                # Adiciona delay entre requisições
+                if pagina > 0 or tentativa > 0:
+                    random_retry_delay = random.randint(5, 10)
+                    print(f"Aguardando {random_retry_delay} segundos antes da próxima requisição...")
+                    time.sleep(random_retry_delay)
+                
+                response = requests.get(BASE_URL, params=params)
+                
+                # Verifica se é erro 418 ou outro erro
+                if response.status_code == 418:
+                    if tentativa < max_retries - 1:
+                        print("Servidor detectou muitas requisições. Aguardando antes de tentar novamente...")
+                        time.sleep(retry_delay * 2)  # Aguarda mais tempo para erro 418
+                        retry_delay += 1  # Aumenta o delay para a próxima tentativa
+                        continue
+                
+                response.raise_for_status()
+                data = response.json()
+                
+                if not data.get('articles'):
+                    print("Nenhum resultado encontrado. Encerrando...")
+                    return
+                    
+                results = data['articles']
+                records_agregados.extend(results)
+                print(f"Página {pagina+1}: {len(results)} registros recebidos. Total acumulado: {len(records_agregados)}\n")
+                
+                if len(results) < PAGE_SIZE:
+                    print("Última página alcançada. Encerrando coleta...")
+                    break
+                
+                # Se chegou aqui, a requisição foi bem sucedida
                 break
                 
-            results = data['articles']
-            records_agregados.extend(results)
-            print(f"Página {pagina+1}: {len(results)} registros recebidos. Total acumulado: {len(records_agregados)}\n")
-            
-            if len(results) < PAGE_SIZE:
-                print("Última página alcançada. Encerrando coleta...")
-                break
-                
-        except requests.exceptions.HTTPError as errh:
-            print(f"Erro HTTP: {errh}")
-            print(f"Resposta: {response.text}")
-            sys.exit(1)
-        except Exception as e:
-            print(f"Erro na requisição: {e}")
-            sys.exit(1)
+            except requests.exceptions.HTTPError as errh:
+                print(f"Erro HTTP: {errh}")
+                print(f"Resposta: {response.text}")
+                if tentativa == max_retries - 1:
+                    sys.exit(1)
+            except Exception as e:
+                print(f"Erro na requisição: {e}")
+                if tentativa == max_retries - 1:
+                    sys.exit(1)
     
     # Salvando resultados brutos
     if records_agregados:
