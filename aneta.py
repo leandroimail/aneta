@@ -69,11 +69,11 @@ def parse_arguments():
         description='Executa diferentes funcionalidades do projeto ASRL',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
-Exemplos de uso:
-  python aneta.py --search
-  python aneta.py --enrich
-  python aneta.py --download
-''')
+                Exemplos de uso:
+                python aneta.py --search
+                python aneta.py --enrich
+                python aneta.py --download
+        ''')
     
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--search', action='store_true', help='Executa a busca no banco de dados acadêmicos')
