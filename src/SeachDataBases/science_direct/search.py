@@ -237,8 +237,7 @@ def main(query, path_data):
             break
 
     if erro_ocorrido:
-        print("\nHouve um erro durante a coleta ou nenhum registro foi encontrado. Nenhum arquivo será salvo.")
-        sys.exit(1)
+        raise Exception("\nHouve um erro durante a coleta ou nenhum registro foi encontrado. Nenhum arquivo será salvo.")
     elif not records_agregados:
         print("\nNenhum registro foi encontrado. Nenhum arquivo será salvo.")
         return None
@@ -249,8 +248,7 @@ def main(query, path_data):
             json.dump(records_agregados, f_json, ensure_ascii=False, indent=4)
         print("Todos os resultados brutos salvos em 'science_direct.json'\n")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo JSON: {e}")
-        sys.exit(1)
+        raise Exception(f"Erro ao salvar o arquivo JSON: {e}")
 
     # Conversão dos registros para o formato BibTeX
     bibtex_entries = [converte_para_bibtex(record) for record in records_agregados]
@@ -260,8 +258,7 @@ def main(query, path_data):
             f_bib.write("\n".join(bibtex_entries))
         print("Resultados convertidos para BibTeX salvos em 'science_direct.bib'")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo BibTeX: {e}")
-        sys.exit(1)
+        raise Exception(f"Erro ao salvar o arquivo BibTeX: {e}")
     
     # Log final
     print("\n==============================================")

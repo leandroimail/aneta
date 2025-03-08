@@ -135,6 +135,10 @@ def main(query, path_data):
     
     global records_agregados
     
+    query = query.strip().replace('\n', ' ').replace('\t', ' ')
+    while '  ' in query:
+        query = query.replace('  ', ' ')
+        
     if not query:
         with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
@@ -180,7 +184,7 @@ def main(query, path_data):
                     print("*                ERRO DE ACESSO                  *")
                     print("**************************************************")
                     print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
-                    break
+                    raise Exception("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
                 print("Nenhum resultado encontrado. Encerrando...")
                 break
                 
@@ -199,10 +203,9 @@ def main(query, path_data):
                 print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
             print(f"Erro HTTP: {errh}")
             print(f"Resposta: {response.text}")
-            sys.exit(1)
+            raise Exception(f"Erro HTTP: {errh}. Resposta: {response.text}")
         except Exception as e:
-            print(f"Erro na requisição: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro na requisição: {e}")
     
     # Salvando resultados brutos
     if records_agregados:
@@ -211,8 +214,7 @@ def main(query, path_data):
                 json.dump(records_agregados, f, indent=4, ensure_ascii=False)
             print("Dados brutos salvos em 'scopus.json'\n")
         except Exception as e:
-            print(f"Erro ao salvar JSON: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro ao salvar JSON: {e}")
         
         # Convertendo para BibTeX
         try:
@@ -228,8 +230,7 @@ def main(query, path_data):
                 f.write('\n'.join(bibtex_entries))
             print("Arquivo BibTeX gerado: 'scopus.bib'")
         except Exception as e:
-            print(f"Erro ao gerar BibTeX: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro ao gerar BibTeX: {e}")
     else:
         print("Nenhum registro encontrado. Nenhum arquivo gerado.")
     

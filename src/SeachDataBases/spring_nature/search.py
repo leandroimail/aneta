@@ -15,6 +15,11 @@ BASE_URL = 'https://api.springernature.com/meta/v2/json'
 
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
+if PAGE_SIZE > 25:
+    print("Aviso: o tamanho da página para a API Springer Nature é limitado a 25 resultados.")
+    PAGE_SIZE = 25
+
+
 records_agregados = []
 
 def extrai_ano(data_str):
@@ -181,6 +186,8 @@ def main(query, path_data):
     if not query:
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
     
+    query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
+    
     out_dir = os.path.join(path_data, "spring_nature")
     if os.path.exists(out_dir):
         import shutil
@@ -244,24 +251,26 @@ def main(query, path_data):
             erro_ocorrido = True
             break
 
-    if erro_ocorrido or not records_agregados:
+    if not records_agregados:
         print("\nHouve um erro durante a coleta ou nenhum registro foi encontrado. Nenhum arquivo será salvo.")
-        sys.exit(1)
+        return ""
+    elif erro_ocorrido:
+        raise RuntimeError("Erro durante a coleta dos registros. Nenhum arquivo será salvo.")
 
     try:
         with open(os.path.join(out_dir, "springer.json"), "w", encoding="utf-8") as f_json:
             json.dump(records_agregados, f_json, ensure_ascii=False, indent=4)
         print("Todos os resultados brutos salvos em 'springer.json'\n")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo JSON: {e}")
-        sys.exit(1)
+        raise Exception(f"Erro ao salvar o arquivo JSON: {e}")
+        
 
     registros_filtrados = [rec for rec in records_agregados if rec.get('contentType', '') in ["Article", "Chapter ConferencePaper"]]
     print(f"Após filtragem, foram mantidos {len(registros_filtrados)} registros dos tipos desejados.\n")
 
     if not registros_filtrados:
         print("Nenhum registro do tipo desejado foi encontrado após a filtragem. Nenhum arquivo será salvo.")
-        sys.exit(1)
+        return ""
 
     bibtex_entries = [converte_para_bibtex(record) for record in registros_filtrados]
 
@@ -270,8 +279,8 @@ def main(query, path_data):
             f_bib.write("\n".join(bibtex_entries))
         print("Resultados convertidos para BibTeX salvos em 'springer.bib'")
     except Exception as e:
-        print(f"Erro ao salvar o arquivo BibTeX: {e}")
-        sys.exit(1)
+        raise Exception(f"Erro ao salvar o arquivo BibTeX: {e}")
+        
 
     total = len(records_agregados)
     # Log final

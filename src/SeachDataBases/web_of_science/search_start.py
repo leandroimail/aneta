@@ -186,8 +186,7 @@ def main(query, path_data):
         'Accept': 'application/json'
     }
     
-    print("Query:", query)
-    print("Path Data:", path_data)
+    query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
     
     num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
@@ -226,10 +225,15 @@ def main(query, path_data):
         except requests.exceptions.HTTPError as errh:
             print(f"Erro HTTP: {errh}")
             print(f"Resposta: {response.text}")
-            sys.exit(1)
+            raise Exception(f"Erro HTTP: {errh}")
+        except requests.exceptions.ConnectionError as errc:
+            print(f"Erro de conexão: {errc}")
+            raise Exception(f"Erro de conexão: {errc}")
+        except requests.exceptions.Timeout as errt:
+            print(f"Timeout: {errt}")
+            raise Exception(f"Timeout   : {errt}")
         except Exception as e:
-            print(f"Erro na requisição: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro na requisição: {e}")
     
     # Salvando resultados brutos no diretório criado
     if records_agregados:
@@ -238,8 +242,7 @@ def main(query, path_data):
                 json.dump(records_agregados, f, indent=4, ensure_ascii=False)
             print("Dados brutos salvos em 'wos.json'")
         except Exception as e:
-            print(f"Erro ao salvar JSON: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro ao salvar JSON: {e}")
         
         # Convertendo para BibTeX e salvando no diretório criado
         try:
@@ -248,8 +251,7 @@ def main(query, path_data):
                 f.write('\n'.join(bibtex_entries))
             print("Arquivo BibTeX gerado: 'wos.bib'")
         except Exception as e:
-            print(f"Erro ao gerar BibTeX: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro ao gerar BibTeX: {e}")
     else:
         print("Nenhum registro encontrado. Nenhum arquivo gerado.")
     

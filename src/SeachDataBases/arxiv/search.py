@@ -290,6 +290,7 @@ def main(query, path_data):
     if not query:
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
     
+    query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
     query = converter_query(query)
     
     out_dir = os.path.join(path_data, "arxiv")
@@ -348,9 +349,10 @@ def main(query, path_data):
             print("Fewer records returned than expected for the page. Finalizing collection.\n")
             break
 
-    if erro_ocorrido or not records_agregados:
+    if not records_agregados:
         print("\nThere was an error during collection or no records were found. No files will be saved.")
-        sys.exit(1)
+        if erro_ocorrido:
+            raise ValueError("An error occurred during the collection process.")
 
     # -----------------------------------------------------------------------------
     # Saves simplified data in JSON
@@ -361,8 +363,8 @@ def main(query, path_data):
             json.dump(registros_json, f_json, ensure_ascii=False, indent=4)
         print("Simplified results saved in 'arxiv.json'\n")
     except Exception as e:
-        print(f"Error saving JSON file: {e}")
-        sys.exit(1)
+        raise Exception(f"Error saving JSON file: {e}")
+        
 
     # -----------------------------------------------------------------------------
     # Saves aggregated XML feeds
@@ -376,8 +378,7 @@ def main(query, path_data):
             tree.write(f_xml, encoding="utf-8", xml_declaration=True)
         print("Aggregated XML feeds saved in 'arxiv.xml'\n")
     except Exception as e:
-        print(f"Error saving XML file: {e}")
-        sys.exit(1)
+        raise Exception(f"Error saving XML file: {e}")
 
     # -----------------------------------------------------------------------------
     # Converts records to BibTeX entries and saves
@@ -388,8 +389,7 @@ def main(query, path_data):
             f_bib.write("\n".join(bibtex_entries))
         print("BibTeX entries saved in 'arxiv.bib'")
     except Exception as e:
-        print(f"Error saving BibTeX file: {e}")
-        sys.exit(1)
+        raise Exception(f"Error saving BibTeX file: {e}")
 
     print("\nData collection and saving process completed successfully.")
     print("Please note: Keywords are extracted directly from arXiv API categories.")

@@ -182,6 +182,8 @@ def main(query, path_data):
     if not query:
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
     
+    query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
+    
     out_dir = os.path.join(path_data, "ieee")
     if os.path.exists(out_dir):
         shutil.rmtree(out_dir)
@@ -249,11 +251,19 @@ def main(query, path_data):
                 print(f"Erro HTTP: {errh}")
                 print(f"Resposta: {response.text}")
                 if tentativa == max_retries - 1:
-                    sys.exit(1)
-            except Exception as e:
-                print(f"Erro na requisição: {e}")
+                    raise Exception("Máximo de tentativas excedido para IEEE. Encerrando...")
+            except requests.exceptions.ConnectionError as errc:
+                print(f"Erro de conexão: {errc}")
                 if tentativa == max_retries - 1:
-                    sys.exit(1)
+                    raise Exception("Máximo de tentativas excedido para IEEE. Encerrando...")
+            except requests.exceptions.Timeout as errt:
+                print(f"Tempo de requisição esgotado: {errt}")
+                if tentativa == max_retries - 1:
+                    raise Exception("Máximo de tentativas excedido para IEEE. Encerrando...")
+            except Exception as e:
+                if tentativa == max_retries - 1:
+                    raise Exception(f"Erro na requisição: {e}")
+
     
     # Salvando resultados brutos
     if records_agregados:
@@ -262,8 +272,7 @@ def main(query, path_data):
                 json.dump(records_agregados, f, indent=4, ensure_ascii=False)
             print("Dados brutos salvos em 'ieee.json'")
         except Exception as e:
-            print(f"Erro ao salvar JSON: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro ao salvar JSON: {e}")
         
         # Convertendo para BibTeX
         try:
@@ -272,8 +281,7 @@ def main(query, path_data):
                 f.write('\n'.join(bibtex_entries))
             print("Arquivo BibTeX gerado: 'ieee.bib'")
         except Exception as e:
-            print(f"Erro ao gerar BibTeX: {e}")
-            sys.exit(1)
+            raise Exception(f"Erro ao gerar BibTeX: {e}")
     else:
         print("Nenhum registro encontrado. Nenhum arquivo gerado.")
     
