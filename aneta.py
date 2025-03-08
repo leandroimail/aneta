@@ -1,4 +1,4 @@
-import os
+import os, sys
 import argparse
 from dotenv import load_dotenv
 
@@ -26,7 +26,7 @@ def run_enrich_async():
     return True
 
 def run_selection():
-    from Selection import get_analyse
+    from src.Selection import get_analyse
     get_analyse()
     return True
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     run_search_database = False
     run_enrich_bibtex = False
     run_enrich_bibtex_async = False
-    run_selection_bibtex = True
+    run_selection_bibtex = False
     run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
