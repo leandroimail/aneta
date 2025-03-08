@@ -1,19 +1,22 @@
 # Description: Configuration file for search engines - set it to true if you want to search in that engine
 # Databases Engines Supported: arxiv, ieee, science_direct, scopus, spring_nature, web_of_science
 # ACM Digital Library not supported yet. Engine not has Rest API (only to enrich file)
+
 arxiv: true
-ieee: true
 science_direct: true
 scopus: true
 spring_nature: true
 acm: true                   
 web_of_science: true
+ieee: true
 
 
-# Generic Search String for all search engines (arxiv, ieee, science_direct, scopus, spring_nature, acm, web_of_science)
+# Generic Search String for all search engines (arxiv, ieee, science_direct, scopus, spring_nature, web_of_science)
+
 search_string: >
-  ("Schema Matching" AND
-  ("Language Model" OR "LLM" OR "Generative AI" OR "GenAI" OR "RAG" OR "Retrieval-Augmented Generation" OR "Retrieval Augmented Generation"))
+  ("automatic scoping review" OR "automated scoping review" OR "autonomous scoping review" OR "automatically scoping review" OR
+  "automatic scoping mapping" OR "automated scoping mapping" OR "autonomous scoping mapping" OR "automatically scoping mapping" OR
+  "automatic systematic review" OR "automated systematic review" OR "autonomous systematic review" OR "automatically systematic review")
 
 
 
@@ -35,25 +38,27 @@ search_string: >
 # publication: term containing string with name of publication. Can be the name of proceedings, article, book, etc
 
 # fields content not are case sensitive. 
-##########. DON'T USE lower() and upper() function in the SQL statement. 
+##########. DON'T USE lower() and upper() function in the SQL statement. It is not n
 
 filter_string: >
   (
-    keywords like '%schema match%' OR abstract like '%schema match%' OR title like '%schema match%'
-  )
-  AND
-  (
-    (keywords like '%llm%' OR abstract like '%llm%' OR title like '%llm%')
-    OR
-    (keywords like '%language model%' OR abstract like '%language model%' OR title like '%language model%')
-    OR
-    (keywords like '%generative ai%' OR abstract like '%generative ai%' OR title like '%generative ai%')
-    OR
-    (keywords like '%genai%' OR abstract like '%genai%' OR title like '%genai%')
-    OR
-    (keywords like '%rag%' OR abstract like '%rag%' OR title like '%rag%')
-    OR
-    (keywords like '%retrieval-augmented generation%' OR abstract like '%retrieval-augmented generation%' OR title like '%retrieval-augmented generation%')
-    OR
-    (keywords like '%retrieval augmented generation%' OR abstract like '%retrieval augmented generation%' OR title like '%retrieval augmented generation%')
+    ( 
+      title LIKE '%scoping review%' OR
+      title LIKE '%scoping mapping%' OR
+      title LIKE '%systematic review%' OR
+      abstract LIKE '%scoping review%' OR
+      abstract LIKE '%scoping mapping%' OR
+      abstract LIKE '%systematic review%' OR
+      keywords LIKE '%scoping review%' OR
+      keywords LIKE '%scoping mapping%' OR
+      keywords LIKE '%systematic review%'
+    ) AND
+    (
+      title LIKE '%automat%' OR
+      abstract LIKE '%automat%' OR
+      keywords LIKE '%automat%'
+    ) AND
+    (
+      year >= 2014 AND year <= 2024
+    )
   )
