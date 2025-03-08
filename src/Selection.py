@@ -471,7 +471,7 @@ def get_database(list_bibs):
     table_bibs["scimago"] = table_bibs["scimago"].str.lower()
     table_bibs["type_publication"] = table_bibs["ENTRYTYPE"].str.lower()
     table_bibs["publication"] = table_bibs["publication"].str.lower()
-    table_bibs["year"] = table_bibs["year"].str.lower()
+    table_bibs["year"] = pd.to_numeric(table_bibs["year"], errors='coerce').fillna(0).astype(int)
     
     conn = duckdb.connect(':memory:')
     conn.register('table_bibs', table_bibs)
