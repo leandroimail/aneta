@@ -194,9 +194,10 @@ def main(query, path_data):
     num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
     
-
+    pagina = 0
+    ultima_pagina_alcancada = False
     
-    for pagina in range(num_requisicoes):
+    while pagina < num_requisicoes and not ultima_pagina_alcancada:
         start_record = (pagina * PAGE_SIZE) + 1
         
         params = {
@@ -234,7 +235,8 @@ def main(query, path_data):
                 
                 if not data.get('articles'):
                     print("Nenhum resultado encontrado. Encerrando...")
-                    return
+                    ultima_pagina_alcancada = True
+                    break
                     
                 results = data['articles']
                 records_agregados.extend(results)
@@ -242,7 +244,7 @@ def main(query, path_data):
                 
                 if len(results) < PAGE_SIZE:
                     print("Última página alcançada. Encerrando coleta...")
-                    break
+                    ultima_pagina_alcancada = True
                 
                 # Se chegou aqui, a requisição foi bem sucedida
                 break
@@ -264,7 +266,9 @@ def main(query, path_data):
                 if tentativa == max_retries - 1:
                     raise Exception(f"Erro na requisição: {e}")
 
-    
+        # Incrementa o contador de página após cada requisição bem-sucedida
+        pagina += 1
+
     # Salvando resultados brutos
     if records_agregados:
         try:
@@ -288,5 +292,5 @@ def main(query, path_data):
     # Log final
     print("\n==============================================")
     print("         BUSCA FINALIZADA: IEEE Xplore          ")
-    print(f"      Artigos encontros e adicionados: {len(records_agregados)}")
+    print(f"      Artigos encontrados e adicionados: {len(records_agregados)}")
     print("==============================================\n")
