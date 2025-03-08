@@ -132,3 +132,11 @@ R -e 'library(bibliometrix); biblioshiny();'
 
 ## TODO: Enriquecimento em paralelo - testar melhor o enriquecimento assincrono
 ## TODO: Implementar Bibliometria via Scopus, não apenas em OpenAlex
+
+
+
+
+---------   author_collaboration_network_top50 está com informação errada!!!!!!!!!!
+
+
+
