@@ -19,6 +19,12 @@ def run_enrich():
     enrich_bibtex()
     return True
 
+def run_enrich_async():
+    import asyncio
+    from src.EnrichBibtexAsync import enrich_bibtex
+    asyncio.run(enrich_bibtex())
+    return True
+
 def run_selection():
     from Selection import get_analyse
     get_analyse()
@@ -77,6 +83,7 @@ def parse_arguments():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--search', action='store_true', help='Executa a busca no banco de dados acadêmicos')
     group.add_argument('--enrich', action='store_true', help='Executa o enriquecimento dos bibtex')
+    group.add_argument('--enrich_async', action='store_true', help='Executa o enriquecimento dos bibtex de forma assíncrona')
     group.add_argument('--selection', action='store_true', help='Executa a seleção dos bibtex')
     group.add_argument('--bibliometry', action='store_true', help='Executa a bibliometria completa do bibtex selecionado')
     group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers')
@@ -88,7 +95,8 @@ if __name__ == "__main__":
     ###################  Variáveis de configuração (modo script)
     run_search_database = False
     run_enrich_bibtex = False
-    run_selection_bibtex = False
+    run_enrich_bibtex_async = False
+    run_selection_bibtex = True
     run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
@@ -103,6 +111,8 @@ if __name__ == "__main__":
         run_search()
     elif args.enrich or run_enrich_bibtex:
         run_enrich()
+    elif args.enrich_async or run_enrich_bibtex_async:
+        run_enrich_async()
     elif args.selection or run_selection_bibtex:
         run_selection()
     elif args.bibliometry or run_bibliometry:
