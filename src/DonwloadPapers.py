@@ -13,21 +13,18 @@ from src.Database import create_lancedb_instance, save_bibliographic_database, f
 try:
     import bibtexparser
 except ImportError:
-    print("A biblioteca bibtexparser não está instalada. Instale com: pip install bibtexparser")
-    sys.exit(1)
+    raise ImportError("A biblioteca bibtexparser não está instalada. Instale com: pip install bibtexparser")
 
 try:
     from markdownify import markdownify as md
 except ImportError:
-    print("A biblioteca markdownify não está instalada. Instale com: pip install markdownify")
-    sys.exit(1)
+    raise ImportError("A biblioteca markdownify não está instalada. Instale com: pip install markdownify")
 
 # Importa scholarly para buscas no Google Scholar
 try:
     from scholarly import scholarly
 except ImportError:
-    print("A biblioteca scholarly não está instalada. Instale com: pip install scholarly")
-    sys.exit(1)
+    raise ImportError("A biblioteca scholarly não está instalada. Instale com: pip install scholarly")
 
 # =====================================================================
 # Funções utilitárias
