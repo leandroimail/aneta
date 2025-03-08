@@ -126,3 +126,9 @@ Windows: Acesse o site oficial: https://pandoc.org/installing.html.
 
 rum biblioshiny 
 R -e 'library(bibliometrix); biblioshiny();'
+
+
+
+
+## TODO: Enriquecimento em paralelo - testar melhor o enriquecimento assincrono
+## TODO: Implementar Bibliometria via Scopus, não apenas em OpenAlex
