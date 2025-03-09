@@ -146,6 +146,10 @@ error_log_file <- file.path(path_save, "error.log")
 
 log_message("Script execution started.", "INFO", log_file)
 
+# Direciona qualquer Rplots.pdf para o path_save
+pdf(file.path(path_save, "Rplots.pdf"))
+ensure_no_open_graphics()
+
 # Building the absolute path of the JSON file
 relative_path <- file.path(path_data, "OUTPUTS", "openalex_metadata.json")
 absolute_path <- file.path(base_path, relative_path)
@@ -826,8 +830,6 @@ tryCatch(
 )
 
 
-
-
 # Plot: World Map of Publications by Country
 tryCatch(
   {
@@ -966,6 +968,7 @@ tryCatch(
     )
   }
 )
+
 
 # Plot: Treemap of Keywords
 tryCatch(
@@ -1154,6 +1157,7 @@ tryCatch(
   }
 )
 
+
 # Plot: Most Locally Cited Papers
 tryCatch(
   {
@@ -1222,3 +1226,11 @@ tryCatch(
 
 # End execution
 log_message("Script execution completed successfully.", "INFO", log_file)
+
+# Verifica se Rplots.pdf foi gerado no diretório atual e move para path_save
+current_rplots <- "Rplots.pdf"
+if (file.exists(current_rplots)) {
+  file.copy(current_rplots, file.path(path_save, "Rplots.pdf"), overwrite = TRUE)
+  file.remove(current_rplots)
+  log_message("Rplots.pdf movido para o diretório de saída.", "INFO", log_file)
+}
