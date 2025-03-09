@@ -101,15 +101,32 @@ save_plot <- function(plot_obj, filename, width = 8, height = 6) {
 # Define environment variables and paths
 path_data <- Sys.getenv("PATH_DATA", ".data")
 base_path <- Sys.getenv("PROJECT_PATH")
-# base_path <- "/Users/leandro.ferreira/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl"
-
 
 # Set path to save plots and logs
 path_save <- file.path(base_path, ".data", "BIBLIOMETRY")
+
+# Check if error_fetch_openalex.log exists and make a backup if it does
+error_log_path <- file.path(path_save, "error_fetch_openalex.log")
+has_error_log <- FALSE
+error_log_content <- NULL
+
+if (file.exists(error_log_path)) {
+  has_error_log <- TRUE
+  error_log_content <- readLines(error_log_path, warn = FALSE)
+}
+
+# Delete the directory if it exists
 if (dir.exists(path_save)) {
   unlink(path_save, recursive = TRUE)
 }
+
+# Create the directory
 dir.create(path_save, recursive = TRUE)
+
+# Restore the error log if it existed
+if (has_error_log && !is.null(error_log_content)) {
+  writeLines(error_log_content, error_log_path)
+}
 
 # Define log files
 log_file <- file.path(path_save, "execution.log")

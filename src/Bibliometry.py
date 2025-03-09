@@ -2,6 +2,7 @@ import os
 import requests
 import yaml
 import json
+import time
 from dotenv import load_dotenv
 from src.BibTex import read_bibtex, write_bibtex
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
@@ -16,17 +17,6 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 
 def save_local_json_openalex(list_entries):
-    # full_json = {
-    #     "meta": {
-    #         "count": len(list_entries),
-    #         "db_response_time_ms": 666,
-    #         "page": 1,
-    #         "per_page": len(list_entries),
-    #         "groups_count": None
-    #     },
-    #     "group_by": [],
-    #     "results": list_entries
-    # }
     PATH_DATA = os.getenv("PATH_DATA", ".data")
     os.makedirs(os.path.abspath(f"{PATH_DATA}/OUTPUTS"), exist_ok=True)    
     with open(os.path.abspath(f"{PATH_DATA}/OUTPUTS/openalex_metadata.json"), "w", encoding="utf-8") as f:
@@ -52,6 +42,9 @@ def fetch_and_store_metadata(bibtex_path):
     """
     print(f"\nProcessando arquivo: {bibtex_path}")
     print(f"{90 * '-'}\n")
+    
+    # Inicializar uma lista para armazenar os erros
+    error_logs = []
     
     try:
         # Lendo o arquivo BibTeX
@@ -85,12 +78,16 @@ def fetch_and_store_metadata(bibtex_path):
             doi = entry.get("doi", "").strip()
             type_publication = entry.get("type_publication", "")
             
-            if not use_arxiv and ("arxiv" in  type_publication.lower() or "arxiv" in doi.lower()):
+            if not use_arxiv and ("arxiv" in type_publication.lower() or "arxiv" in doi.lower()):
                 print(f"Registro '{title}': Artigo do ArXiv, não é possível buscar metadados.\n")
+                # Registrar erro no log
+                error_logs.append(f"ArXiv não suportado: {title} - DOI: {doi}")
                 continue
             
             if not doi:
                 print(f"Registro '{title}': Sem DOI, impossível buscar metadados.\n")
+                # Registrar erro no log
+                error_logs.append(f"DOI não encontrado: {title}")
                 continue
                 
             # Tratando o DOI para remover prefixos
@@ -106,7 +103,7 @@ def fetch_and_store_metadata(bibtex_path):
                     print(f"Metadados do OpenAlex obtidos com sucesso para '{title}'")
                     list_entries_openalex.append(openalex_data)
                 else:
-                    print(f"Não foi possível obter metadados do OpenAlex para '{title}'")
+                    error_logs.append(f"Registro '{title}': Falha ao buscar metadados no OpenAlex para DOI {doi_cleaned}.")
             
             # Buscando no Scopus
             if bibliometry_scopus:
@@ -115,7 +112,7 @@ def fetch_and_store_metadata(bibtex_path):
                     print(f"Metadados do Scopus obtidos com sucesso para '{title}'")
                     list_entries_scopus.append(scopus_data)
                 else:
-                    print(f"Não foi possível obter metadados do Scopus para '{title}'")
+                    error_logs.append(f"Registro '{title}': Falha ao buscar metadados no Scopus para DOI {doi_cleaned}.")
             
             print(f"Processamento concluído para '{title}'\n")
         
@@ -124,6 +121,31 @@ def fetch_and_store_metadata(bibtex_path):
             save_local_json_openalex(list_entries_openalex)
         if bibliometry_scopus:
             save_local_json_scopus(list_entries_scopus)
+            
+        # Salvar os erros em um arquivo de log se houver erros
+        path_data = os.getenv("PATH_DATA", ".data")
+        os.makedirs(os.path.join(path_data, "BIBLIOMETRY"), exist_ok=True)
+        log_path = os.path.join(path_data, "BIBLIOMETRY", "error_fetch_openalex.log")
+        
+        if error_logs:
+            with open(log_path, "w", encoding="utf-8") as log_file:
+                log_file.write(f"Erros encontrados em {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                log_file.write("-" * 50 + "\n")
+                for error in error_logs:
+                    log_file.write(f"{error}\n")
+            
+            # Exibir mensagem de erro em vermelho
+            print(f"\n\n{90 * '-'}")
+            print("\033[91m" + "\033[1m" + f"ERRO: Alguns artigos não puderam ser processados." + "\033[0m")
+            print("\033[91m" + f"Verifique o log em: {log_path}" + "\033[0m")
+            print(f"{90 * '-'} \n\n")
+            
+            # Esperar 3 segundos
+            time.sleep(3)
+        else:
+            # Se não há erros e o arquivo de log existe, apaga-o
+            if os.path.exists(log_path):
+                os.remove(log_path)
             
         print(f"Processamento do arquivo {bibtex_path} concluído com sucesso!")
     except Exception as e:

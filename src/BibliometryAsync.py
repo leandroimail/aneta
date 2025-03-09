@@ -19,17 +19,6 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 
 
 def save_local_json_openalex(list_entries):
-    # full_json = {
-    #     "meta": {
-    #         "count": len(list_entries),
-    #         "db_response_time_ms": 666,
-    #         "page": 1,
-    #         "per_page": len(list_entries),
-    #         "groups_count": None
-    #     },
-    #     "group_by": [],
-    #     "results": list_entries
-    # }
     PATH_DATA = os.getenv("PATH_DATA", ".data")
     os.makedirs(os.path.abspath(f"{PATH_DATA}/OUTPUTS"), exist_ok=True)    
     with open(os.path.abspath(f"{PATH_DATA}/OUTPUTS/openalex_metadata.json"), "w", encoding="utf-8") as f:
@@ -172,13 +161,16 @@ async def async_process_entry(entry, session, use_arxiv, bibliometry_openalex, b
     doi = entry.get("doi", "").strip()
     type_publication = entry.get("type_publication", "")
     
+    error_msg = None
     if not use_arxiv and ("arxiv" in type_publication.lower() or "arxiv" in doi.lower()):
-        print(f"Registro '{title}': Artigo do ArXiv, não é possível buscar metadados.\n")
-        return None, None
+        error_msg = f"Registro '{title}': Artigo do ArXiv, não é possível buscar metadados."
+        print(f"{error_msg}\n")
+        return None, None, error_msg
     
     if not doi:
-        print(f"Registro '{title}': Sem DOI, impossível buscar metadados.\n")
-        return None, None
+        error_msg = f"Registro '{title}': Sem DOI, impossível buscar metadados."
+        print(f"{error_msg}\n")
+        return None, None, error_msg
     
     # Tratando o DOI para remover prefixos
     doi_cleaned = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
@@ -196,6 +188,7 @@ async def async_process_entry(entry, session, use_arxiv, bibliometry_openalex, b
             print(f"Metadados do OpenAlex obtidos com sucesso para '{title}'")
         else:
             print(f"Não foi possível obter metadados do OpenAlex para '{title}'")
+            error_msg = f"Registro '{title}': Falha ao buscar metadados no OpenAlex para DOI {doi_cleaned}."
     
     # Buscando no Scopus
     if bibliometry_scopus:
@@ -206,7 +199,20 @@ async def async_process_entry(entry, session, use_arxiv, bibliometry_openalex, b
             print(f"Não foi possível obter metadados do Scopus para '{title}'")
     
     print(f"Processamento concluído para '{title}'\n")
-    return openalex_data, scopus_data
+    return openalex_data, scopus_data, error_msg
+
+
+def save_openalex_fetch_errors(errors):
+    """Salva os erros de busca no OpenAlex em um arquivo de log"""
+    path_data = os.getenv("PATH_DATA", ".data")
+    os.makedirs(os.path.join(path_data, "BIBLIOMETRY"), exist_ok=True)
+    error_file = os.path.join(path_data, "BIBLIOMETRY", "error_fetch_openalex.log")
+    
+    with open(error_file, "w", encoding="utf-8") as f:
+        for error in errors:
+            f.write(f"{error}\n")
+    
+    return error_file
 
 
 async def fetch_and_store_metadata_async(bibtex_path):
@@ -220,6 +226,8 @@ async def fetch_and_store_metadata_async(bibtex_path):
     print(f"\nProcessando arquivo: {bibtex_path}")
     print(f"{90 * '-'}\n")
     
+    errors = []
+    
     try:
         # Lendo o arquivo BibTeX
         entries = read_bibtex(bibtex_path)
@@ -228,7 +236,7 @@ async def fetch_and_store_metadata_async(bibtex_path):
         
         if not entries:
             print(f"Nenhuma entrada encontrada no arquivo: {bibtex_path}")
-            return
+            return errors
         
         with open(os.path.abspath("Config/bibliometry_config.yaml"), "r", encoding="utf-8") as f:
             bibliometry_config = yaml.safe_load(f)
@@ -253,7 +261,9 @@ async def fetch_and_store_metadata_async(bibtex_path):
             results = await asyncio.gather(*tasks)
             
             # Processa os resultados
-            for openalex_data, scopus_data in results:
+            for openalex_data, scopus_data, error in results:
+                if error:
+                    errors.append(error)
                 if openalex_data:
                     list_entries_openalex.append(openalex_data)
                 if scopus_data:
@@ -268,6 +278,9 @@ async def fetch_and_store_metadata_async(bibtex_path):
         print(f"Processamento do arquivo {bibtex_path} concluído com sucesso!")
     except Exception as e:
         print(f"Erro ao processar o arquivo BibTeX ({bibtex_path}): {e}")
+        errors.append(f"Erro geral: {e}")
+        
+    return errors
 
 
 def fetch_and_store_metadata(bibtex_path):
@@ -278,7 +291,16 @@ def fetch_and_store_metadata(bibtex_path):
     Args:
         bibtex_path (str): Caminho para o arquivo BibTeX
     """
-    asyncio.run(fetch_and_store_metadata_async(bibtex_path))
+    errors = asyncio.run(fetch_and_store_metadata_async(bibtex_path))
+    if errors:
+        return save_openalex_fetch_errors(errors)
+    else:
+        # If no errors occurred, remove any existing error log file
+        path_data = os.getenv("PATH_DATA", ".data")
+        error_file = os.path.join(path_data, "BIBLIOMETRY", "error_fetch_openalex.log")
+        if os.path.exists(error_file):
+            os.remove(error_file)
+    return None
 
 
 def run_R_bibliometrix():
@@ -325,7 +347,18 @@ def run_bibliometry():
     bibtex_file = os.getenv("BIB_FILE", ".data/OUTPUTS/select_bibs.bib")
     full_path_bibtex = os.path.join(path_data, bibtex_file)
     full_path_bibtex = os.path.abspath(full_path_bibtex)
-    fetch_and_store_metadata(full_path_bibtex)
+    
+    error_file = fetch_and_store_metadata(full_path_bibtex)
+    
+    # Verificar se houve erros na busca
+    if error_file:
+        print("\n\n\n")
+        print(f"{90 * '-'}")
+        print("\033[91m" + "\033[1m" + f"ERRO: Alguns artigos não puderam ser processados." + "\033[0m")
+        print("\033[91m" + f"Verifique o log em: {error_file}" + "\033[0m")
+        print(f"{90 * '-'} \n\n")
+        import time
+        time.sleep(3)
     
     print("\n\n\n")
     print(f"{90 * '-'}")
