@@ -1,6 +1,17 @@
-import os, sys
+import __init__
+import os
+import sys
 import argparse
+import asyncio
 from dotenv import load_dotenv
+
+from src.Search import run_search as search_run
+from src.EnrichBibtex import enrich_bibtex as enrich_bibtex_sync
+from src.EnrichBibtexAsync import enrich_bibtex as enrich_bibtex_async
+from src.Selection import get_analyse
+from src.Bibliometry import run_bibliometry as run_bibliometry_func
+from src.DonwloadPapers import download_all_papers
+
 
 def setup_environment():
     load_dotenv()
@@ -10,35 +21,26 @@ def setup_environment():
     os.environ["PROJECT_PATH"] = PROJECT_PATH
 
 def run_search():
-    from src.Search import run_search
-    run_search()
+    search_run()
     return True
 
 def run_enrich():
-    from src.EnrichBibtex import enrich_bibtex
-    enrich_bibtex()
+    enrich_bibtex_sync()
     return True
 
 def run_enrich_async():
-    import asyncio
-    from src.EnrichBibtexAsync import enrich_bibtex
-    asyncio.run(enrich_bibtex())
+    asyncio.run(enrich_bibtex_async())
     return True
 
 def run_selection():
-    from src.Selection import get_analyse
     get_analyse()
     return True
 
 def run_bibliometry_function():
-    from src.Bibliometry import run_bibliometry
-    run_bibliometry()
+    run_bibliometry_func()
     return True
 
 def run_download():
-    from src.DonwloadPapers import download_all_papers
-    from src.Config import path_directory_bibs
-    
     bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
     doi_file = os.environ.get("DOI_FILE", ".OUTPUTS/DOIs.txt")
     folder_save_pdf = os.getenv("FOLDER_SAVE_PDF", "PDFs")
@@ -93,7 +95,7 @@ def parse_arguments():
 
 if __name__ == "__main__":
     ###################  Variáveis de configuração (modo script)
-    run_search_database = False
+    run_search_database = True
     run_enrich_bibtex = False
     run_enrich_bibtex_async = False
     run_selection_bibtex = False
@@ -124,7 +126,6 @@ if __name__ == "__main__":
     else:
         parser.print_help()
         # Opcional: para sair com código de erro
-        import sys
         sys.exit(1)
 
 
