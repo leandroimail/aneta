@@ -44,8 +44,16 @@ library(wordcloud2)
 library(RColorBrewer)
 library(treemap)
 
-# No início do script, após definir path_save
-pdf(file = NULL) # Desativa o dispositivo PDF padrão
+# Função para garantir que nenhum dispositivo gráfico está aberto
+ensure_no_open_graphics <- function() {
+  while (dev.cur() > 1) {
+    dev.off()
+  }
+}
+
+# Desativa o dispositivo PDF padrão e garante que não há dispositivos gráficos ativos
+pdf(file = NULL)
+ensure_no_open_graphics()
 
 # Function to record logs
 log_message <- function(message, level = "INFO", log_file) {
@@ -66,12 +74,16 @@ save_network_plot <- function(network_plot, filename, path_save, log_file) {
       width = 10, height = 8, units = "in", res = 300
     )
     plot(network_plot$graph)
+    dev.off()  # ADICIONADO: Fechar o dispositivo gráfico após plotar
     log_message(paste(filename, "saved successfully."), "INFO", log_file)
   }
 }
 
 
 save_plot <- function(plot_obj, filename, width = 8, height = 6) {
+  # Garantir que não há dispositivos gráficos abertos
+  ensure_no_open_graphics()
+  
   # Set plot theme
   theme_set(theme_bw())
 
@@ -367,8 +379,7 @@ tryCatch(
       type = "fruchterman",
       cluster = "louvain",
       size.cex = TRUE, edgesize = 2, labelsize = 0.75,
-      noloops = TRUE,
-      halo = FALSE, curved = TRUE,
+      noloops = TRUE, halo = FALSE, curved = TRUE,
       label.color = TRUE,
       community.repulsion = 0.0075
     )
@@ -465,6 +476,7 @@ tryCatch(
         width = 3000, height = 2400, res = 300
       )
       plot(conceptual_structure$graph_dendogram)
+      dev.off()  # ADICIONADO: Fechar o dispositivo gráfico após plotar
       log_message("Dendrogram saved successfully.", "INFO", log_file)
     })
   },
@@ -496,6 +508,7 @@ tryCatch(
       res = 300
     )
     print(hist_plot$g)
+    dev.off()  # ADICIONADO: Fechar o dispositivo gráfico após plotar
     log_message("Historical Citation Network saved successfully.", "INFO", log_file)
   },
   error = function(e) {
@@ -657,102 +670,154 @@ tryCatch(
 
     # Extract year from publication_date
     M_data$Year <- as.numeric(substr(M_data$PY, 1, 4))
-
-    # Calculate the last 10 years range
-    current_year <- as.numeric(format(Sys.Date(), "%Y"))
-    last_10_years <- (current_year - 9):current_year
-
-    # Create a data frame with keywords counts by year
-    yearly_keywords <- data.frame(Year = integer(), Keyword = character(), Count = integer())
-
-    # For each document, extract keywords and add to the yearly_keywords data frame
-    for (i in 1:nrow(M_data)) {
-      year <- M_data$Year[i]
-      if (!is.na(year) && year %in% last_10_years) { # Only include last 10 years
-        # Get keywords for current document
-        keywords_string <- M_data$ID[i]
-
-        if (!is.na(keywords_string) && keywords_string != "") {
-          # Split keywords by separator
-          keywords <- unlist(strsplit(keywords_string, ";"))
-          keywords <- trimws(keywords) # Remove leading/trailing whitespace
-
-          if (length(keywords) > 0) {
-            # Create a dataframe for current document's keywords
-            doc_df <- data.frame(
-              Year = rep(year, length(keywords)),
-              Keyword = keywords,
-              Count = 1
-            )
-
-            # Append to the main dataframe
-            yearly_keywords <- rbind(yearly_keywords, doc_df)
+    
+    # Identify which years actually have data
+    available_years <- sort(unique(M_data$Year))
+    available_years <- available_years[!is.na(available_years)]
+    
+    if(length(available_years) > 0) {
+      # Get the most recent year with data
+      most_recent_year <- max(available_years)
+      current_year <- as.numeric(format(Sys.Date(), "%Y"))
+      
+      log_message(paste("Most recent year with data:", most_recent_year, 
+                      "(Current year:", current_year, ")"), "INFO", log_file)
+      
+      # Determine how many years to go back to get 10 years
+      years_to_analyze <- min(10, length(available_years))
+      
+      # Get the 10 most recent years with data
+      last_years <- tail(available_years, years_to_analyze)
+      
+      log_message(paste("Analyzing keywords for", length(last_years), 
+                      "years:", paste(last_years, collapse=", ")), "INFO", log_file)
+    
+      # Create a data frame with keywords counts by year
+      yearly_keywords <- data.frame(Year = integer(), Keyword = character(), Count = integer())
+    
+      # For each document, extract keywords and add to the yearly_keywords data frame
+      for (i in 1:nrow(M_data)) {
+        year <- M_data$Year[i]
+        if (!is.na(year) && year %in% last_years) {
+          # Get keywords for current document
+          keywords_string <- M_data$ID[i]
+    
+          if (!is.na(keywords_string) && keywords_string != "") {
+            # Split keywords by separator
+            keywords <- unlist(strsplit(keywords_string, ";"))
+            keywords <- trimws(keywords) # Remove leading/trailing whitespace
+    
+            if (length(keywords) > 0) {
+              # Create a dataframe for current document's keywords
+              doc_df <- data.frame(
+                Year = rep(year, length(keywords)),
+                Keyword = keywords,
+                Count = 1
+              )
+    
+              # Append to the main dataframe
+              yearly_keywords <- rbind(yearly_keywords, doc_df)
+            }
           }
         }
       }
-    }
-
-    # If we have keywords data, proceed with aggregation
-    if (nrow(yearly_keywords) > 0) {
-      # Aggregate to get total count per keyword per year
-      yearly_keywords_agg <- aggregate(Count ~ Year + Keyword, data = yearly_keywords, FUN = sum)
-
-      # Get the top 20 keywords across all years
-      top_keywords_df <- aggregate(Count ~ Keyword, data = yearly_keywords_agg, FUN = sum)
-      top_keywords_df <- top_keywords_df[order(top_keywords_df$Count, decreasing = TRUE), ]
-      top_keywords <- top_keywords_df$Keyword[1:min(20, nrow(top_keywords_df))]
-
-      # Filter the data to include only the top 20 keywords
-      filtered_keywords <- yearly_keywords_agg[yearly_keywords_agg$Keyword %in% top_keywords, ]
-
-      # Create a wide format dataframe for Excel
-      keywords_wide <- reshape(filtered_keywords,
-        idvar = "Keyword",
-        timevar = "Year",
-        direction = "wide"
-      )
-
-      # Rename columns to remove "Count." prefix
-      colnames(keywords_wide) <- gsub("Count\\.", "", colnames(keywords_wide))
-
-      # Replace NA with 0
-      keywords_wide[is.na(keywords_wide)] <- 0
-
-      # Save to Excel
-      excel_file <- file.path(path_save, "top20_keywords_by_year.xlsx")
-      write.xlsx(keywords_wide, excel_file)
-      log_message("Top 20 keywords by year saved to Excel.", "INFO", log_file)
-
-      # Reorder factors for plotting so most frequent keywords appear at the bottom
-      filtered_keywords$Keyword <- factor(
-        filtered_keywords$Keyword,
-        levels = rev(top_keywords)
-      )
-
-      # Create stacked bar chart with more contrasting colors
-      stacked_plot <- ggplot(filtered_keywords, aes(x = as.factor(Year), y = Count, fill = Keyword)) +
-        geom_bar(stat = "identity", position = "stack") +
-        scale_fill_viridis_d(option = "turbo") + # More contrasting color palette
-        theme_minimal() +
-        labs(
-          title = "Top 20 Keywords Distribution (Last 10 Years)",
-          x = "Year",
-          y = "Keyword Count",
-          fill = "Keywords"
-        ) +
-        theme(
-          legend.position = "right",
-          axis.text.x = element_text(angle = 45, hjust = 1),
-          plot.title = element_text(size = 14, face = "bold"),
-          legend.text = element_text(size = 8),
-          panel.grid.major.x = element_blank(),
-          panel.border = element_rect(fill = NA, color = "gray80")
+    
+      # If we have keywords data, proceed with aggregation
+      if (nrow(yearly_keywords) > 0) {
+        # Aggregate to get total count per keyword per year
+        yearly_keywords_agg <- aggregate(Count ~ Year + Keyword, data = yearly_keywords, FUN = sum)
+    
+        # Get the top 20 keywords across all years
+        top_keywords_df <- aggregate(Count ~ Keyword, data = yearly_keywords_agg, FUN = sum)
+        top_keywords_df <- top_keywords_df[order(top_keywords_df$Count, decreasing = TRUE), ]
+        top_keywords <- top_keywords_df$Keyword[1:min(20, nrow(top_keywords_df))]
+    
+        # Filter the data to include only the top 20 keywords
+        filtered_keywords <- yearly_keywords_agg[yearly_keywords_agg$Keyword %in% top_keywords, ]
+        
+        # Create all possible Year-Keyword combinations to ensure all years are included
+        all_combinations <- expand.grid(
+          Year = last_years,
+          Keyword = top_keywords,
+          stringsAsFactors = FALSE
         )
-
-      save_plot(stacked_plot, "top20_keywords_last_10years.png", width = 12, height = 8)
-      log_message("Stacked bar chart of top 20 keywords for last 10 years created.", "INFO", log_file)
+        
+        # Merge with the actual data, filling missing combinations with 0
+        complete_keywords <- merge(all_combinations, filtered_keywords, 
+                                  by = c("Year", "Keyword"), 
+                                  all.x = TRUE)
+        
+        # Replace NA counts with 0
+        complete_keywords$Count[is.na(complete_keywords$Count)] <- 0
+    
+        # Create a wide format dataframe for Excel
+        keywords_wide <- reshape(complete_keywords,
+          idvar = "Keyword",
+          timevar = "Year",
+          direction = "wide"
+        )
+    
+        # Rename columns to remove "Count." prefix
+        colnames(keywords_wide) <- gsub("Count\\.", "", colnames(keywords_wide))
+        
+        # Find year columns
+        year_cols <- colnames(keywords_wide)[colnames(keywords_wide) != "Keyword"]
+        year_cols <- as.numeric(year_cols)
+        
+        # Sort year columns in ascending order
+        sorted_year_cols <- sort(year_cols)
+        
+        # Construct the new column order (Keyword first, then sorted years)
+        new_col_order <- c("Keyword", as.character(sorted_year_cols))
+        
+        # Reorder the columns
+        keywords_wide <- keywords_wide[, new_col_order]
+    
+        # Replace NA with 0
+        keywords_wide[is.na(keywords_wide)] <- 0
+    
+        # Save to Excel
+        excel_file <- file.path(path_save, "top20_keywords_last_years.xlsx")
+        write.xlsx(keywords_wide, excel_file)
+        log_message("Top 20 keywords by year saved to Excel.", "INFO", log_file)
+    
+        # Reorder factors for plotting so most frequent keywords appear at the bottom
+        complete_keywords$Keyword <- factor(
+          complete_keywords$Keyword,
+          levels = rev(top_keywords)
+        )
+        
+        # Make sure Year is treated as a factor with all levels present in order
+        complete_keywords$Year <- factor(complete_keywords$Year, levels = sort(last_years))
+    
+        # Create stacked bar chart with more contrasting colors
+        stacked_plot <- ggplot(complete_keywords, aes(x = Year, y = Count, fill = Keyword)) +
+          geom_bar(stat = "identity", position = "stack") +
+          scale_fill_viridis_d(option = "turbo") + # More contrasting color palette
+          theme_minimal() +
+          labs(
+            title = paste("Top 20 Keywords Distribution (", years_to_analyze, " Years)"),
+            x = "Year",
+            y = "Keyword Count",
+            fill = "Keywords"
+          ) +
+          theme(
+            legend.position = "right",
+            axis.text.x = element_text(angle = 45, hjust = 1),
+            plot.title = element_text(size = 14, face = "bold"),
+            legend.text = element_text(size = 8),
+            panel.grid.major.x = element_blank(),
+            panel.border = element_rect(fill = NA, color = "gray80")
+          )
+    
+        save_plot(stacked_plot, "top20_keywords_last_years.png", width = 12, height = 8)
+        log_message(paste("Stacked bar chart of top 20 keywords for last", 
+                         years_to_analyze, "years created."), "INFO", log_file)
+      } else {
+        log_message("No keyword data found for the selected years.", "WARNING", log_file)
+      }
     } else {
-      log_message("No keyword data found for the last 10 years.", "WARNING", log_file)
+      log_message("No year data found in the dataset.", "WARNING", log_file)
     }
   },
   error = function(e) {
@@ -784,7 +849,7 @@ tryCatch(
     top_20_countries <- df_countries[1:20, ]
 
     # Save countries data to Excel
-    excel_file_countries <- file.path(path_save, "countries_publications_top20.xlsx")
+    excel_file_countries <- file.path(path_save, "world_map_publications_top20.xlsx")
     write.xlsx(top_20_countries, excel_file_countries, rowNames = FALSE)
     log_message("Top 20 countries publications data saved to Excel.", "INFO", log_file)
 
