@@ -23,8 +23,8 @@ except ImportError:
 # Importa scholarly para buscas no Google Scholar
 try:
     from scholarly import scholarly
-except ImportError:
-    raise ImportError("A biblioteca scholarly não está instalada. Instale com: pip install scholarly")
+except ImportError as error:
+    raise ImportError(f"Erro ao importar a biblioteca scholarly. Error: {error}")
 
 # =====================================================================
 # Funções utilitárias
