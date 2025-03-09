@@ -238,7 +238,7 @@ async def fetch_and_store_metadata_async(bibtex_path):
             print(f"Nenhuma entrada encontrada no arquivo: {bibtex_path}")
             return errors
         
-        with open(os.path.abspath("Config/bibliometry_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("Config/general_config.yaml"), "r", encoding="utf-8") as f:
             bibliometry_config = yaml.safe_load(f)
             
         use_arxiv = bibliometry_config.get("bibliometry_for_arxiv", False)

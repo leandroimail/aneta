@@ -1,0 +1,22 @@
+######################## Enrichment options ########################
+enrich_bibtex_doi: true
+enrich_bibtex_abstract: true
+enrich_bibtex_keywords: true
+enrich_bibtex_jcr_scimago: true
+
+enrich_arxiv: false
+
+
+
+######################## Bibliometry options ########################
+bibliometry_using_openalex: true
+bibliometry_for_arxiv: true
+
+###### Not implemented yet ######
+bibliometry_using_scopus: false 
+
+
+
+#################### Download PDF Papers  options ####################
+enable_PyPaperBot_download: True
+enable_search_link_file_by_google_scholars: True

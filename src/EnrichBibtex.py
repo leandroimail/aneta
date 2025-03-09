@@ -888,7 +888,7 @@ def enrich_bibtex_file(bibtex_path, df_jcr, df_scimago, output_path):
 
 def enrich_bibtex_jcr_scimago():
     """
-    Percorre as bases configuradas em config/enrich_config.yaml (chave: nome da base, valor: booleano habilitado)
+    Percorre as bases configuradas em config/general_config.yaml (chave: nome da base, valor: booleano habilitado)
     e enriquece todos os arquivos BibTeX encontrados (no diretório definido por PATH_DATA) com os dados de JCR e Scimago.
     """
     path_data = os.path.abspath(os.getenv("PATH_DATA", "Data"))
@@ -944,7 +944,7 @@ def enrich_bibtex_jcr_scimago():
 
 def enrich_bibtex():
     try:
-        with open(os.path.abspath("Config/enrich_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("Config/general_config.yaml"), "r", encoding="utf-8") as f:
             enrich_config = yaml.safe_load(f)
             os.environ["ENRICH_ARXIV"] = str(enrich_config.get("enrich_arxiv", False))
             
