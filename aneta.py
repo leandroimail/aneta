@@ -10,6 +10,7 @@ from src.EnrichBibtex import enrich_bibtex as enrich_bibtex_sync
 from src.EnrichBibtexAsync import enrich_bibtex as enrich_bibtex_async
 from src.Selection import get_analyse
 from src.Bibliometry import run_bibliometry as run_bibliometry_func
+from src.BibliometryAsync import run_bibliometry as run_bibliometry_async_func
 from src.DonwloadPapers import download_all_papers
 
 
@@ -38,6 +39,10 @@ def run_selection():
 
 def run_bibliometry_function():
     run_bibliometry_func()
+    return True
+
+def run_bibliometry_async():
+    run_bibliometry_async_func()
     return True
 
 def run_download():
@@ -88,6 +93,7 @@ def parse_arguments():
     group.add_argument('--enrich_async', action='store_true', help='Executa o enriquecimento dos bibtex de forma assíncrona')
     group.add_argument('--selection', action='store_true', help='Executa a seleção dos bibtex')
     group.add_argument('--bibliometry', action='store_true', help='Executa a bibliometria completa do bibtex selecionado')
+    group.add_argument('--bibliometry_async', action='store_true', help='Executa de forma assíncrona a bibliometria completa do bibtex selecionado')
     group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers')
     group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
     
@@ -95,10 +101,11 @@ def parse_arguments():
 
 if __name__ == "__main__":
     ###################  Variáveis de configuração (modo script)
-    run_search_database = True
+    run_search_database = False
     run_enrich_bibtex = False
     run_enrich_bibtex_async = False
     run_selection_bibtex = False
+    run_bibliometry_async_var = False
     run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
@@ -109,19 +116,37 @@ if __name__ == "__main__":
     args, parser = parse_arguments()
     
     # Prioriza argumentos de linha de comando sobre as variáveis do script
-    if args.search or run_search_database:
+    if args.search:
         run_search()
-    elif args.enrich or run_enrich_bibtex:
+    elif args.enrich:
         run_enrich()
-    elif args.enrich_async or run_enrich_bibtex_async:
+    elif args.enrich_async:
         run_enrich_async()
-    elif args.selection or run_selection_bibtex:
+    elif args.bibliometry_async:
+        run_bibliometry_async()
+    elif args.selection:
         run_selection()
-    elif args.bibliometry or run_bibliometry:
+    elif args.bibliometry:
         run_bibliometry_function()
-    elif args.download_pdf or run_download_papers:
+    elif args.download_pdf:
         run_download()
-    elif args.deprecated_abstract or run_deprecated_abstract:
+    elif args.deprecated_abstract:
+        deprecated_abstract()
+    elif run_search_database:
+        run_search()
+    elif run_enrich_bibtex:
+        run_enrich()
+    elif run_enrich_bibtex_async:
+        run_enrich_async()
+    elif run_bibliometry_async_var:
+        run_bibliometry_async()
+    elif run_selection_bibtex:
+        run_selection()
+    elif run_bibliometry:
+        run_bibliometry_function()
+    elif run_download_papers:
+        run_download()
+    elif run_deprecated_abstract:
         deprecated_abstract()
     else:
         parser.print_help()
