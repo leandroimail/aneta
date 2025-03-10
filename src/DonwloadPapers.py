@@ -1,11 +1,12 @@
 import os
 import sys
-import re
+import urllib
 import tempfile
 import requests
 import argparse
 import time  
-import random 
+import random
+import yaml
 from dotenv import load_dotenv
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
@@ -42,7 +43,8 @@ def sanitize_filename(doi):
     Converte um DOI em um nome de arquivo válido:
     substitui caracteres não alfanuméricos (exceto pontos e hífens) por underline.
     """
-    return re.sub(r'[^a-zA-Z0-9\.\-]', '_', doi)
+    doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
+    return urllib.parse.quote(doi, safe='')
 
 def download_file(url, file_path, binary=True, timeout=20):
     """
@@ -69,6 +71,26 @@ def download_file(url, file_path, binary=True, timeout=20):
     except Exception as e:
         print(f"Erro ao baixar {url}: {e}")
         return False
+
+# =====================================================================
+# Carregamento de configurações
+# =====================================================================
+
+def load_config():
+    """
+    Carrega as configurações do arquivo YAML.
+    """
+    config_path = os.path.abspath("Config/general_config.yaml")
+    try:
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+        return config
+    except Exception as e:
+        print(f"Erro ao carregar configurações: {e}")
+        return {
+            'enable_PyPaperBot_download': False,
+            'enable_search_link_file_by_google_scholars': False
+        }
 
 # =====================================================================
 # Processamento dos arquivos de entrada
@@ -460,16 +482,25 @@ def fetch_article_by_title(title, timeout=20):
         return None
 
 
-def download_doi_entry(entry, pdf_dir, logs):
+def download_doi_entry(entry, pdf_dir, logs, failed_entries):
     """
     Faz o download de um artigo identificado por DOI.
     Estratégia:
-      #TODO Melhor esse comentário posteriormente 
-    Registra no log o método utilizado ou a falha.
+      1. Verificar se o PDF já existe
+      2. Tentar campo url_pdf
+      3. Download direto via DOI
+      4. Buscar via Crossref API
+      5. Buscar via OpenAlex
+      6. Buscar via Unpaywall
+    Se todas estas estratégias falharem, adiciona à lista de failed_entries para tentar depois.
     """
     doi = entry.get("doi", "").strip()
+    title = entry.get("title", "").strip()
     if not doi:
         print("Entrada sem DOI.")
+        # Registra no log de falhas que não foi possível baixar por falta de DOI
+        entry_id = entry.get("ID", "entrada_desconhecida")
+        logs["failed"].append(f"{entry_id} -> Não foi possível baixar pois artigo não possui DOI: Titulo: {title}")
         return False
     filename = sanitize_filename(doi) + ".pdf"
     pdf_path = os.path.join(pdf_dir, filename)
@@ -495,7 +526,7 @@ def download_doi_entry(entry, pdf_dir, logs):
     doi_url = "https://doi.org/" + doi
     print(f"Tentando download direto via DOI: {doi_url}")
     try:
-        response = requests.get(doi_url, stream=True, timeout=20, headers = HEADERS)
+        response = requests.get(doi_url, stream=True, timeout=20, headers=HEADERS)
         content_type = response.headers.get("Content-Type", "")
         if response.status_code == 200 and "pdf" in content_type.lower():
             with open(pdf_path, "wb") as f:
@@ -534,99 +565,160 @@ def download_doi_entry(entry, pdf_dir, logs):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via Unpaywall")
             return True
-
-    # 7. Busca no Google Scholar por DOI
-    print("Tentando buscar PDF via Google Scholar (por DOI)...")
-    pdf_url = fetch_article_by_doi(doi)
-    if pdf_url and pdf_url != 'PDF não encontrado.' and pdf_url != "Artigo não encontrado." and not pdf_url.startswith("Erro ao buscar artigo"): # Check for error messages from scholarly
-        if download_file(pdf_url, pdf_path):
-            print(f"PDF salvo: {pdf_path}\n")
-            logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por DOI)")
-            return True
-
-    # 8. Busca no Google Scholar por título (se disponível)
-    title = entry.get("title", "")
-    if title:
-        print("Tentando buscar PDF via Google Scholar (por título)...")
-        pdf_url = fetch_article_by_title(title)
-        if pdf_url and pdf_url != 'PDF não encontrado.'  and pdf_url != "Artigo não encontrado." and not pdf_url.startswith("Erro ao buscar artigo"): # Check for error messages from scholarly
-            if download_file(pdf_url, pdf_path):
-                print(f"PDF salvo: {pdf_path}\n")
-                logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por título)")
-                return True
-
-    # 9. Tentar integração com PyPaperBot
-    print("Tentando utilizar o PyPaperBot...")
-    if run_pypaperbot_for_doi(doi, pdf_dir):
-        print(f"PyPaperBot conseguiu baixar o PDF para {doi}\n")
-        logs["downloaded"].append(f"{doi} -> PDF via PyPaperBot")
-        return True        
-        
-    # Tentar baixar o HTML e converter para Markdown
-    try:
-        response = requests.get(doi_url, timeout=20, headers = HEADERS)
-        if response.status_code == 200:
-            temp_html = os.path.join(tempfile.gettempdir(), sanitize_filename(doi) + ".html")
-            with open(temp_html, "w", encoding="utf-8") as f:
-                f.write(response.text)
-            markdown_content = md(response.text, heading_style="ATX")
-            markdown_dir = os.path.join(pdf_dir, "markdown")
-            os.makedirs(markdown_dir, exist_ok=True)
-            md_filename = sanitize_filename(doi) + ".md"
-            md_path = os.path.join(markdown_dir, md_filename)
-            with open(md_path, "w", encoding="utf-8") as f_md:
-                f_md.write(markdown_content)
-            print(f"Arquivo markdown salvo: {md_path}\n")
-            logs["downloaded"].append(f"{doi} -> HTML convertido para Markdown via DOI")
-            os.remove(temp_html)
-            # return True
-    except Exception as e:
-        print(f"Erro ao baixar/converter HTML via DOI: {e}")
-    return True
-
-    print(f"Não foi possível baixar o PDF para {doi}\n")
-    logs["failed"].append(f"{doi} -> Falha em todas as estratégias")
+    
+    # Se chegamos aqui, todas as tentativas falharam
+    # Adicionar o DOI à lista de falhas para tentar depois com GS e PyPaperBot
+    print(f"Método principais falharam para {doi}. Adicionando à lista para tentar mais tarde.")
+    failed_entries.append(entry)
+    
     return False
 
-
 # =====================================================================
-# Integração com o PyPaperBot
+# Processamento em lote dos artigos que falharam
 # =====================================================================
 
-def run_pypaperbot_for_doi(doi, pdf_dir):
+def batch_download_google_scholar(failed_entries, pdf_dir, logs):
     """
-    Tenta chamar o PyPaperBot internamente para baixar o PDF do artigo.
-    A ideia é:
-      - Criar um arquivo temporário contendo o DOI (seguindo o modelo de argumento do PyPaperBot).
-      - Ajustar o sys.argv para simular a chamada via linha de comando.
-    Retorna True se o PyPaperBot obtiver sucesso, False caso contrário.
+    Tenta baixar em lote todos os artigos falhos usando o Google Scholar.
+    Retorna a lista de entradas que ainda falharam.
     """
-    try:
-        temp_doi_file = os.path.join(tempfile.gettempdir(), "temp_doi.txt")
-        with open(temp_doi_file, "w", encoding="utf-8") as f:
-            f.write(doi)
-        try:
-            from PyPaperBot import __main__ as pypaperbot_main
-        except ImportError:
-            print("PyPaperBot não está instalado ou não pode ser importado.")
-            return False
-        old_argv = sys.argv.copy()
-        sys.argv = ["PyPaperBot", "--doi-file", temp_doi_file, "--dwn-dir", pdf_dir]
-        try:
-            pypaperbot_main.main()
-        finally:
-            sys.argv = old_argv
+    config = load_config()
+    if not config.get('enable_search_link_file_by_google_scholars', False):
+        print("Download via Google Scholar desabilitado nas configurações.")
+        return failed_entries
+    
+    still_failed = []
+    print("\n\n=================================================")
+    print("TENTATIVA EM LOTE VIA GOOGLE SCHOLAR")
+    print(f"Tentando baixar {len(failed_entries)} artigos via Google Scholar")
+    print("=================================================\n")
+    
+    for entry in failed_entries:
+        print("--------------------------------------------------")
+        doi = entry.get("doi", "").strip()
         filename = sanitize_filename(doi) + ".pdf"
         pdf_path = os.path.join(pdf_dir, filename)
+        
+        # Já verifica se o arquivo foi baixado por outro método entre tentativas
         if os.path.exists(pdf_path):
-            os.remove(temp_doi_file)
-            return True
-        else:
-            os.remove(temp_doi_file)
-            return False
-    except Exception as e:
-        print(f"Erro na integração com o PyPaperBot: {e}")
-        return False
+            print(f"PDF já baixado: {pdf_path}")
+            logs["downloaded"].append(f"{doi} -> PDF baixado entre tentativas")
+            continue
+            
+        success = False
+        
+        # Buscar apenas por DOI (removida a busca por título)
+        if doi:
+            print(f"Tentando buscar PDF via Google Scholar (por DOI): {doi}")
+            pdf_url = fetch_article_by_doi(doi)
+            if pdf_url and pdf_url != 'PDF não encontrado.' and pdf_url != "Artigo não encontrado." and not pdf_url.startswith("Erro ao buscar artigo"):
+                if download_file(pdf_url, pdf_path):
+                    print(f"PDF salvo: {pdf_path}\n")
+                    logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por DOI) em lote")
+                    success = True
+        
+        if not success:
+            still_failed.append(entry)
+            print(f"Google Scholar falhou para {doi}")
+            
+        print("--------------------------------------------------\n")
+    
+    return still_failed
+
+def batch_download_pypaperbot(failed_entries, pdf_dir, logs):
+    """
+    Tenta baixar em lote todos os artigos falhos usando o PyPaperBot.
+    Se falhar, tenta baixar o HTML e converter para Markdown como último recurso.
+    """
+    config = load_config()
+    if not config.get('enable_PyPaperBot_download', False):
+        print("Download via PyPaperBot desabilitado nas configurações.")
+        return failed_entries
+    else:
+        still_failed_entries = []
+        print("\n\n=================================================")
+        print("TENTATIVA EM LOTE VIA PYPAPERBOT")
+        print(f"Tentando baixar {len(failed_entries)} artigos via PyPaperBot")
+        print("=================================================\n")
+        
+        # Criar arquivo temporário com todos os DOIs
+        temp_doi_file = os.path.join(tempfile.gettempdir(), "batch_doi.txt")
+        try:
+            with open(temp_doi_file, "w", encoding="utf-8") as f:
+                for entry in failed_entries:
+                    doi = entry.get("doi", "").strip()
+                    if doi:
+                        f.write(doi + "\n")
+            
+            # Tentar executar o PyPaperBot para todos os DOIs
+            try:
+                from PyPaperBot import __main__ as pypaperbot_main
+                old_argv = sys.argv.copy()
+                sys.argv = ["PyPaperBot", "--doi-file", temp_doi_file, "--dwn-dir", pdf_dir, "--use-doi-as-filename"]
+                try:
+                    pypaperbot_main.main()
+                finally:
+                    sys.argv = old_argv
+                    
+                # Verificar quais foram baixados
+                for entry in failed_entries:
+                    doi = entry.get("doi", "").strip()
+                    filename = sanitize_filename(doi) + ".pdf"
+                    pdf_path = os.path.join(pdf_dir, filename)
+                    if os.path.exists(pdf_path):
+                        print(f"PyPaperBot baixou com sucesso: {doi}")
+                        logs["downloaded"].append(f"{doi} -> PDF via PyPaperBot em lote")
+                    else:
+                        still_failed_entries.append(entry)
+                        
+            except ImportError:
+                print("PyPaperBot não está instalado ou não pode ser importado.")
+                still_failed_entries = failed_entries
+        except Exception as e:
+            print(f"Erro na integração com o PyPaperBot em lote: {e}")
+            still_failed_entries = failed_entries
+        finally:
+            if os.path.exists(temp_doi_file):
+                os.remove(temp_doi_file)
+    
+    # Última tentativa: converter HTML para Markdown para os que ainda falharam
+    if config.get('enable_save_md_to_lost_papers', False):
+        print("\n\n=================================================")
+        print("ÚLTIMA TENTATIVA: CONVERTER HTML PARA MARKDOWN")
+        print(f"Tentando baixar {len(still_failed_entries)} artigos em formato HTML/Markdown")
+        print("=================================================\n")
+        
+        for entry in still_failed_entries:
+            doi = entry.get("doi", "").strip()
+            if not doi:
+                continue
+                
+            doi_url = "https://doi.org/" + doi
+            print(f"Tentando baixar HTML para {doi} e converter para Markdown...")
+            
+            try:
+                response = requests.get(doi_url, timeout=20, headers=HEADERS)
+                if response.status_code == 200:
+                    temp_html = os.path.join(tempfile.gettempdir(), sanitize_filename(doi) + ".html")
+                    with open(temp_html, "w", encoding="utf-8") as f:
+                        f.write(response.text)
+                    markdown_content = md(response.text, heading_style="ATX")
+                    markdown_dir = os.path.join(pdf_dir, "markdown")
+                    os.makedirs(markdown_dir, exist_ok=True)
+                    md_filename = sanitize_filename(doi) + ".md"
+                    md_path = os.path.join(markdown_dir, md_filename)
+                    with open(md_path, "w", encoding="utf-8") as f_md:
+                        f_md.write(markdown_content)
+                    print(f"Arquivo markdown salvo: {md_path}\n")
+                    logs["markdown_saved"].append(f"{doi} -> HTML convertido para Markdown via DOI")
+                else:
+                    print(f"Falha ao obter HTML para {doi}. Status: {response.status_code}")
+                    logs["failed"].append(f"{doi} -> Falha em todas as estratégias")
+            except Exception as e:
+                print(f"Erro ao baixar/converter HTML para {doi}: {e}")
+                logs["failed"].append(f"{doi} -> Falha em todas as estratégias")
+    
+    return still_failed_entries
 
 # =====================================================================
 # Função principal para download de todos os artigos
@@ -642,22 +734,36 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
 
     Os parâmetros podem ser passados diretamente ou via linha de comando.
     """
-    if not bibtex_path or not pdf_dir or not doi_file_path:
-        parser = argparse.ArgumentParser(description="Download de artigos via BibTeX e DOIs.")
-        parser.add_argument("--bibtex", required=True, help="Caminho do arquivo BibTeX")
-        parser.add_argument("--pdf-dir", required=True, help="Diretório onde serão salvos os PDFs")
-        parser.add_argument("--doi-file", required=True, help="Arquivo txt contendo DOIs")
-        args = parser.parse_args()
-        bibtex_path = args.bibtex
-        pdf_dir = args.pdf_dir
-        doi_file_path = args.doi_file
-
+    # Limpar arquivos antigos de execuções anteriores
+    print("\nVerificando e removendo arquivos antigos...\n")
+    files_to_clean = [
+        os.path.join(pdf_dir, "downloaded_log.txt"),
+        os.path.join(pdf_dir, "failed_log.txt"),
+        os.path.join(pdf_dir, "markdown_log.txt"),
+        os.path.join(pdf_dir, "result.csv"),
+        os.path.join(pdf_dir, "bibtex.bib")
+    ]
+        
+    for file_path in files_to_clean:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                print(f"Arquivo removido: {file_path}")
+            except Exception as e:
+                print(f"Não foi possível remover o arquivo {file_path}: {e}")
+    
+    print("\nIniciando processamento de novos dados...\n")
+    
     os.makedirs(pdf_dir, exist_ok=True)
 
     logs = {
         "downloaded": [],
-        "failed": []
+        "failed": [],
+        "markdown_saved": [] # Nova categoria para arquivos markdown
     }
+    
+    # Lista para armazenar entradas que falharam nos métodos principais
+    failed_entries = []
 
     print("\nInício do processamento...\n")
 
@@ -674,18 +780,70 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
     print("\nProcessando entradas com DOI...\n")
     for entry in doi_entries:
         print("--------------------------------------------------")
-        download_doi_entry(entry, pdf_dir, logs)
+        download_doi_entry(entry, pdf_dir, logs, failed_entries)
         print("--------------------------------------------------\n")
+
+    # Processamento em lote dos artigos que falharam
+    if failed_entries:
+        print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais...\n")
+        # Primeiro, tenta Google Scholar em lote
+        failed_entries = batch_download_pypaperbot(failed_entries, pdf_dir, logs)
+        
+    # Depois, tenta PyPaperBot em lote para os que ainda falharam
+    print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais...\n")
+    if failed_entries:
+        failed_entries = batch_download_google_scholar(failed_entries, pdf_dir, logs)
+        
+    if failed_entries:
+        print(f"\n{len(failed_entries)} artigos ainda falharam após tentativas em lote.\n")
+        # Exibir detalhes dos artigos que falharam
+        print("\nDetailhes dos artigos com falha no download:")
+        print("-" * 90)
+        print(f"{'TÍTULO':<71} | {'DOI':<21}")
+        print("-" * 90)
+        
+        # Adicionar ao log as entradas que falharam após todas as tentativas
+        for entry in failed_entries:
+            title = entry.get("title", "Titulo Não Encontrado")
+            doi = entry.get("doi", "").strip()
+            entry_id = entry.get("ID", "")
+            
+            # Imprimir na tela o título e DOI de cada artigo que falhou
+            title_display = (title[:47] + "...") if len(title) > 47 else title
+            print(f"{title_display:<50} | {doi:<20}")
+            
+            log_entry = f"ID: {entry_id} -> DOI: {doi} -> Título: {title} -> Falha em todas as estratégias"
+            logs["failed"].append(log_entry)
+        print("-" * 70)
+    else:
+        print("\nTodos os artigos foram baixados com sucesso pelos métodos principais.\n")
 
     downloaded_log_path = os.path.join(pdf_dir, "downloaded_log.txt")
     failed_log_path = os.path.join(pdf_dir, "failed_log.txt")
+    markdown_log_path = os.path.join(pdf_dir, "markdown_log.txt")
+    
     try:
         with open(downloaded_log_path, "w", encoding="utf-8") as f:
             f.write("\n".join(logs["downloaded"]))
         with open(failed_log_path, "w", encoding="utf-8") as f:
             f.write("\n".join(logs["failed"]))
-        print(f"Logs salvos:\n - Sucesso: {downloaded_log_path}\n - Falhas: {failed_log_path}\n")
+        if load_config().get('enable_save_md_to_lost_papers', False):
+            with open(markdown_log_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(logs["markdown_saved"]))
+            print(f"Logs salvos:\n - Sucesso: {downloaded_log_path}\n - Falhas: {failed_log_path}\n - Markdown: {markdown_log_path}\n")
     except Exception as e:
         print(f"Erro ao salvar os logs: {e}")
+
+    # Exibir destaque em vermelho para artigos que não foram baixados
+    if logs["failed"]:
+        # Cores ANSI para terminal
+        RED = '\033[91m'
+        BOLD = '\033[1m'
+        END = '\033[0m'
+        
+        print(f"\n{RED}{BOLD}================================================={END}")
+        print(f"{RED}{BOLD}  ATENÇÃO: {len(logs['failed'])} ARTIGOS NÃO FORAM BAIXADOS!  {END}")
+        print(f"{RED}{BOLD}  Verifique o arquivo de log: {failed_log_path}  {END}")
+        print(f"{RED}{BOLD}================================================={END}\n")
 
     print("Processamento concluído.\n")
