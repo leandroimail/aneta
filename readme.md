@@ -130,13 +130,10 @@ R -e 'library(bibliometrix); biblioshiny();'
 
 
 
-## TODO: Enriquecimento em paralelo - testar melhor o enriquecimento assincrono
+
 ## TODO: Implementar Bibliometria via Scopus, não apenas em OpenAlex
+## TODO: Implementar download de pdf de forma assincrona
 
 
-
-
----------   author_collaboration_network_top50 está com informação errada!!!!!!!!!!
-
-
-
+## TODO: Adicionar bibliometria e download de arquivos para final.bib além de select.bib
+## todo: Adicionar bibliometria e download de arquivos para final.bib além de select.bib
