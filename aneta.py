@@ -47,16 +47,14 @@ def run_bibliometry_async():
 
 def run_download():
     bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
-    doi_file = os.environ.get("DOI_FILE", ".OUTPUTS/DOIs.txt")
     folder_save_pdf = os.getenv("FOLDER_SAVE_PDF", "PDFs")
     
     path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
     path_data = os.path.join(path_data, ".bibs")
     
     path_directory_file_bib = path_data.replace(".bibs", bib_file)
-    path_directory_file_doi = path_data.replace(".bibs", doi_file)
     folder_save_pdf = path_data.replace(".bibs", folder_save_pdf)
-    download_all_papers(path_directory_file_bib, folder_save_pdf, path_directory_file_doi)
+    download_all_papers(path_directory_file_bib, folder_save_pdf)
     return True
 
 def deprecated_abstract():

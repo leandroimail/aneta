@@ -768,8 +768,11 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
     print("\nInício do processamento...\n")
 
     arxiv_entries, doi_bibtex_entries = process_bibtex(bibtex_path)
-    external_dois = read_doi_file(doi_file_path)
-    doi_entries = merge_doi_lists(doi_bibtex_entries, external_dois)
+    if doi_file_path and doi_file_path.strip() != "":
+        external_dois = read_doi_file(doi_file_path)
+        doi_entries = merge_doi_lists(doi_bibtex_entries, external_dois)
+    else:
+        doi_entries = doi_bibtex_entries
 
     print("\nProcessando entradas do arXiv...\n")
     for entry in arxiv_entries:
