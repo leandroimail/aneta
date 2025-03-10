@@ -16,7 +16,6 @@ BASE_URL = 'https://api.springernature.com/meta/v2/json'
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
 if PAGE_SIZE > 25:
-    print("Aviso: o tamanho da página para a API Springer Nature é limitado a 25 resultados.")
     PAGE_SIZE = 25
 
 
@@ -177,6 +176,9 @@ def main(query, path_data):
     print("\n==============================================")
     print("       INICIANDO BUSCA: SPRING NATURE           ")
     print("==============================================\n")
+    
+    if int(os.getenv("PAGE_SIZE", 25)) > 25:
+        print("Aviso: o tamanho da página para a API Springer Nature é limitado a 25 resultados.")
     
     if not query:
         with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:

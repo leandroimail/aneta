@@ -28,7 +28,6 @@ MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", 50)) 
 
 if PAGE_SIZE < 50:
-    print("Tamanho da página ajustado para 50")
     PAGE_SIZE = 50
 
 records_agregados = []
@@ -169,6 +168,9 @@ def converte_para_bibtex(entry):
 # ============================================================
 def main(query, path_data):
     global records_agregados
+    
+    if int(os.getenv("PAGE_SIZE", 50)) < 50:
+        print("Tamanho da página ajustado para 50")
     
     # Log inicial melhorado
     print("\n==============================================")
