@@ -1,0 +1,17 @@
+principal_research_question: >
+  What are the main methods and technologies currently used for automatic generation of scoping review?
+
+additional_research_questions:
+  arq1: >
+    Which research uses machine learning or data science to automate scoping reviews or systematic reviews?
+  arq2: >
+    What research or algorithms does AI Generative and LLM use?
+  arq3: >
+    Is there any model, benchmark or methodology to validate the accuracy of the automatically generated systematic review or scoping review?
+
+accepted_criteria:
+  ac1: >
+    The main topic of the article should be about scoping review or systematic review, not just mentioning scoping review or systematic review
+  ac2: >
+    The article must address technologies or methods for reviewing for automation of systematics or scoping review.
+

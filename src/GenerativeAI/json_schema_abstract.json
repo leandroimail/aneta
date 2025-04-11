@@ -1,0 +1,32 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Schema for Academic Publication",
+    "description": "A schema describing metadata for an academic publication",
+    "type": "object",
+    "properties": {
+      "title": {
+        "description": "The title of the publication",
+        "type": "string"
+      },
+      "abstract": {
+        "description": "The abstract of the publication",
+        "type": "string"
+      },
+      "keywords": {
+        "description": "Keywords or tags associated with the publication",
+        "type": "string"
+      },
+      "type_publication": {
+        "description": "The type of publication",
+        "type": "string",
+        "enum": ["Arxiv Paper", "Journal Article", "Conference Paper", "Book Chapter", "Thesis"]
+      },
+      "doi": {
+        "description": "Digital Object Identifier for the publication",
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "required": ["title", "abstract", "keywords", "type_publication", "doi"],
+    "additionalProperties": false
+}

@@ -1,0 +1,6 @@
+resume_base_prompts: >
+  You are a helpful assistant. You will be given a resume and a job description. Your task is to extract the relevant skills from the resume that match the job description.
+
+
+article_base_prompts: >
+  You are a helpful assistant. You will be given an article and a job description. Your task is to extract the relevant skills from the article that match the job description.

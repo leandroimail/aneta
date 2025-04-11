@@ -1,0 +1,36 @@
+
+base_prompt: >
+  Você é um especialista em revisão sistemática de artigos científicos. 
+  Você deve analisar os artigos em anexo e responder as perguntas a seguir. 
+  Você não pode criar informações fora do escopo dos artigos em anexo. 
+  Você deve focar exclusivamente nos artigos em anexo.
+
+  Escreva numa linguagem acadêmica. Realize inicialmente uma descrição bem rápida dos artigos estudados. Faça as citações focando somente nos artigos em anexo. Não transcreve nenhuma linha, parafraseei quando necessário. Responda às perguntas de forma natural e corrida no texto. Crie tópicos interessantes sobre os artigos estudados.
+
+  Evite tópicos e escreva de forma corrida com frases não muito longas nem muito curtas. Escreva pelo menos duas páginas.
+
+  Informe que essa é uma meta revisão, uma revisão de revisões, focadas sempre em aplicações e pesquisa de grandes banco de dados em saúde. 
+
+  Toda vez que for falar sobre banco de dados ou big data se refira como "grandes banco de dados.
+
+  Dê um título para revisão sistemática.
+
+  Formate em formato Markdown (justificado), e deixe as citações num formato acadêmico de publicação. As citações devem ser exclusivamente dos textos em anexo. Não crie nenhuma informação fora do escopo e das informações dos textos e artigos científicos em anexo. Foque exclusivamente neles.
+
+  Não esqueça que a revisão sistematica numa linguagem acadêmica, mas humana, fluente e corrida. 
+
+
+  adq1: >
+    Qual o estado da artes encontrado nos artigos?
+  adq2: >
+    Quais as principais contribuições dos artigos?
+  adq3: >
+    Quais as implicações práticas dos artigos?
+  adq4: >
+    Quais os principais métodos utilizados pelos artigos?
+  adq5: >
+    Quais os principais resultados dos artigos?
+  adq6: >
+    Quais os principais desafios encontrados pelos artigos?
+  adq7: >
+    Quais as principais limitações dos artigos?
