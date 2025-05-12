@@ -12,6 +12,7 @@ from src.Selection import get_analyse
 from src.Bibliometry import run_bibliometry as run_bibliometry_func
 from src.BibliometryAsync import run_bibliometry as run_bibliometry_async_func
 from src.DonwloadPapers import download_all_papers
+from GenerativeAI.LLMUtils import run_prepare_base_prompt
 
 
 def setup_environment():
@@ -75,6 +76,18 @@ def deprecated_abstract():
         get_abstract(path_ACM, "ACM")
     return True
 
+def run_abstract_classifier_llm():
+    bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
+    
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+    
+    path_directory_file_bib = path_data.replace(".bibs", bib_file)
+    
+    # Chamando a função com um caminho único de arquivo BibTeX
+    run_prepare_base_prompt(path_directory_file_bib)
+    return True
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Executa diferentes funcionalidades do projeto ASRL',
@@ -94,7 +107,8 @@ def parse_arguments():
     group.add_argument('--bibliometry_async', action='store_true', help='Executa de forma assíncrona a bibliometria completa do bibtex selecionado')
     group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers')
     group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
-    
+    group.add_argument('--abstract_classifier_llm', action='store_true', help='Realiza a classificação de abstracts usando LLM')
+
     return parser.parse_args(), parser
 
 if __name__ == "__main__":
@@ -107,6 +121,7 @@ if __name__ == "__main__":
     run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
+    run_abstract_llm = True
 
     setup_environment()
     
@@ -130,6 +145,8 @@ if __name__ == "__main__":
         run_download()
     elif args.deprecated_abstract:
         deprecated_abstract()
+    elif args.abstract_classifier_llm:
+        run_abstract_classifier_llm()
     elif run_search_database:
         run_search()
     elif run_enrich_bibtex:
@@ -146,9 +163,10 @@ if __name__ == "__main__":
         run_download()
     elif run_deprecated_abstract:
         deprecated_abstract()
+    elif run_abstract_llm:
+        run_abstract_classifier_llm()
     else:
         parser.print_help()
-        # Opcional: para sair com código de erro
         sys.exit(1)
 
 
