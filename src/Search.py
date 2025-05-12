@@ -10,7 +10,7 @@ from SeachDataBases.scopus import search_get as scopus_search
 # from SeachDataBases.scopus import search as scopus_search
 
 # Carrega as variáveis do .env
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 def run_search():

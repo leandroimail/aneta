@@ -7,7 +7,7 @@ from Config.Deprecated.DeprecatedConfigPythonFile.Config import regex_expression
 from Config.Deprecated.DeprecatedConfigPythonFile.Config import condition_include as condition_include_deprecated
 from Config.Deprecated.DeprecatedConfigPythonFile.Config import condition_exclude as condition_exclude_deprecated
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 #####################  SYSTEM CONFIG #####################

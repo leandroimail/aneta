@@ -16,7 +16,7 @@ from GenerativeAI.LLMUtils import run_prepare_base_prompt
 
 
 def setup_environment():
-    load_dotenv()
+    load_dotenv(os.path.abspath(".conf"))
     load_dotenv(os.path.abspath("Config/.env"))
     global PROJECT_PATH
     PROJECT_PATH = os.path.dirname(os.path.abspath(__file__))

@@ -8,7 +8,7 @@ import yaml
 from dotenv import load_dotenv
 from urllib.parse import quote
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 # ============================================================

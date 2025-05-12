@@ -9,7 +9,7 @@ import sys
 import yaml
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 BASE_URL = 'http://export.arxiv.org/api/query'

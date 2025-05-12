@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from src.BibTex import read_bibtex, write_bibtex
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 db = create_lancedb_instance()

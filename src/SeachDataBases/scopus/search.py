@@ -7,7 +7,7 @@ import yaml
 from dotenv import load_dotenv
 import shutil
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 API_KEY = os.getenv("ELSEVIER_API_KEY", "")

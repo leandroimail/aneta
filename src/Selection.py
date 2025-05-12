@@ -14,7 +14,7 @@ import yaml
 from dotenv import load_dotenv
 
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 from src.Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi, list_type_publication

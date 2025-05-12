@@ -7,7 +7,7 @@ import re
 import sys
 import yaml
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 # ============================================================

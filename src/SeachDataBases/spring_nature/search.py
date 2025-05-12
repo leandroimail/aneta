@@ -6,7 +6,7 @@ import os
 import yaml
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 # Obtém a chave e removemos a constante fixa

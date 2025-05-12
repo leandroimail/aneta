@@ -10,7 +10,7 @@ import time  # Adicione esta importação no topo do arquivo
 from urllib.parse import quote
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 # ============================================================

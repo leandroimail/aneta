@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import yaml
 
 # Carregar variáveis de ambiente do arquivo .env
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 
 def read_bibtex_file(bibtex_path: str) -> List[Dict[str, Any]]:
     """

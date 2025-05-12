@@ -4,7 +4,7 @@ import lancedb
 from typing import Union, Dict
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("Config/.env"))
 
 def create_lancedb_instance(path_db: str = ".db") -> lancedb.LanceDBConnection:
