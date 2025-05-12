@@ -9,9 +9,20 @@ additional_research_questions:
   arq3: >
     Is there any model, benchmark or methodology to validate the accuracy of the automatically generated systematic review or scoping review?
 
+rejection_criteria:
+  rc1: >
+    The article is not a systematic review or scoping review.
+  rc2: >
+    The article does not address technologies or methods for reviewing for automation of systematics or scoping review.
+  rc3: >
+    The article is not in English.
+  rc4: >
+    The article is not a scientific article, such as a blog post, opinion piece, or news article.
+  rc5: >
+    The article is a duplicate of another article already included in the dataset.
+
 accepted_criteria:
   ac1: >
     The main topic of the article should be about scoping review or systematic review, not just mentioning scoping review or systematic review
   ac2: >
     The article must address technologies or methods for reviewing for automation of systematics or scoping review.
-
