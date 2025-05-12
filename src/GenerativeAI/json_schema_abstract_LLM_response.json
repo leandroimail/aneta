@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM Response Schema for Article Analysis",
+  "description": "Schema for validating LLM responses analyzing scientific articles",
+  "type": "object",
+  "required": [
+    "research_questions",
+    "is_relevant"
+  ],
+  "properties": {
+    "research_questions": {
+      "type": "object",
+      "description": "Questions about the research and their answers",
+      "required": ["principal_research_question"],
+      "properties": {
+        "principal_research_question": {
+          "$ref": "#/definitions/answerWithComment"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/answerWithComment"
+      }
+    },
+    "accepted_criteria": {
+      "type": "object",
+      "description": "Criteria for accepting articles",
+      "patternProperties": {
+        "^ac[0-9]+$": {
+          "$ref": "#/definitions/answerWithComment"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rejection_criteria": {
+      "type": "object",
+      "description": "Criteria for rejecting articles",
+      "patternProperties": {
+        "^rc[0-9]+$": {
+          "$ref": "#/definitions/answerWithComment"
+        }
+      },
+      "additionalProperties": false
+    },
+    "additional_questions": {
+      "type": "object",
+      "description": "Additional informational questions about the articles",
+      "patternProperties": {
+        "^adq[0-9]+$": {
+          "type": "string",
+          "description": "Answer to an additional question"
+        }
+      },
+      "additionalProperties": false
+    },
+    "is_relevant": {
+      "$ref": "#/definitions/answerWithComment",
+      "description": "Final determination if the article is relevant to the research"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "answerWithComment": {
+      "type": "object",
+      "required": ["answer", "comment"],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "enum": ["YES", "NO"],
+          "description": "Binary response to a question or criterion"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Explanation justifying the answer"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

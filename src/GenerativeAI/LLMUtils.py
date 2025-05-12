@@ -253,3 +253,5 @@ def run_prepare_base_prompt(input_bibtex_path: Optional[str] = None,
     if not prompt:
         print("Erro ao preparar o prompt base.")
         raise ValueError("Nenhum prompt base foi gerado.")
+    
+    return prompt
