@@ -16,17 +16,12 @@
         "description": "Keywords or tags associated with the publication",
         "type": "string"
       },
-      "type_publication": {
-        "description": "The type of publication",
-        "type": "string",
-        "enum": ["Arxiv Paper", "Journal Article", "Conference Paper", "Book Chapter", "Thesis"]
-      },
-      "doi": {
+      "id": {
         "description": "Digital Object Identifier for the publication",
         "type": "string",
         "format": "uri"
       }
     },
-    "required": ["title", "abstract", "keywords", "type_publication", "doi"],
+    "required": ["title", "abstract", "keywords", "id"],
     "additionalProperties": false
 }
