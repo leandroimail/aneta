@@ -1,78 +1,147 @@
 base_prompt: >
-  Você é um especialista em revisão sistemática de artigos científicos. 
-  Você deve analisar os resumos em anexo e responder as perguntas à seguir. 
-  Você não pode criar informações fora do escopo dos resumos de artigos em anexo. 
-  Você deve focar exclusivamente nos resumos de artigos em anexo.
+  # Query
 
-  A query de pesquisa nas bases de dados de artigos cientificos utilizada foi:
+  You are an expert in conducting systematic reviews and scoping review of scientific articles.
+  You must analyze the attached abstracts, title and keywords and answer the following questions.
+  You may not create information outside the scope of the attached article abstracts, title and keywords.
+  You must focus mainly on the attached article abstracts.
+
+  The search query used in the scientific article databases was:
   
+
   {{query}}
 
-  Você recebera um json com os resumos dos artigos encontrados na pesquisa, Com base no json de resumos de artigos você deve analisar os resumos dos artigos e responder as perguntas de pesquisas a seguir. Responda SIM ou NÃO:
+
+  # Questions
+
+  You will receive a JSON with the abstracts, title and keywords of the articles found in the search. 
+  Based on the JSON of article, you must analyze the abstracts,title, keywords and answer the following research questions. Answer YES or NO:
+
 
   {{questions}}
 
-  A resposta as perguntas acima deve ser sempre SIM ou NÃO.
-  Adicionalmente para cada chave de pergunta adicione um comentário explicando curto contendo o por que da resposta SIM ou NÃO.
 
-  Classifique os artigos em relação aos critérios de aceitação a seguir. Responda SIM ou NÃO:
+  # Rejection Criteria
 
-  {{accepted_criteria}} 
+  The answers to the above questions must always be YES or NO.  
+  Additionally, for each question key, add a short comment explaining why the answer is YES or NO.
 
-  Além das perguntas de pesquisa você deve responder as perguntas adicionais a seguir:
+  Classify the articles according to the following rejection criteria. Answer YES or NO:
 
-  adq1: >
-    Quantos artigos atendem a query de pesquisa : '{{query}}' no sentido de responder no sentido de '{{principal_research_question}}'?
-  adq2: >
-    Quais os principais assuntos comentados pelos artigos?
-  adq3: >
-    Quais principais assuntos adicionais tratados no artigo fora das perguntas princiapis de pesquisas?
-  adq4: >
-    Sugira possiveis perguntas adicionais a serem feitas para pesquisa.
-  adq5: >
-    Sugira temas, aspectos e dimenssões adicionais a serem adicionados.
 
-  Retorno a resposta deve ser em formato JSON com o seguinte formato:
+  {{rejection_criteria}} 
+
+
+  # Acceptance Criteria
+
+  Classify the articles according to the following acceptance criteria. Answer YES or NO:
+
+
+  {{accepted_criteria}}
+
+
+  # Additional Questions
+
+  Beyond the research questions, you must answer the following additional questions:
+
+
+  adq1: How many articles meet the search query '{{query}}' in terms of addressing '{{principal_research_question}}'?
+
+  adq2: What are the main topics discussed by the articles?
+
+  adq3: What additional key topics are addressed in the articles beyond the principal research questions?
+
+  adq4: Suggest possible additional questions to be asked for further research.
+
+  adq5: Suggest additional themes, aspects, and dimensions to be included.
+
+
+
+  # Final Classification
+
+  Finally, you must provide if the articles are relevant to the research question, and if they are accepted or rejected.  Answer YES or NO:
+
+  You must also provide a comment explaining why the articles are relevant or not.
+
+  The articles are relevant if they are accepted and the principal research question is YES.
+
+  The articles are accepted if they meet the acceptance criteria. Acceptance criteria override the rejection criteria.
+
+  The articles are rejected if they meet the rejection criteria or do not meet the acceptance criteria.
+
+  You provide the answer and comments for the following keys:
+
+    - is_relevant:
+
+    - comment_relevance:
+
+
+
+  # Articles, Title and Keywords
+
+  Generate the response in JSON format, without Markdown or any other formatting.
+  Do not generate any information outside the scope of the JSON.
+  Do not generate any information outside the scope of the attached article abstracts. Focus exclusively on them.
+
+  Below are the abstracts of the articles found:
+  
+
+  {{json_articles_abstracts}}
+
+
+
+  # JSON Structure
+
+  The response must be in JSON format with the following structure:
 
   {
     "research_questions": {
       "principal_research_question": {
-        "answer": "SIM ou NÃO",
-        "comment": "Comentário explicando o por que da resposta SIM ou NÃO."
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
       },
       "arq1": {
-        "answer": "SIM ou NÃO",
-        "comment": "Comentário explicando o por que da resposta SIM ou NÃO."
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
       },
       "arqN": {
-        "answer": "SIM ou NÃO",
-        "comment": "Comentário explicando o por que da resposta SIM ou NÃO."
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
       },
       ...
     },
     "accepted_criteria": {
       "ac1": {
-        "answer": "SIM ou NÃO",
-        "comment": "Comentário explicando o por que da resposta SIM ou NÃO."
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
       },
       "acN": {
-        "answer": "SIM ou NÃO",
-        "comment": "Comentário explicando o por que da resposta SIM ou NÃO."
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
+      },
+      ...
+    },
+    "rejection_criteria": {
+      "rc1": {
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
+      },
+      "rcN": {
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
       },
       ...
     },
     "additional_questions": {
-      "adq1": "Resposta da pergunta adicional 1",
-      "adq2": "Resposta da pergunta adicional 2",
-      "adqN": "Resposta da pergunta adicional 3",
+      "adq1": "Answer to additional question 1",
+      "adq2": "Answer to additional question 2",
+      "adqN": "Answer to additional question 3",
       ...
+    },
+    "is_relevant": {
+        "answer": "YES or NO",
+        "comment": "Comment explaining why the answer is YES or NO."
     }
   }
 
-  Gere a resposta em formato JSON, sem formatação em Markdown ou qualquer outro tipo de formatação.
-  Não gere nenhuma informação fora do escopo do JSON.
-  Não gere nenhuma informação fora do escopo dos resumos de artigos em anexo. Foque exclusivamente neles.
 
-  A seguir estão os resumos dos artigos encontrados:
-  
-  {{json}}
