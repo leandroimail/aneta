@@ -12,7 +12,8 @@ from src.Selection import get_analyse
 from src.Bibliometry import run_bibliometry as run_bibliometry_func
 from src.BibliometryAsync import run_bibliometry as run_bibliometry_async_func
 from src.DonwloadPapers import download_all_papers
-from GenerativeAI.LLMUtils import run_prepare_base_prompt
+from GenerativeAI.LLMSelectPapersByAbstract import run_select_bibs_filtered_by_abstract
+from GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_one_on_one
 
 
 def setup_environment():
@@ -85,7 +86,19 @@ def run_abstract_classifier_llm():
     path_directory_file_bib = path_data.replace(".bibs", bib_file)
     
     # Chamando a função com um caminho único de arquivo BibTeX
-    run_prepare_base_prompt(path_directory_file_bib)
+    run_select_bibs_filtered_by_abstract(path_directory_file_bib)
+    return True
+
+def run_abstract_classifier_llm_one_on_one():
+    bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
+    
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+    
+    path_directory_file_bib = path_data.replace(".bibs", bib_file)
+    
+    # Chamando a função one-on-one com um caminho único de arquivo BibTeX
+    run_select_bibs_filtered_by_abstract_one_on_one(path_directory_file_bib)
     return True
 
 def parse_arguments():
@@ -108,6 +121,7 @@ def parse_arguments():
     group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers')
     group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
     group.add_argument('--abstract_classifier_llm', action='store_true', help='Realiza a classificação de abstracts usando LLM')
+    group.add_argument('--abstract_classifier_llm_one_on_one', action='store_true', help='Realiza a classificação de abstracts usando LLM (modo One-on-One)')
 
     return parser.parse_args(), parser
 
@@ -121,7 +135,8 @@ if __name__ == "__main__":
     run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
-    run_abstract_llm = True
+    run_abstract_llm = False
+    run_abstract_llm_one_on_one = True
 
     setup_environment()
     
@@ -147,6 +162,8 @@ if __name__ == "__main__":
         deprecated_abstract()
     elif args.abstract_classifier_llm:
         run_abstract_classifier_llm()
+    elif args.abstract_classifier_llm_one_on_one:
+        run_abstract_classifier_llm_one_on_one()
     elif run_search_database:
         run_search()
     elif run_enrich_bibtex:
@@ -165,6 +182,8 @@ if __name__ == "__main__":
         deprecated_abstract()
     elif run_abstract_llm:
         run_abstract_classifier_llm()
+    elif run_abstract_llm_one_on_one:
+        run_abstract_classifier_llm_one_on_one()
     else:
         parser.print_help()
         sys.exit(1)

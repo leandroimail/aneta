@@ -177,6 +177,11 @@ def prepare_base_prompt(select_bib_json: str) -> str:
     for key, question in research_questions.get('additional_research_questions', {}).items():
         questions_formatted += f"{key}: {question}\n"
     
+    # Formatar as perguntas de suporte (supporting questions)
+    supporting_questions_formatted = ""
+    for key, question in research_questions.get('supporting_questions', {}).items():
+        supporting_questions_formatted += f"{key}: {question}\n"
+    
     # Formatar os critérios de rejeição
     rejection_criteria_formatted = ""
     for key, criteria in research_questions.get('rejection_criteria', {}).items():
@@ -200,12 +205,86 @@ def prepare_base_prompt(select_bib_json: str) -> str:
     # Preencher o template com as informações coletadas
     filled_prompt = prompt_template.replace("{{query}}", search_config['search_string'])
     filled_prompt = filled_prompt.replace("{{questions}}", questions_formatted)
+    filled_prompt = filled_prompt.replace("{{supporting_questions}}", supporting_questions_formatted)
     filled_prompt = filled_prompt.replace("{{rejection_criteria}}", rejection_criteria_formatted)
     filled_prompt = filled_prompt.replace("{{accepted_criteria}}", accepted_criteria_formatted)
     filled_prompt = filled_prompt.replace("{{principal_research_question}}", research_questions['principal_research_question'])
     filled_prompt = filled_prompt.replace("{{json_articles_abstracts}}", articles_abstracts_json)
     
     save_prompt_base(filled_prompt)
+    
+    return filled_prompt
+
+def prepare_single_article_prompt(article: Dict[str, Any]) -> str:
+    """
+    Prepara o prompt base para um único artigo, lendo os arquivos de configuração e preenchendo o template
+    com as informações coletadas e o abstract do artigo específico.
+    
+    Args:
+        article (Dict[str, Any]): Dicionário contendo os dados de um único artigo
+    
+    Returns:
+        str: O prompt base preenchido com as informações do artigo
+    """
+    # Definir caminhos dos arquivos de configuração
+    base_path = os.getenv("PROJECT_PATH", os.path.dirname(os.path.abspath(__file__)))
+    base_path = os.path.abspath(base_path)    
+    research_questions_path = os.path.join(base_path, 'Config', 'research_questions.yaml')
+    search_config_path = os.path.join(base_path, 'Config', 'search_config.yaml')
+    prompt_template_path = os.path.join(base_path, 'src', 'GenerativeAI', 'abstract_base_prompts_one_on_one.yaml')
+    
+    # Ler arquivos de configuração
+    try:
+        # Ler as perguntas de pesquisa
+        with open(research_questions_path, 'r', encoding='utf-8') as file:
+            research_questions = yaml.safe_load(file)
+        
+        # Ler a configuração de busca
+        with open(search_config_path, 'r', encoding='utf-8') as file:
+            search_config = yaml.safe_load(file)
+        
+        # Ler o template do prompt
+        with open(prompt_template_path, 'r', encoding='utf-8') as file:
+            prompt_template = yaml.safe_load(file)['base_prompt']
+            
+    except Exception as e:
+        print(f"Erro ao ler arquivos de configuração: {e}")
+        return ""
+    
+    # Formatar as perguntas de pesquisa
+    questions_formatted = f"principal_research_question: {research_questions['principal_research_question']}\n"
+    for key, question in research_questions.get('additional_research_questions', {}).items():
+        questions_formatted += f"{key}: {question}\n"
+    
+    # Formatar as perguntas de suporte (supporting questions)
+    supporting_questions_formatted = ""
+    for key, question in research_questions.get('supporting_questions', {}).items():
+        supporting_questions_formatted += f"{key}: {question}\n"
+    
+    # Formatar os critérios de rejeição
+    rejection_criteria_formatted = ""
+    for key, criteria in research_questions.get('rejection_criteria', {}).items():
+        rejection_criteria_formatted += f"{key}: {criteria}\n"
+    
+    # Formatar os critérios de aceitação
+    accepted_criteria_formatted = ""
+    for key, criteria in research_questions.get('accepted_criteria', {}).items():
+        accepted_criteria_formatted += f"{key}: {criteria}\n"
+    
+    # Formatar o artigo individual
+    article_formatted = f' - Title: "{article["title"]}"\n'
+    article_formatted += f' - Abstract: "{article["abstract"]}"\n'
+    article_formatted += f' - Keywords: "{article["keywords"]}"\n'
+    article_formatted += f' - ID: "{article["id"]}"\n'
+    
+    # Preencher o template com as informações coletadas
+    filled_prompt = prompt_template.replace("{{query}}", search_config['search_string'])
+    filled_prompt = filled_prompt.replace("{{questions}}", questions_formatted)
+    filled_prompt = filled_prompt.replace("{{supporting_questions}}", supporting_questions_formatted)
+    filled_prompt = filled_prompt.replace("{{rejection_criteria}}", rejection_criteria_formatted)
+    filled_prompt = filled_prompt.replace("{{accepted_criteria}}", accepted_criteria_formatted)
+    filled_prompt = filled_prompt.replace("{{principal_research_question}}", research_questions['principal_research_question'])
+    filled_prompt = filled_prompt.replace("{{json_articles_abstracts}}", article_formatted)
     
     return filled_prompt
 
@@ -255,3 +334,84 @@ def run_prepare_base_prompt(input_bibtex_path: Optional[str] = None,
         raise ValueError("Nenhum prompt base foi gerado.")
     
     return prompt
+
+def run_prepare_base_prompt_list(input_bibtex_path: Optional[str] = None, 
+                                output_path: Optional[str] = None) -> List[str]:
+    """
+    Função que gera uma lista de prompts, um para cada artigo do arquivo BibTeX,
+    e salva todos em um único arquivo markdown.
+    
+    Args:
+        input_bibtex_path (Optional[str]): Caminho para um único arquivo BibTeX.
+                                            Se None, usa o caminho padrão.
+        output_path (Optional[str]): Caminho para salvar o arquivo markdown com todos os prompts.
+                                        Se None, usa o caminho padrão.
+    
+    Returns:
+        List[str]: Lista de prompts, um para cada artigo
+    """
+    # Configuração do PATH_DATA
+    path_data = os.getenv("PATH_DATA", ".data")
+    
+    # Definir diretório de saída padrão
+    default_output_dir = os.path.join(path_data, "OUTPUTS")
+    os.makedirs(default_output_dir, exist_ok=True)
+    
+    # Definir caminho de saída padrão para o JSON se não fornecido
+    json_output_path = None
+    if output_path is None:
+        json_output_path = os.path.abspath(os.path.join(default_output_dir, "select_bibs.json"))
+    else:
+        json_output_path = output_path
+    
+    # Definir caminho para o arquivo markdown com todos os prompts
+    all_prompts_md_path = os.path.join(default_output_dir, "all_article_prompts.md")
+    
+    # Processar caminho de entrada
+    if input_bibtex_path is None:
+        # Se nenhum caminho for fornecido, tentar usar um caminho padrão
+        bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
+        input_bibtex_path = os.path.join(path_data, bib_file)
+        print(f"Nenhum caminho de entrada especificado, usando o padrão: {input_bibtex_path}")
+    
+    # Converter BibTex para JSON
+    json_data = bibtex_to_json_schema(input_bibtex_path, json_output_path)
+    
+    if not json_data:
+        print("Erro ao converter BibTex para JSON.")
+        raise ValueError("Nenhum dado JSON foi gerado.")
+    
+    # Lista para armazenar os prompts individuais
+    prompts_list = []
+    
+    # Conteúdo do arquivo markdown
+    markdown_content = "# Prompts para Análise Individual de Artigos\n\n"
+    
+    # Gerar um prompt para cada artigo
+    for idx, article in enumerate(json_data):
+        # Gerar prompt para o artigo atual
+        prompt = prepare_single_article_prompt(article)
+        if not prompt:
+            print(f"Erro ao preparar o prompt para o artigo {article['id']}")
+            continue
+        
+        prompts_list.append(prompt)
+        
+        # Adicionar o prompt ao conteúdo markdown
+        markdown_content += f"## Artigo {idx+1}: {article['id']}\n\n"
+        markdown_content += "```\n"
+        markdown_content += prompt
+        markdown_content += "\n```\n\n"
+        markdown_content += "---\n\n"
+    
+    # Salvar todos os prompts em um único arquivo markdown
+    try:
+        with open(all_prompts_md_path, 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
+        print(f"Arquivo com todos os prompts salvo com sucesso em {all_prompts_md_path}")
+    except Exception as e:
+        print(f"Erro ao salvar o arquivo markdown com todos os prompts: {e}")
+    
+    print(f"Gerados {len(prompts_list)} prompts individuais")
+    
+    return prompts_list
