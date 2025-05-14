@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM Response Schema for Article Analysis",
+  "description": "Schema for validating LLM responses analyzing a scientific article",
+  "type": "object",
+  "required": ["id", "research_questions", "is_relevant"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the article, typically a DOI"
+    },
+    "research_questions": {
+      "type": "object",
+      "description": "Questions about the research and their answers",
+      "required": ["principal_research_question"],
+      "properties": {
+        "principal_research_question": {
+          "$ref": "#/definitions/answerWithComment"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/answerWithComment"
+      }
+    },
+    "supporting_questions": {
+      "type": "object",
+      "description": "Supporting questions with flexible answer options",
+      "patternProperties": {
+        "^sq[0-9]+$": {
+          "$ref": "#/definitions/supportingQuestionAnswer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "accepted_criteria": {
+      "type": "object",
+      "description": "Criteria for accepting articles",
+      "patternProperties": {
+        "^ac[0-9]+$": {
+          "$ref": "#/definitions/answerWithComment"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rejection_criteria": {
+      "type": "object",
+      "description": "Criteria for rejecting articles",
+      "patternProperties": {
+        "^rc[0-9]+$": {
+          "$ref": "#/definitions/answerWithComment"
+        }
+      },
+      "additionalProperties": false
+    },
+    "is_relevant": {
+      "$ref": "#/definitions/answerWithComment",
+      "description": "Final determination if the article is relevant to the research"
+    },
+    "additional_questions_by_article": {
+      "type": "object",
+      "description": "Additional questions specific to this article",
+      "patternProperties": {
+        "^adq_a[0-9]+$": {
+          "type": "string",
+          "description": "Answer to an additional article-specific question"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "answerWithComment": {
+      "type": "object",
+      "required": ["answer", "comment"],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "enum": ["YES", "NO"],
+          "description": "Binary response to a question or criterion"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Explanation justifying the answer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "supportingQuestionAnswer": {
+      "type": "object",
+      "required": ["answer", "comment"],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "Response to a supporting question, can be various classifications or certainty levels"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Explanation justifying the answer"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
