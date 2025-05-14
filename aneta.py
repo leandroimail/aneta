@@ -12,8 +12,10 @@ from src.Selection import get_analyse
 from src.Bibliometry import run_bibliometry as run_bibliometry_func
 from src.BibliometryAsync import run_bibliometry as run_bibliometry_async_func
 from src.DonwloadPapers import download_all_papers
+
 from GenerativeAI.LLMSelectPapersByAbstract import run_select_bibs_filtered_by_abstract
 from GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_one_on_one
+from src.GenerativeAI.LLMUtils import bibtex_to_json_schema
 
 
 def setup_environment():
@@ -101,6 +103,29 @@ def run_abstract_classifier_llm_one_on_one():
     run_select_bibs_filtered_by_abstract_one_on_one(path_directory_file_bib)
     return True
 
+def run_bibtex_to_json_schema():
+    """
+    Executa a conversão de um arquivo BibTeX para o formato JSON seguindo um schema específico.
+    
+    Returns:
+        bool: True se a operação foi concluída com sucesso
+    """
+    bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
+    
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+    
+    path_directory_file_bib = path_data.replace(".bibs", bib_file)
+    
+    # Define o caminho de saída para o arquivo JSON
+    output_dir = os.path.join(os.path.dirname(path_data), "OUTPUTS")
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "select_bibs.json")
+    
+    # Chamando a função de conversão com os caminhos configurados
+    bibtex_to_json_schema(path_directory_file_bib, output_path)
+    return True
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Executa diferentes funcionalidades do projeto ASRL',
@@ -122,6 +147,7 @@ def parse_arguments():
     group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
     group.add_argument('--abstract_classifier_llm', action='store_true', help='Realiza a classificação de abstracts usando LLM')
     group.add_argument('--abstract_classifier_llm_one_on_one', action='store_true', help='Realiza a classificação de abstracts usando LLM (modo One-on-One)')
+    group.add_argument('--bibtex_to_json', action='store_true', help='Converte arquivo BibTeX para formato JSON com schema específico')
 
     return parser.parse_args(), parser
 
@@ -136,7 +162,8 @@ if __name__ == "__main__":
     run_download_papers = False
     run_deprecated_abstract = False
     run_abstract_llm = False
-    run_abstract_llm_one_on_one = True
+    run_abstract_llm_one_on_one = False
+    run_convert_bibtex_to_json = True
 
     setup_environment()
     
@@ -164,6 +191,8 @@ if __name__ == "__main__":
         run_abstract_classifier_llm()
     elif args.abstract_classifier_llm_one_on_one:
         run_abstract_classifier_llm_one_on_one()
+    elif args.bibtex_to_json:
+        run_bibtex_to_json_schema()
     elif run_search_database:
         run_search()
     elif run_enrich_bibtex:
@@ -184,6 +213,8 @@ if __name__ == "__main__":
         run_abstract_classifier_llm()
     elif run_abstract_llm_one_on_one:
         run_abstract_classifier_llm_one_on_one()
+    elif run_convert_bibtex_to_json:
+        run_bibtex_to_json_schema()
     else:
         parser.print_help()
         sys.exit(1)
