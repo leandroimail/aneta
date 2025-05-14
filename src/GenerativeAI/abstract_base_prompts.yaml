@@ -1,10 +1,13 @@
 base_prompt: >
-  # Query
+  #Base Instructions
 
   You are an expert in conducting systematic reviews and scoping review of scientific articles.
   You must analyze the attached abstracts, title and keywords and answer the following questions.
   You may not create information outside the scope of the attached article abstracts, title and keywords.
   You must focus mainly on the attached article abstracts.
+  Generate analysis for all json elements with abstracts. analysis and generate answers for everyone 
+
+  #Query
 
   The search query used in the scientific article databases was:
   
@@ -19,6 +22,13 @@ base_prompt: >
 
 
   {{questions}}
+
+
+  # Supporting Questions
+
+  You must answer the following supporting questions. If this question has classes, you need to classify the articles according to the classes passed in the question.
+
+  {{supporting_questions}}
 
 
   # Rejection Criteria
@@ -40,23 +50,6 @@ base_prompt: >
   {{accepted_criteria}}
 
 
-  # Additional Questions
-
-  Beyond the research questions, you must answer the following additional questions:
-
-
-  adq1: How many articles meet the search query '{{query}}' in terms of addressing '{{principal_research_question}}'?
-
-  adq2: What are the main topics discussed by the articles?
-
-  adq3: What additional key topics are addressed in the articles beyond the principal research questions?
-
-  adq4: Suggest possible additional questions to be asked for further research.
-
-  adq5: Suggest additional themes, aspects, and dimensions to be included.
-
-
-
   # Final Classification
 
   Finally, you must provide if the articles are relevant to the research question, and if they are accepted or rejected.  Answer YES or NO:
@@ -75,6 +68,30 @@ base_prompt: >
 
     - comment_relevance:
 
+
+  # Additional Research Questions by Each Article
+
+  For each article, you must answer the following additional research questions.
+
+  adq_a1: "What topics are discussed in the article is relevant to the research question?"
+
+  adq_a2: "Suggest possible additional questions to be asked for further research based on the article."
+
+
+  # Additional Questions for all articles
+
+  Beyond the research questions, you must answer the following additional questions, for all articles:
+
+
+  adq1: How many articles meet the search query '{{query}}' in terms of addressing '{{principal_research_question}}'?
+
+  adq2: What are the main topics discussed by the articles?
+
+  adq3: What additional key topics are addressed in the articles beyond the principal research questions?
+
+  adq4: Suggest possible additional questions to be asked for further research.
+
+  adq5: Suggest additional themes, aspects, and dimensions to be included.
 
 
   # Articles, Title and Keywords
@@ -95,53 +112,73 @@ base_prompt: >
   The response must be in JSON format with the following structure:
 
   {
-    "research_questions": {
-      "principal_research_question": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
-      },
-      "arq1": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
-      },
-      "arqN": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+    "articles" : [
+      {
+        "id": "10.1234/abcd",
+        "research_questions": {
+          "principal_research_question": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+          },
+          "arq1": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+          },
+          "arqN": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+          },
+          ...
+        },
+        "supporting_questions": {
+          "sq1": {
+            "answer": "YES, NO, MAYBE or NOT SURE",
+            "comment": "Comment explaining why the answer is YES, NO, MAYBE or NOT SURE."
+          },
+          "sq2": {
+            "answer": "CLASS 1, CLASS 2,  NOT CLASSIFIED or NOT SURE",
+            "comment": "Comment explaining why the answer is CLASS 1, CLASS 2,  NOT CLASSIFIED or NOT SURE."
+          },
+          ...
+        },
+        "accepted_criteria": {
+          "ac1": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+          },
+          "acN": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+          },
+          ...
+        },
+        "rejection_criteria": {
+          "rc1": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+          },
+          "rcN": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+          },
+          ...
+        },
+        "is_relevant": {
+            "answer": "YES or NO",
+            "comment": "Comment explaining why the answer is YES or NO."
+        },
+        "additional_questions_by_article": {
+          "adq_a1": "Answer to additional question 1",
+          "adq_a2": "Answer to additional question 2"
+          ...
+        },
       },
       ...
-    },
-    "accepted_criteria": {
-      "ac1": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
-      },
-      "acN": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
-      },
-      ...
-    },
-    "rejection_criteria": {
-      "rc1": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
-      },
-      "rcN": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
-      },
-      ...
-    },
-    "additional_questions": {
+    ],
+    "additional_questions_all_articles": {
       "adq1": "Answer to additional question 1",
       "adq2": "Answer to additional question 2",
       "adqN": "Answer to additional question 3",
       ...
-    },
-    "is_relevant": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
     }
   }
-
-
