@@ -50,10 +50,12 @@ def convert_bibtex_to_json_schema(bibtex_entries: List[Dict[str, Any]]) -> List[
         
         # Criar a estrutura JSON conforme o schema
         json_entry = {
+            "id": id,
+            "doi": doi,
             "title": title,
             "abstract": entry.get('abstract', ''),
             "keywords": entry.get('author_keywords', entry.get('keywords', '')),
-            "id": id,
+            
         }
         json_entries.append(json_entry)
     
