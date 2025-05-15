@@ -161,9 +161,9 @@ if __name__ == "__main__":
     run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
+    run_convert_bibtex_to_json = False
     run_abstract_llm = False
-    run_abstract_llm_one_on_one = False
-    run_convert_bibtex_to_json = True
+    run_abstract_llm_one_on_one = True
 
     setup_environment()
     

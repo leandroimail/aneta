@@ -137,3 +137,6 @@ R -e 'library(bibliometrix); biblioshiny();'
 
 ## TODO: Adicionar bibliometria e download de arquivos para final.bib além de select.bib
 ## todo: Adicionar bibliometria e download de arquivos para final.bib além de select.bib
+
+## TODO: Implementar LLM Abstract assincrono
+## TODO: Implementar parada e retomada por id do bibtex no one:one
