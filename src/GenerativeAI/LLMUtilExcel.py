@@ -50,7 +50,7 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
             return {"raw_content": content}
 
 
-def extract_responses_from_raw_text(file_content: str, research_questions: Dict[str, str] = None) -> Dict[str, Any]:
+def extract_responses_from_raw_text(file_content: str, research_questions: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """
     Extrai respostas do texto bruto quando a análise JSON falha.
     Tenta identificar padrões de resposta para as perguntas de pesquisa com base em prefixos.
@@ -343,11 +343,12 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
                         # Adicionar metadados
                         if isinstance(parsed_content, list):
                             for item in parsed_content:
-                                item['_response_id'] = response_id
-                                item['_provider'] = provider_name
-                                item['_model'] = model
-                                item['_file'] = file
-                                results[provider].append(item)
+                                if isinstance(item, dict):  # Check if item is a dictionary
+                                    item['_response_id'] = response_id
+                                    item['_provider'] = provider_name
+                                    item['_model'] = model
+                                    item['_file'] = file
+                                    results[provider].append(item)
                         else:
                             parsed_content['_response_id'] = response_id
                             parsed_content['_provider'] = provider_name
@@ -604,7 +605,7 @@ def create_excel_from_data(responses_data: Dict[str, List[Dict]],
     writer_simple.close()
 
 
-def process_responses_to_excel(base_dir: str = None) -> Tuple[str, str]:
+def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str]:
     """
     Função principal para processar respostas e criar os arquivos Excel.
     
@@ -616,17 +617,14 @@ def process_responses_to_excel(base_dir: str = None) -> Tuple[str, str]:
     """
     # Definir caminhos
     if base_dir is None:
-        base_dir = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    else:
-        base_dir = Path(base_dir)
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     
-    base_path = base_dir / ".data/OUTPUTS/raw_responses"
-    yaml_path = base_dir / "Config/research_questions.yaml"
-    json_path = base_dir / ".data/OUTPUTS/select_bibs.json"
-    output_dir = base_dir / ".data/OUTPUTS/processed_responses"
-    output_path = output_dir / "combined_responses_full.xlsx"
-    simple_output_path = output_dir / "combined_responses_simple.xlsx"
-    
+    base_path = os.path.join(base_dir, ".data", "OUTPUTS", "raw_responses")
+    yaml_path = os.path.join(base_dir, "Config", "research_questions.yaml")
+    json_path = os.path.join(base_dir, ".data", "OUTPUTS", "select_bibs.json")
+    output_dir = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses")
+    output_path = os.path.join(output_dir, "combined_responses_full.xlsx")
+    simple_output_path = os.path.join(output_dir, "combined_responses_simple.xlsx")
     # Garantir que o diretório de saída exista
     os.makedirs(output_dir, exist_ok=True)
     
