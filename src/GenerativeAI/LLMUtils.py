@@ -83,7 +83,7 @@ def save_json_to_file(json_data: List[Dict[str, Any]], output_path: str) -> None
     except Exception as e:
         print(f"Erro ao salvar o arquivo JSON: {e}")
 
-def save_prompt_base(prompt_txt: str, output_path: str = None) -> None:
+def save_prompt_base(prompt_txt: str, output_path: Optional[str] = None) -> None:
     """
     Salva o prompt base em um arquivo de texto.
 
@@ -108,13 +108,13 @@ def save_prompt_base(prompt_txt: str, output_path: str = None) -> None:
     except Exception as e:
         print(f"Erro ao salvar o arquivo de texto: {e}")
 
-def bibtex_to_json_schema(bibtex_path: str, output_path: str = None) -> List[Dict[str, Any]]:
+def bibtex_to_json_schema(bibtex_path: str, output_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Função principal que processa um arquivo BibTex e gera JSON conforme o schema.
     
     Args:
         bibtex_path (str): Caminho para o arquivo BibTex
-        output_path (str, optional): Caminho para salvar o arquivo JSON. Se None,
+        output_path (Optional[str]): Caminho para salvar o arquivo JSON. Se None,
                                     usa o caminho padrão em PATH_DATA/OUTPUTS/
         
     Returns:
@@ -138,13 +138,13 @@ def bibtex_to_json_schema(bibtex_path: str, output_path: str = None) -> List[Dic
     
     return json_entries
 
-def prepare_base_prompt(select_bib_json: str) -> str:
+def prepare_base_prompt(select_bib_json: List[Dict[str, Any]]) -> str:
     """
     Prepara o prompt base lendo os arquivos de configuração e preenchendo o template
     com as informações coletadas e os abstracts de artigos.
     
     Args:
-        select_bib_json (str): Caminho para o arquivo JSON com os abstracts dos artigos
+        select_bib_json (List[Dict[str, Any]]): Lista de dicionários com dados de artigos
     
     Returns:
         str: O prompt base preenchido com todas as informações
@@ -291,7 +291,7 @@ def prepare_single_article_prompt(article: Dict[str, Any]) -> str:
     return filled_prompt
 
 def run_prepare_base_prompt(input_bibtex_path: Optional[str] = None, 
-                            output_path: Optional[str] = None) -> List[Dict[str, Any]]:
+                            output_path: Optional[str] = None) -> str:
     """
     Função principal para classificar abstracts usando processamento de bibtex para JSON.
     
@@ -302,7 +302,7 @@ def run_prepare_base_prompt(input_bibtex_path: Optional[str] = None,
                                         Se None, usa o caminho padrão.
     
     Returns:
-        List[Dict[str, Any]]: Lista de registros convertidos para o formato JSON
+        str: O prompt base gerado a partir dos dados JSON
     """
     # Configuração do PATH_DATA
     path_data = os.getenv("PATH_DATA", ".data")
