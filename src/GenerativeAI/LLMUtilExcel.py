@@ -126,9 +126,6 @@ def convert_to_json_llm(raw_text: str) -> Dict[str, Any]:
         # Initialize the OpenAIClient
         client = OpenAIClient(api_key=api_key, model=model)
         
-        # Read the JSON schema
-        json_format = read_json_schema()
-        
         # Create prompt - sending full text without truncation
         prompt = PROMPT
         prompt = prompt.format(raw_text=raw_text).strip()
