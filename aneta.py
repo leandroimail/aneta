@@ -16,7 +16,7 @@ from src.DonwloadPapers import download_all_papers
 from GenerativeAI.LLMSelectPapersByAbstract import run_select_bibs_filtered_by_abstract
 from GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_one_on_one
 from src.GenerativeAI.LLMUtils import bibtex_to_json_schema
-
+from src.GenerativeAI.LLMUtilExcel import process_responses_to_excel  # Add import for process_responses_to_excel
 
 def setup_environment():
     load_dotenv(os.path.abspath(".conf"))
@@ -126,6 +126,21 @@ def run_bibtex_to_json_schema():
     bibtex_to_json_schema(path_directory_file_bib, output_path)
     return True
 
+def run_process_responses_to_excel():
+    """
+    Processes LLM responses into Excel files for analysis.
+    
+    Returns:
+        bool: True if the operation was completed successfully
+    """
+    # Call the process_responses_to_excel function
+    full_path, simple_path = process_responses_to_excel()
+    
+    print(f"Excel files created successfully:")
+    print(f"- Full Excel file: {full_path}")
+    print(f"- Simple Excel file: {simple_path}")
+    return True
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Executa diferentes funcionalidades do projeto ASRL',
@@ -148,6 +163,7 @@ def parse_arguments():
     group.add_argument('--abstract_classifier_llm', action='store_true', help='Realiza a classificação de abstracts usando LLM')
     group.add_argument('--abstract_classifier_llm_one_on_one', action='store_true', help='Realiza a classificação de abstracts usando LLM (modo One-on-One)')
     group.add_argument('--bibtex_to_json', action='store_true', help='Converte arquivo BibTeX para formato JSON com schema específico')
+    group.add_argument('--process_responses', action='store_true', help='Processa respostas LLM para arquivos Excel')
 
     return parser.parse_args(), parser
 
@@ -163,7 +179,8 @@ if __name__ == "__main__":
     run_deprecated_abstract = False
     run_convert_bibtex_to_json = False
     run_abstract_llm = False
-    run_abstract_llm_one_on_one = True
+    run_abstract_llm_one_on_one = False
+    run_process_excel = True  
 
     setup_environment()
     
@@ -193,6 +210,8 @@ if __name__ == "__main__":
         run_abstract_classifier_llm_one_on_one()
     elif args.bibtex_to_json:
         run_bibtex_to_json_schema()
+    elif args.process_responses:  # Add new command line argument handler
+        run_process_responses_to_excel()
     elif run_search_database:
         run_search()
     elif run_enrich_bibtex:
@@ -215,6 +234,8 @@ if __name__ == "__main__":
         run_abstract_classifier_llm_one_on_one()
     elif run_convert_bibtex_to_json:
         run_bibtex_to_json_schema()
+    elif run_process_excel:  # Add script mode handler for new function
+        run_process_responses_to_excel()
     else:
         parser.print_help()
         sys.exit(1)
