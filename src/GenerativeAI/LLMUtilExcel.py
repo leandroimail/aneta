@@ -6,9 +6,19 @@ from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 import yaml
 import pandas as pd
+from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import OpenAIClient
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv(os.path.abspath(".conf"))
+PROMPT = f"""Convert the string into valid json. json must be unique dictionary, not a list or array,
+Return only json without any other text or explanation or comments or any other text.
+Do not add any other text or explanation or comments or any other text.
+
+string json to convert:
+{{raw_text}}
+"""
+
+
 
 
 def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
@@ -33,11 +43,21 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
         content = file_content
     
     # Limpeza adicional
-    content = content.strip()
+    content = content.replace("```json", "").replace("```", "").replace("```", "").strip()
+
+    content = content.strip("[").strip("]")
     
     # Tentar analisar como JSON
     try:
-        return json.loads(content)
+        dict_json = json.loads(content)
+        if len(dict_json) == 1 and "id" not in dict_json:
+            new_dict = {}
+            for key, value in dict_json.items():
+                new_dict["id"] = key
+                new_dict = new_dict | value
+            return new_dict
+        return dict_json
+
     except json.JSONDecodeError:
         try:
             # Lidar com possíveis vírgulas no final
@@ -50,220 +70,166 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
             return {"raw_content": content}
 
 
-def extract_responses_from_raw_text(file_content: str, research_questions: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+def read_json_schema(schema_path: Optional[str] = None) -> str:
     """
-    Extrai respostas do texto bruto quando a análise JSON falha.
-    Tenta identificar padrões de resposta para as perguntas de pesquisa com base em prefixos.
+    Reads the JSON schema for formatting LLM responses.
     
     Args:
-        file_content: Conteúdo do arquivo de resposta
-        research_questions: Dicionário com as perguntas de pesquisa (opcional)
+        schema_path: Path to the JSON schema file (optional)
         
     Returns:
-        Dicionário com informações extraídas do texto bruto
+        Dictionary with the JSON schema content
     """
-    results = {}
+    # Define default path if not provided
+    if not schema_path:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        schema_path = os.path.join(base_dir, "src", "GenerativeAI", 
+                                    "json_schema_abstract_LLM_response_one_on_one.json")
     
-    # Primeiro, tentar encontrar o ID do artigo
-    id_pattern = r'(?:id|ID|Id|article[_\s]id|artigo[_\s]id)[\s:]+(\d+)'
-    id_match = re.search(id_pattern, file_content)
-    if id_match:
-        results['id'] = id_match.group(1).strip()
+    try:
+        with open(schema_path, 'r', encoding='utf-8') as file:
+            return file.read()
+    except Exception as e:
+        print(f"Error reading JSON schema: {e}")
+        # Return a basic schema in case of error
+        return """{
+            "type": "object",
+            "required": ["id", "research_questions", "is_relevant"],
+            "properties": {
+                "id": {"type": "string"},
+                "research_questions": {"type": "object"},
+                "is_relevant": {"type": "object"}
+            }
+        }"""
+
+
+def convert_to_json_llm(raw_text: str) -> Dict[str, Any]:
+    """
+    Uses OpenAI's language model to convert raw text into valid JSON.
+    Uses the OpenAIClient class for standardized LLM interaction.
     
-    # Buscar respostas baseadas em prefixos
-    # Preparar o conteúdo para busca por linhas, limpando espaços extras
-    lines = [line.strip() for line in file_content.split('\n') if line.strip()]
-    
-    # Prefixos específicos que devem ter resposta YES/NO
-    yes_no_prefixes = [
-        'rq_principal_', 'rq_arq', 'sq_', 'ac_ac', 'rc_rc', 'is_relevant_answer'
-    ]
-    
-    # Processar cada linha
-    for line in lines:
-        # Tentar encontrar qualquer prefixo de pergunta
-        prefix_match = re.search(r'^((?:rq|sq|ac|rc|is_relevant)_\w+)[\s:]+(.+)', line, re.IGNORECASE)
+    Args:
+        raw_text: Raw text to be converted to JSON
         
-        if prefix_match:
-            prefix = prefix_match.group(1).lower()
-            answer = prefix_match.group(2).strip()
-            
-            # Verificar se é um prefixo que deve ter resposta YES/NO
-            is_yes_no_prefix = any(prefix.startswith(yp) for yp in yes_no_prefixes)
-            
-            if is_yes_no_prefix:
-                # Normalizar resposta para YES/NO
-                answer_lower = answer.lower()
-                if any(pos in answer_lower for pos in ['yes', 'sim', 'true', 'verdadeiro']):
-                    results[prefix] = "YES"
-                elif any(neg in answer_lower for neg in ['no', 'não', 'false', 'falso']):
-                    results[prefix] = "NO"
-            else:
-                # Para outros prefixos, usar a resposta como está
-                results[prefix] = answer
-    
-    # Buscar is_relevant (tratamento especial)
-    if 'is_relevant' not in results and 'is_relevant_answer' not in results:
-        relevant_patterns = [
-            r'(?:is_relevant|is relevant|relevante|relevância)[\s:]+(true|false|yes|no|sim|não|verdadeiro|falso)',
-            r'(?:artigo|article)[\s\w]*(?:é|is)[\s\w]*(?:relevant|relevante)[\s:]*([^.\n,]+)'
+    Returns:
+        Dictionary with the JSON content parsed from the LLM response
+    """
+    try:
+        # Get environment variables
+        model = os.getenv("LLM_MODEL_SIMPLE", "gpt-4.1-nano")
+        api_key = os.getenv("LLM_API_KEY_SIMPLE")
+        
+        if not api_key:
+            print("Error: API key LLM_API_KEY_SIMPLE not found")
+            return {"error": "API key not found"}
+        
+        # Initialize the OpenAIClient
+        client = OpenAIClient(api_key=api_key, model=model)
+        
+        # Read the JSON schema
+        json_format = read_json_schema()
+        
+        # Create prompt - sending full text without truncation
+        prompt = PROMPT
+        prompt = prompt.format(raw_text=raw_text).strip()
+
+        # Prepare messages for the OpenAIClient
+        messages = [
+            {"role": "user", "content": prompt}
         ]
         
-        for pattern in relevant_patterns:
-            relevant_match = re.search(pattern, file_content, re.IGNORECASE)
-            if relevant_match:
-                value = relevant_match.group(1).strip().lower()
-                if any(pos in value for pos in ['yes', 'sim', 'true', 'verdadeiro']):
-                    results['is_relevant'] = "YES"
-                    break
-                elif any(neg in value for neg in ['no', 'não', 'false', 'falso']):
-                    results['is_relevant'] = "NO"
-                    break
-    
-    # Alternativa: buscar por padrões específicos se os prefixos não forem encontrados
-    if not results or (len(results) == 1 and 'id' in results):
-        # Gerar padrões baseados nas perguntas de pesquisa, se disponíveis
-        patterns = {}
+        # Use the client's invoke method to get the response
+        result_text = client.invoke(messages)
         
-        if research_questions:
-            # Gerar padrões para a pergunta principal
-            if 'principal_research_question' in research_questions:
-                key_phrases = extract_key_phrases(research_questions['principal_research_question'])
-                if key_phrases:
-                    pattern = r'(?:' + '|'.join(key_phrases) + r').*?[:]\s*([^#\n]+)'
-                    patterns['rq_principal_research_question'] = pattern
+        # Parse JSON from response
+        return clean_and_parse_json(result_text)
             
-            # Gerar padrões para perguntas adicionais
-            for key, question in research_questions.items():
-                if key.startswith('arq'):
-                    key_phrases = extract_key_phrases(question)
-                    if key_phrases:
-                        pattern = r'(?:' + '|'.join(key_phrases) + r').*?[:]\s*([^#\n]+)'
-                        patterns[f'rq_{key}'] = pattern
-                        
-            # Gerar padrões para perguntas de suporte
-            for key, question in research_questions.items():
-                if key.startswith('sq'):
-                    key_phrases = extract_key_phrases(question)
-                    if key_phrases:
-                        pattern = r'(?:' + '|'.join(key_phrases) + r').*?[:]\s*([^#\n]+)'
-                        patterns[f'sq_{key}'] = pattern
-                        
-            # Gerar padrões para critérios de aceitação
-            for key, question in research_questions.items():
-                if key.startswith('ac'):
-                    key_phrases = extract_key_phrases(question)
-                    if key_phrases:
-                        pattern = r'(?:' + '|'.join(key_phrases) + r').*?[:]\s*([^#\n]+)'
-                        patterns[f'ac_{key}'] = pattern
-                        
-            # Gerar padrões para critérios de rejeição
-            for key, question in research_questions.items():
-                if key.startswith('rc'):
-                    key_phrases = extract_key_phrases(question)
-                    if key_phrases:
-                        pattern = r'(?:' + '|'.join(key_phrases) + r').*?[:]\s*([^#\n]+)'
-                        patterns[f'rc_{key}'] = pattern
-        
-        # Se não há perguntas disponíveis ou falha na geração de padrões, usar padrões padrão
-        if not patterns:
-            patterns = {
-                'rq_principal_research_question': r'(?:main\s*data\s*quality\s*problems|problemas\s*de\s*qualidade\s*de\s*dados).*?[:]\s*([^#\n]+)',
-                'rq_arq1': r'(?:strategies|estratégias).*?(?:solve|resolver).*?(?:data\s*quality|qualidade\s*de\s*dados).*?[:]\s*([^#\n]+)',
-                'sq_1': r'(?:new\s*technique|methodology|framework|algorithm|model|nova\s*técnica|metodologia|estrutura|algoritmo|modelo).*?[:]\s*([^#\n]+)',
-                'ac_ac1': r'(?:data\s*quality\s*issues|problemas\s*de\s*qualidade\s*de\s*dados).*?[:]\s*([^#\n]+)',
-                'ac_ac2': r'(?:strategy|approach|technique|methodology|algorithm|tool|estratégia|abordagem|técnica|metodologia|algoritmo|ferramenta).*?(?:improve|quality|melhora|qualidade).*?[:]\s*([^#\n]+)',
-                'rc_rc1': r'(?:concerns\s*regarding\s*data\s*acquisition|preocupações\s*com\s*aquisição\s*de\s*dados).*?[:]\s*([^#\n]+)',
-                'rc_rc2': r'(?:data\s*quality\s*issues|problemas\s*de\s*qualidade\s*de\s*dados).*?não.*?[:]\s*([^#\n]+)',
-                'rc_rc3': r'(?:strategy|approach|technique|methodology|proposal|estratégia|abordagem|técnica|metodologia|proposta).*?improve.*?quality.*?[:]\s*([^#\n]+)',
-                'rc_rc4': r'(?:context|marine\s*ecosystems|contexto|ecossistemas\s*marinhos).*?[:]\s*([^#\n]+)'
-            }
-        
-        # Extrair respostas usando os padrões
-        for key, pattern in patterns.items():
-            match = re.search(pattern, file_content, re.IGNORECASE | re.DOTALL)
-            if match:
-                # Se for um prefixo de YES/NO, normalizar resposta
-                if any(key.startswith(yp) for yp in yes_no_prefixes):
-                    value = match.group(1).strip().lower()
-                    if any(pos in value for pos in ['yes', 'sim', 'true', 'verdadeiro']):
-                        results[key] = "YES"
-                    elif any(neg in value for neg in ['no', 'não', 'false', 'falso']):
-                        results[key] = "NO"
-                else:
-                    # Para outros padrões, usar a resposta como está
-                    results[key] = match.group(1).strip()
-    
-    # Se conseguimos encontrar pelo menos algumas informações, retornar o resultado
-    return results if results else {"raw_content": file_content.strip()}
+    except Exception as e:
+        print(f"Error using LLM for JSON conversion: {e}")
+        return {"error": str(e)}
 
 
-def extract_key_phrases(text: str) -> List[str]:
+def save_parsed_json(parsed_content: Dict[str, Any], provider: str, model: str, file: str, base_dir: Optional[str] = None) -> str:
     """
-    Extrai frases-chave de uma pergunta para criar padrões de busca,
-    utilizando abordagem baseada na estrutura do texto sem termos predefinidos.
+    Saves the parsed JSON content to a file organized by provider and model.
     
     Args:
-        text: Texto da pergunta
+        parsed_content: The parsed JSON content to save
+        provider: Provider name (e.g., 'OpenAI', 'Gemini')
+        model: Model name (e.g., 'gpt-4', 'gemini-pro')
+        file: Original file name
+        base_dir: Base directory for output (optional)
         
     Returns:
-        Lista de frases-chave
+        str: Path to the saved JSON file
     """
-    # Limpar o texto
-    text = text.lower().strip()
-    keywords = []
+    # Determine base directory
+    if base_dir is None:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     
-    # 1. Extrair palavras longas (geralmente substantivos ou palavras-chave)
-    words = re.findall(r'\b\w{4,}\b', text)
-    if words:
-        # Ordenar por tamanho, palavras mais longas tendem a ser mais informativas
-        long_words = sorted(set(words), key=len, reverse=True)
-        # Adicionar as palavras mais longas (até 5)
-        keywords.extend(long_words[:5])
+    # Create the output directory structure
+    output_base = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses", "final_json")
+    if not os.path.exists(output_base):
+        os.makedirs(output_base)
+    provider_dir = os.path.join(output_base, provider)
+    model_dir = os.path.join(provider_dir, model)
     
-    # 2. Extrair possíveis frases nominais (substantivo + adjetivo)
-    noun_phrases = re.findall(r'\b\w{3,}\s+\w{3,}\b', text)
-    if noun_phrases:
-        # Adicionar até 3 frases nominais mais longas
-        sorted_phrases = sorted(set(noun_phrases), key=len, reverse=True)
-        keywords.extend(sorted_phrases[:3])
+    # Create directories if they don't exist
+    os.makedirs(model_dir, exist_ok=True)
     
-    # 3. Identificar termos de questão (começam com o quê, quais, como)
-    question_terms = re.findall(r'\b(what|which|how|who|where|quando|como|quais|qual|quem|onde)\s+\w+\s+\w+', text)
-    if question_terms:
-        keywords.extend(question_terms[:2])
+    # Create output filename - replace _raw.txt with .json
+    output_filename = file.replace("_raw.txt", ".json")
+    output_path = os.path.join(model_dir, output_filename)
     
-    # 4. Capturar possíveis tópicos entre aspas
-    quotes = re.findall(r'"([^"]+)"', text)
-    if quotes:
-        keywords.extend(quotes)
+    # Save the JSON content
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(parsed_content, f, ensure_ascii=False, indent=2)
+        return output_path
+    except Exception as e:
+        print(f"Error saving JSON file {output_path}: {e}")
+        return ""
+
+
+def save_unconverted_files_log(unconverted_files: List[str], base_dir: Optional[str] = None) -> str:
+    """
+    Saves a log file with the list of files that couldn't be converted to proper JSON.
     
-    # Remover duplicatas e preservar a ordem
-    unique_keywords = []
-    for kw in keywords:
-        if kw not in unique_keywords:
-            unique_keywords.append(kw)
+    Args:
+        unconverted_files: List of file paths that couldn't be converted
+        base_dir: Base directory for output (optional)
+        
+    Returns:
+        str: Path to the saved log file
+    """
+    if not unconverted_files:
+        return ""
+        
+    # Determine base directory
+    if base_dir is None:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     
-    # Se não encontramos palavras-chave suficientes, usar o início da frase
-    if len(unique_keywords) < 2:
-        words = text.split()
-        if len(words) > 5:
-            # Usar as primeiras 5 palavras da pergunta
-            start_phrase = ' '.join(words[:5])
-            unique_keywords.append(start_phrase)
+    # Create the output directory structure
+    output_dir = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses", "logs")
+    os.makedirs(output_dir, exist_ok=True)
     
-    # Escapar caracteres especiais para regex
-    escaped_keywords = [re.escape(kw) for kw in unique_keywords]
+    # Create output filename with timestamp
+    timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+    log_path = os.path.join(output_dir, f"unconverted_files_{timestamp}.log")
     
-    # Se ainda não temos palavras-chave, dividir em tokens e usar os primeiros
-    if not escaped_keywords:
-        tokens = re.findall(r'\b\w+\b', text)
-        if tokens:
-            escaped_keywords = [re.escape(tokens[0])]
-            if len(tokens) > 1:
-                escaped_keywords.append(re.escape(tokens[1]))
-    
-    return escaped_keywords
+    # Save the log content
+    try:
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(f"Unconverted files log - {pd.Timestamp.now()}\n")
+            f.write("="*80 + "\n\n")
+            f.write(f"Total unconverted files: {len(unconverted_files)}\n\n")
+            for i, file_path in enumerate(unconverted_files, 1):
+                f.write(f"{i}. {file_path}\n")
+        print(f"Unconverted files log saved to: {log_path}")
+        return log_path
+    except Exception as e:
+        print(f"Error saving unconverted files log: {e}")
+        return ""
 
 
 def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -286,6 +252,7 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
             print(f"Erro ao ler perguntas de pesquisa: {e}")
     
     results = {}
+    unconverted_files = []  # Track files that couldn't be converted
     
     # Percorrer todos os subdiretórios
     for root, dirs, files in os.walk(base_path):
@@ -332,12 +299,15 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
                     parsed_content = clean_and_parse_json(content)
                     
                     # Verificar se o conteúdo analisado possui informações úteis
-                    if parsed_content and not (len(parsed_content) == 1 and "raw_content" in parsed_content):
-                        # Conteúdo JSON válido encontrado
-                        pass
-                    else:
-                        # Tentar extrair respostas do texto bruto usando as perguntas de pesquisa
-                        parsed_content = extract_responses_from_raw_text(content, research_questions)
+                    if "raw_content" in parsed_content:
+                        # Tentar extrair respostas do texto bruto usando o LLM
+                        parsed_content = convert_to_json_llm(parsed_content['raw_content'])
+                        
+                        # Check if conversion was successful
+                        if "raw_content" in parsed_content:
+                            # Conversion failed, add to list of unconverted files
+                            unconverted_files.append(file_path)
+                            print(f"Warning: Failed to convert {file_path} using LLM")
                     
                     if parsed_content:
                         # Adicionar metadados
@@ -348,15 +318,28 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
                                     item['_provider'] = provider_name
                                     item['_model'] = model
                                     item['_file'] = file
+                                    # Save the parsed JSON to a file
+                                    json_path = save_parsed_json(item, provider_name, model, file)
+                                    if json_path:
+                                        item['_json_path'] = json_path
                                     results[provider].append(item)
                         else:
                             parsed_content['_response_id'] = response_id
                             parsed_content['_provider'] = provider_name
                             parsed_content['_model'] = model
                             parsed_content['_file'] = file
+                            # Save the parsed JSON to a file
+                            json_path = save_parsed_json(parsed_content, provider_name, model, file)
+                            if json_path:
+                                parsed_content['_json_path'] = json_path
                             results[provider].append(parsed_content)
                 except Exception as e:
                     print(f"Erro ao processar arquivo {file_path}: {e}")
+                    unconverted_files.append(file_path)
+    
+    # Save log of unconverted files
+    if unconverted_files:
+        save_unconverted_files_log(unconverted_files)
     
     return results
 
@@ -644,10 +627,6 @@ def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str
     print(f"- Arquivo completo: {output_path}")
     print(f"- Arquivo simplificado: {simple_output_path}")
     return str(output_path), str(simple_output_path)
-
-
-if __name__ == "__main__":
-    process_responses_to_excel()
 
 
 
