@@ -19,6 +19,37 @@ string json to convert:
 """
 
 
+def read_json_schema(schema_path: Optional[str] = None) -> str:
+    """
+    Reads the JSON schema for formatting LLM responses.
+    
+    Args:
+        schema_path: Path to the JSON schema file (optional)
+        
+    Returns:
+        Dictionary with the JSON schema content
+    """
+    # Define default path if not provided
+    if not schema_path:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        schema_path = os.path.join(base_dir, "src", "GenerativeAI", 
+                                    "json_schema_abstract_LLM_response_one_on_one.json")
+    
+    try:
+        with open(schema_path, 'r', encoding='utf-8') as file:
+            return file.read()
+    except Exception as e:
+        print(f"Error reading JSON schema: {e}")
+        # Return a basic schema in case of error
+        return """{
+            "type": "object",
+            "required": ["id", "research_questions", "is_relevant"],
+            "properties": {
+                "id": {"type": "string"},
+                "research_questions": {"type": "object"},
+                "is_relevant": {"type": "object"}
+            }
+        }"""
 
 
 def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
@@ -68,39 +99,6 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
             print(f"Falha ao analisar JSON: {e}")
             # Retornar conteúdo bruto como fallback
             return {"raw_content": content}
-
-
-def read_json_schema(schema_path: Optional[str] = None) -> str:
-    """
-    Reads the JSON schema for formatting LLM responses.
-    
-    Args:
-        schema_path: Path to the JSON schema file (optional)
-        
-    Returns:
-        Dictionary with the JSON schema content
-    """
-    # Define default path if not provided
-    if not schema_path:
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        schema_path = os.path.join(base_dir, "src", "GenerativeAI", 
-                                    "json_schema_abstract_LLM_response_one_on_one.json")
-    
-    try:
-        with open(schema_path, 'r', encoding='utf-8') as file:
-            return file.read()
-    except Exception as e:
-        print(f"Error reading JSON schema: {e}")
-        # Return a basic schema in case of error
-        return """{
-            "type": "object",
-            "required": ["id", "research_questions", "is_relevant"],
-            "properties": {
-                "id": {"type": "string"},
-                "research_questions": {"type": "object"},
-                "is_relevant": {"type": "object"}
-            }
-        }"""
 
 
 def convert_to_json_llm(raw_text: str) -> Dict[str, Any]:
