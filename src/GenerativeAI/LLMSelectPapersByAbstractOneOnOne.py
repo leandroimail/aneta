@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import re  # Adicionada importação para expressões regulares
 from typing import Dict, List, Optional, Any, Union, Literal, TypeVar, Generic, Type
 from dotenv import load_dotenv
 from pathlib import Path
@@ -660,6 +661,103 @@ def save_llm_responses_to_file(responses: List[ArticleAnalysis], output_path: Op
         print(f"Error saving LLM responses: {e}")
 
 
+def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
+    """
+    Cleans and parses JSON content from raw responses.
+    
+    Args:
+        file_content: Response file content
+        
+    Returns:
+        Dictionary containing the parsed JSON data
+    """
+    # Check if content is within code blocks
+    json_block_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+    matches = re.findall(json_block_pattern, file_content)
+    
+    if matches:
+        # Get the first JSON block
+        content = matches[0]
+    else:
+        # No code blocks, use raw content
+        content = file_content
+    
+    # Additional cleaning
+    content = content.replace("```json", "").replace("```", "").strip()
+    content = content.strip("[").strip("]")
+    
+    # Try to parse as JSON
+    try:
+        dict_json = json.loads(content)
+        if len(dict_json) == 1 and "id" not in dict_json:
+            new_dict = {}
+            for key, value in dict_json.items():
+                new_dict["id"] = key
+                new_dict = new_dict | value
+            return new_dict
+        return dict_json
+
+    except json.JSONDecodeError:
+        try:
+            # Handle possible trailing commas
+            content = re.sub(r',\s*}', '}', content)
+            content = re.sub(r',\s*]', ']', content)
+            return json.loads(content)
+        except json.JSONDecodeError:
+            # Return raw content as fallback
+            return {"raw_content": content}
+
+
+def convert_to_json_llm(raw_text: str, llm_client: Optional[LLMClient] = None) -> Dict[str, Any]:
+    """
+    Uses a language model to convert raw text into valid JSON.
+    
+    Args:
+        raw_text: Raw text to be converted to JSON
+        llm_client: Optional LLM client instance to use
+        
+    Returns:
+        Dictionary with the JSON content parsed from the LLM response
+    """
+    try:
+        # Define a prompt for JSON conversion
+        prompt = f"""Convert the string into valid json. json must be unique dictionary, not a list or array,
+Return only json without any other text or explanation or comments or any other text.
+Do not add any other text or explanation or comments or any other text.
+
+string json to convert:
+{raw_text}
+"""
+        
+        # Use the provided LLM client or create a new one
+        if llm_client is None:
+            # Get environment variables
+            model = os.getenv("LLM_MODEL_SIMPLE", "gpt-4.1-nano")
+            api_key = os.getenv("LLM_API_KEY_SIMPLE") or os.getenv("LLM_API_KEY_ABSTRACT")
+            
+            if not api_key:
+                print("Error: API key for LLM not found")
+                return {"error": "API key not found"}
+            
+            # Initialize a client
+            llm_client = OpenAIClient(api_key=api_key, model=model)
+        
+        # Prepare messages
+        messages = [
+            {"role": "user", "content": prompt}
+        ]
+        
+        # Get the response
+        result_text = llm_client.invoke(messages)
+        
+        # Parse JSON from response
+        return clean_and_parse_json(result_text)
+            
+    except Exception as e:
+        print(f"Error using LLM for JSON conversion: {e}")
+        return {"error": str(e)}
+
+
 def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None, 
                                             output_path: Optional[str] = None) -> List[ArticleAnalysis]:
     """
@@ -710,9 +808,24 @@ def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = Non
                         if end_idx > start_idx:
                             json_content = json_content[start_idx:end_idx].strip()
                     
-                    # Parse JSON response
-                    parsed_response = json.loads(json_content)
-                    
+                    # Parse JSON response - primeira tentativa
+                    try:
+                        parsed_response = json.loads(json_content)
+                    except json.JSONDecodeError:
+                        # Primeira tentativa falhou, usar clean_and_parse_json
+                        print(f"⚠ JSON decode failed for article {idx+1}, trying advanced cleaning...")
+                        parsed_response = clean_and_parse_json(raw_response)
+                        
+                        # Se ainda contiver raw_content, tentar convert_to_json_llm
+                        if "raw_content" in parsed_response:
+                            print(f"⚠ Attempting LLM conversion for article {idx+1}")
+                            parsed_response = convert_to_json_llm(parsed_response["raw_content"], llm_client)
+                        
+                    if "raw_content" in parsed_response:
+                        parsed_response = parsed_response["raw_content"]
+                    else:
+                        raw_response = json.dumps(parsed_response, ensure_ascii=False)
+
                     # Check if response has the {'articles': [...]} structure and extract the article
                     if isinstance(parsed_response, dict) and 'articles' in parsed_response and isinstance(parsed_response['articles'], list) and parsed_response['articles']:
                         # Extract the first article from the 'articles' array
