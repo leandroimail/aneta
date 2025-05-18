@@ -156,3 +156,12 @@ base_prompt: >
       ...
     },
   }
+
+
+  # Notes
+  - The JSON must be valid and well-formed.
+  - The JSON must be in lowercase.
+  - The JSON must not contain any extra spaces or new lines.
+  - The JSON must not contain any extra information or comments outside the specified structure.
+  - The JSON must be a unique dictionary, not a list or array.
+  - The JSON must be contain the keys: id, research_questions, accepted_criteria, rejection_criteria, is_relevant, additional_questions_by_article and the sub-keys as necessary.
