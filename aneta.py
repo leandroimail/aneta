@@ -15,8 +15,9 @@ from src.DonwloadPapers import download_all_papers
 
 from GenerativeAI.LLMSelectPapersByAbstract import run_select_bibs_filtered_by_abstract
 from GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_one_on_one
+from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOneAsync import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_async
 from src.GenerativeAI.LLMUtils import bibtex_to_json_schema
-from src.GenerativeAI.LLMUtilExcel import process_responses_to_excel  # Add import for process_responses_to_excel
+from src.GenerativeAI.LLMUtilExcel import process_responses_to_excel
 
 def setup_environment():
     load_dotenv(os.path.abspath(".conf"))
@@ -103,6 +104,24 @@ def run_abstract_classifier_llm_one_on_one():
     run_select_bibs_filtered_by_abstract_one_on_one(path_directory_file_bib)
     return True
 
+def run_abstract_classifier_llm_one_on_one_async():
+    """
+    Executa a classificação de abstracts usando LLM de forma assíncrona (modo One-on-One).
+    
+    Returns:
+        bool: True se a operação foi concluída com sucesso
+    """
+    bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
+    
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+    
+    path_directory_file_bib = path_data.replace(".bibs", bib_file)
+    
+    # Chamando a função assíncrona com asyncio.run
+    asyncio.run(run_select_bibs_filtered_by_abstract_async(path_directory_file_bib))
+    return True
+
 def run_bibtex_to_json_schema():
     """
     Executa a conversão de um arquivo BibTeX para o formato JSON seguindo um schema específico.
@@ -162,10 +181,12 @@ def parse_arguments():
     group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
     group.add_argument('--abstract_classifier_llm', action='store_true', help='Realiza a classificação de abstracts usando LLM')
     group.add_argument('--abstract_classifier_llm_one_on_one', action='store_true', help='Realiza a classificação de abstracts usando LLM (modo One-on-One)')
+    group.add_argument('--abstract_classifier_llm_one_on_one_async', action='store_true', help='Realiza a classificação de abstracts usando LLM de forma assíncrona (modo One-on-One)')
     group.add_argument('--bibtex_to_json', action='store_true', help='Converte arquivo BibTeX para formato JSON com schema específico')
     group.add_argument('--process_responses', action='store_true', help='Processa respostas LLM para arquivos Excel')
 
     return parser.parse_args(), parser
+
 
 if __name__ == "__main__":
     ###################  Variáveis de configuração (modo script)
@@ -180,7 +201,8 @@ if __name__ == "__main__":
     run_convert_bibtex_to_json = False
     run_abstract_llm = False
     run_abstract_llm_one_on_one = False
-    run_process_excel = True  
+    run_abstract_llm_one_on_one_async = False  # New variable for async version
+    run_process_excel = False  
 
     setup_environment()
     
@@ -208,6 +230,8 @@ if __name__ == "__main__":
         run_abstract_classifier_llm()
     elif args.abstract_classifier_llm_one_on_one:
         run_abstract_classifier_llm_one_on_one()
+    elif args.abstract_classifier_llm_one_on_one_async:  # Add new CLI argument handler
+        run_abstract_classifier_llm_one_on_one_async()
     elif args.bibtex_to_json:
         run_bibtex_to_json_schema()
     elif args.process_responses:  # Add new command line argument handler
@@ -232,6 +256,8 @@ if __name__ == "__main__":
         run_abstract_classifier_llm()
     elif run_abstract_llm_one_on_one:
         run_abstract_classifier_llm_one_on_one()
+    elif run_abstract_llm_one_on_one_async:  # Add script mode handler
+        run_abstract_classifier_llm_one_on_one_async()
     elif run_convert_bibtex_to_json:
         run_bibtex_to_json_schema()
     elif run_process_excel:  # Add script mode handler for new function
