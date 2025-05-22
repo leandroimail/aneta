@@ -759,6 +759,34 @@ string json to convert:
         return {"error": str(e)}
 
 
+def check_raw_response_exists(idx: int, llm_type: str, llm_model: str, output_dir: Optional[str] = None) -> bool:
+    """
+    Checks if raw response file already exists for a specific article index.
+    
+    Args:
+        idx (int): Index of the article (1-based)
+        llm_type (str): Type of LLM used (e.g., "OpenAI", "Gemini")
+        llm_model (str): Model name used
+        output_dir (Optional[str]): Directory where raw responses are saved
+        
+    Returns:
+        bool: True if file exists, False otherwise
+    """
+    try:
+        path_data = os.getenv("PATH_DATA", ".data")
+        
+        if not output_dir:
+            output_dir = os.path.join(path_data, "OUTPUTS", "raw_responses", llm_type)
+        
+        # Check for individual raw response file
+        individual_path = os.path.join(output_dir, f"response_{idx+1}_{llm_type}_{llm_model}_raw.txt")
+        
+        return os.path.exists(individual_path)
+        
+    except Exception:
+        # If there's any error checking, assume file doesn't exist
+        return False
+
 def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None, 
                                             output_path: Optional[str] = None) -> List[ArticleAnalysis]:
     """
@@ -781,12 +809,69 @@ def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = Non
     raw_responses = []
     article_analyses = []
     
+    # Verificar se devemos sobrescrever arquivos existentes
+    overwrite = os.getenv("LLM_OVERWRITE_ABSTRACT", "False").lower() == "true"
+    llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+    llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
+    path_data = os.getenv("PATH_DATA", ".data")
+    
+    # Preparar diretório para verificação de arquivos
+    output_dir = os.path.join(path_data, "OUTPUTS", "raw_responses", llm_type)
+    os.makedirs(output_dir, exist_ok=True)
+    
     try:
         print(f"Processing {len(prompt_list)} articles one by one...")
         
         # Process each prompt individually
         for idx, prompt in enumerate(prompt_list):
             print(f"Processing article {idx+1}/{len(prompt_list)}...")
+            
+            # Verificar se o arquivo RAW já existe
+            if not overwrite and check_raw_response_exists(idx, llm_type, llm_model, output_dir):
+                print(f"⏩ Skipping LLM call for article {idx+1} - raw response file already exists.")
+                print(f"   Set LLM_OVERWRITE_ABSTRACT=True to override existing files.")
+                
+                # Tentar ler e processar o arquivo existente
+                try:
+                    individual_path = os.path.join(output_dir, f"response_{idx+1}_{llm_type}_{llm_model}_raw.txt")
+                    with open(individual_path, 'r', encoding='utf-8') as f:
+                        raw_response = f.read()
+                        
+                    raw_responses.append(raw_response)
+                    
+                    # Tentar processar o conteúdo existente
+                    try:
+                        parsed_response = clean_and_parse_json(raw_response)
+                        
+                        if "raw_content" in parsed_response:
+                            parsed_response = convert_to_json_llm(parsed_response["raw_content"], llm_client)
+                        
+                        # Check if response has the {'articles': [...]} structure and extract the article
+                        if isinstance(parsed_response, dict) and 'articles' in parsed_response and isinstance(parsed_response['articles'], list) and parsed_response['articles']:
+                            # Extract the first article from the 'articles' array
+                            parsed_response = parsed_response['articles'][0]
+                        
+                        # Convert to ArticleAnalysis
+                        try:
+                            # Try pydantic v2 approach first
+                            article_analysis = ArticleAnalysis.model_validate(parsed_response)
+                        except AttributeError:
+                            # Fall back to pydantic v1 approach
+                            article_analysis = ArticleAnalysis.parse_obj(parsed_response)
+                        
+                        article_analyses.append(article_analysis)
+                        print(f"✓ Article {idx+1} successfully loaded from existing file")
+                        
+                    except Exception as e:
+                        print(f"⚠ Error processing existing file for article {idx+1}: {e}")
+                        continue
+                        
+                except Exception as e:
+                    print(f"⚠ Error reading existing file for article {idx+1}: {e}")
+                    continue
+                
+                # Skip to next article
+                continue
             
             # Send message to LLM
             messages = [

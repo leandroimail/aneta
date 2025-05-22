@@ -1002,6 +1002,34 @@ async def process_article_async(article: SequencedArticle, llm_client: LLMClient
         article.set_error(e)
 
 
+def check_raw_response_exists(idx: int, llm_type: str, llm_model: str, output_dir: Optional[str] = None) -> bool:
+    """
+    Checks if raw response file already exists for a specific article index.
+    
+    Args:
+        idx (int): Index of the article (0-based)
+        llm_type (str): Type of LLM used (e.g., "OpenAI", "Gemini")
+        llm_model (str): Model name used
+        output_dir (Optional[str]): Directory where raw responses are saved
+        
+    Returns:
+        bool: True if file exists, False otherwise
+    """
+    try:
+        path_data = os.getenv("PATH_DATA", ".data")
+        
+        if not output_dir:
+            output_dir = os.path.join(path_data, "OUTPUTS", "raw_responses", llm_type)
+        
+        # Filename format matches the one used in save_raw_llm_responses function
+        filepath = os.path.join(output_dir, f"response_{idx+1}_{llm_type}_{llm_model}_raw.txt")
+        
+        return os.path.exists(filepath)
+        
+    except Exception:
+        return False
+
+
 # Function to get rate limit from environment variable
 def get_rate_limit() -> float:
     """
@@ -1028,14 +1056,14 @@ def get_rate_limit() -> float:
         print(f"Could not parse rate limit value: {rate_limit_str}. Using default of {default_rate_limit} requests/second")
         return default_rate_limit
 
-
 # Modified version of process_article_async with rate limiting
 async def process_article_async_with_rate_limit(article: SequencedArticle, 
-                                               llm_client: LLMClient, 
-                                               semaphore: asyncio.Semaphore,
-                                               min_delay: float) -> None:
+                                                llm_client: LLMClient, 
+                                                semaphore: asyncio.Semaphore,
+                                                min_delay: float) -> None:
     """
     Process single article prompt asynchronously with rate limiting.
+    Checks if raw response file already exists before calling LLM.
     
     Args:
         article: SequencedArticle object containing prompt and sequence
@@ -1043,6 +1071,81 @@ async def process_article_async_with_rate_limit(article: SequencedArticle,
         semaphore: Semaphore to control concurrent requests
         min_delay: Minimum delay between requests in seconds
     """
+    # Verificar se devemos sobrescrever arquivos existentes
+    overwrite = os.getenv("LLM_OVERWRITE_ABSTRACT", "False").lower() == "true"
+    llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+    llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
+    path_data = os.getenv("PATH_DATA", ".data")
+    
+    # Preparar diretório para verificação de arquivos
+    output_dir = os.path.join(path_data, "OUTPUTS", "raw_responses", llm_type)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Verificar se o arquivo RAW já existe
+    if not overwrite and check_raw_response_exists(article.sequence, llm_type, llm_model, output_dir):
+        print(f"⏩ Skipping LLM call for article {article.sequence+1} - raw response file already exists.")
+        print(f"   Set LLM_OVERWRITE_ABSTRACT=True to override existing files.")
+        
+        # Tentar ler e processar o arquivo existente
+        try:
+            individual_path = os.path.join(output_dir, f"response_{article.sequence+1}_{llm_type}_{llm_model}_raw.txt")
+            with open(individual_path, 'r', encoding='utf-8') as f:
+                raw_response = f.read()
+                
+            article.raw_response = raw_response
+            
+            # Tentar processar o conteúdo existente
+            try:
+                # Clean response to extract JSON content
+                json_content = raw_response
+                if "```json" in json_content:
+                    # Extract JSON from markdown code block if present
+                    start_idx = json_content.find("```json") + 7
+                    end_idx = json_content.find("```", start_idx)
+                    if end_idx > start_idx:
+                        json_content = json_content[start_idx:end_idx].strip()
+                
+                # Parse JSON response
+                try:
+                    parsed_response = json.loads(json_content)
+                except json.JSONDecodeError:
+                    # Primeira tentativa falhou, usar clean_and_parse_json
+                    print(f"⚠ JSON decode failed for article {article.sequence+1}, trying advanced cleaning...")
+                    parsed_response = clean_and_parse_json(raw_response)
+                    
+                    # Se ainda contiver raw_content, tentar convert_to_json_llm
+                    if "raw_content" in parsed_response:
+                        print(f"⚠ Attempting LLM conversion for article {article.sequence+1}")
+                        parsed_response = await asyncio.to_thread(convert_to_json_llm, parsed_response["raw_content"], llm_client)
+                
+                if "raw_content" in parsed_response:
+                    parsed_response = parsed_response["raw_content"]
+                
+                # Check if response has the {'articles': [...]} structure and extract the article
+                if isinstance(parsed_response, dict) and 'articles' in parsed_response and isinstance(parsed_response['articles'], list) and parsed_response['articles']:
+                    # Extract the first article from the 'articles' array
+                    parsed_response = parsed_response['articles'][0]
+                
+                # Convert to ArticleAnalysis
+                try:
+                    # Try pydantic v2 approach first
+                    article_analysis = ArticleAnalysis.model_validate(parsed_response)
+                except AttributeError:
+                    # Fall back to pydantic v1 approach
+                    article_analysis = ArticleAnalysis.parse_obj(parsed_response)
+                
+                article.article_analysis = article_analysis
+                print(f"✓ Article {article.sequence+1} successfully loaded from existing file")
+                
+            except Exception as e:
+                print(f"⚠ Error processing existing file for article {article.sequence+1}: {e}")
+                
+        except Exception as e:
+            print(f"⚠ Error reading existing file for article {article.sequence+1}: {e}")
+        
+        return
+    
+    # Se o arquivo não existe ou se devemos sobrescrever, processa normalmente
     async with semaphore:
         # Record start time for rate limiting
         start_time = asyncio.get_event_loop().time()
@@ -1129,7 +1232,7 @@ async def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str]
 
 # Função principal refatorada para usar assincronidade
 async def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None, 
-                                              output_path: Optional[str] = None):
+                                                output_path: Optional[str] = None):
     """
     Main function to run the LLM analysis pipeline.
     
