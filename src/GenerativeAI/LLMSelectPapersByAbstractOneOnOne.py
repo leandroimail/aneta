@@ -321,6 +321,7 @@ class GeminiClient(LLMClient):
             # Gemini expects contents as a string or a list of strings, not as a list of dicts.
             # We need to concatenate all user and system messages into a single string prompt.
             # Only user and system roles are relevant for the prompt.
+            is_reasonear = os.getenv("LLM_IS_REASONER_ABSTRACT", "False").lower() == "true"
             prompt_parts = []
             for msg in messages:
                 if msg["role"] in ("user", "system"):
@@ -329,7 +330,7 @@ class GeminiClient(LLMClient):
 
             # Check if the model is from the gemini-2.5-flash family to add thinking_config
             model_lower = self.model_name.lower()
-            if model_lower.startswith("gemini-2.5-flash"):
+            if model_lower.startswith("gemini-2.5-flash") and not is_reasonear:
                 config = genai_types.GenerateContentConfig(
                     thinking_config=genai_types.ThinkingConfig(thinking_budget=0)
                 )
