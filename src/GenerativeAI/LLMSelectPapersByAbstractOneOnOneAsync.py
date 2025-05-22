@@ -2,14 +2,15 @@ import os
 import sys
 import json
 import re  # Adicionada importação para expressões regulares
-from typing import Dict, List, Optional, Any, Union, Literal, TypeVar, Generic, Type
+from typing import Dict, List, Optional, Any, Union, Literal, TypeVar, Generic, Type, Tuple
 from dotenv import load_dotenv
 from pathlib import Path
 import asyncio  # added for asynchronous support
+import aiohttp  # added for async HTTP requests
 # Update import statements for the Google Generative AI library
 from google import genai
 from google.genai import types as genai_types  # Import types for config
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI  # Import AsyncOpenAI for async operations
 from pydantic import BaseModel, Field, field_validator  # Atualizado para usar field_validator
 
 # Local imports
@@ -142,6 +143,33 @@ class LLMClient(Generic[T]):
             T: Parsed response in the specified Pydantic model
         """
         raise NotImplementedError("Subclasses must implement parse method")
+    
+    async def async_invoke(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Asynchronously invoke the LLM with the given messages.
+        
+        Args:
+            messages: List of message dicts with role and content
+            
+        Returns:
+            str: The content of the LLM's response
+        """
+        # Default implementation runs the synchronous version in a thread pool
+        return await asyncio.to_thread(self.invoke, messages)
+    
+    async def async_parse(self, messages: List[Dict[str, str]], response_model: Type[T]) -> T:
+        """
+        Asynchronously parse the LLM response directly into a Pydantic model.
+        
+        Args:
+            messages: List of message dicts with role and content
+            response_model: Pydantic model class to parse the response into
+            
+        Returns:
+            T: Parsed response in the specified Pydantic model
+        """
+        # Default implementation runs the synchronous version in a thread pool
+        return await asyncio.to_thread(self.parse, messages, response_model)
 
 
 class OpenAIClient(LLMClient):
@@ -156,6 +184,7 @@ class OpenAIClient(LLMClient):
             model: Model name to use
         """
         self.client = OpenAI(api_key=api_key)
+        self.async_client = AsyncOpenAI(api_key=api_key)
         self.model = model
     
     def invoke(self, messages: List[Dict[str, str]]) -> str:
@@ -181,6 +210,29 @@ class OpenAIClient(LLMClient):
         except Exception as e:
             raise Exception(f"Error invoking OpenAI model: {e}")
     
+    async def async_invoke(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Asynchronously invoke the OpenAI model with the given messages.
+        
+        Args:
+            messages: List of message dicts with role and content
+            
+        Returns:
+            str: The content of the model's response
+        """
+        try:
+            # Create request parameters
+            request_params = {
+                "model": self.model,
+                "messages": messages,
+            }
+                
+            response = await self.async_client.chat.completions.create(**request_params)
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            raise Exception(f"Error asynchronously invoking OpenAI model: {e}")
+    
     def parse(self, messages: List[Dict[str, str]], response_model: Type[T]) -> T:
         """
         Parse the OpenAI response directly into a Pydantic model.
@@ -203,8 +255,8 @@ class OpenAIClient(LLMClient):
             completion = self.client.chat.completions.create(**request_params)
             response_content = completion.choices[0].message.content
             
-            # Save raw response content
-            save_raw_llm_response(response_content)
+            # Save raw response content - we'll do this in the main processing function
+            # to avoid I/O during async operations
             
             # Parse JSON response
             parsed_response = json.loads(response_content)
@@ -218,6 +270,45 @@ class OpenAIClient(LLMClient):
             
         except Exception as e:
             raise Exception(f"Error parsing OpenAI response: {e}")
+    
+    async def async_parse(self, messages: List[Dict[str, str]], response_model: Type[T]) -> T:
+        """
+        Asynchronously parse the OpenAI response directly into a Pydantic model.
+        
+        Args:
+            messages: List of message dicts with role and content
+            response_model: Pydantic model class to parse the response into
+            
+        Returns:
+            T: Parsed response in the specified Pydantic model
+        """
+        try:
+            # Create request parameters with json format
+            request_params = {
+                "model": self.model,
+                "messages": messages,
+                "response_format": {"type": "json_object"},
+            }
+            
+            completion = await self.async_client.chat.completions.create(**request_params)
+            response_content = completion.choices[0].message.content
+            
+            # Save raw response content - we'll do this in the main processing function
+            # to avoid I/O during async operations
+            
+            # Parse JSON response
+            parsed_response = json.loads(response_content)
+            # Use model_validate instead of parse_obj which is deprecated in pydantic v2
+            try:
+                # Try pydantic v2 approach first
+                return response_model.model_validate(parsed_response)
+            except AttributeError:
+                # Fall back to pydantic v1 approach
+                return response_model.parse_obj(parsed_response)
+            
+        except Exception as e:
+            raise Exception(f"Error asynchronously parsing OpenAI response: {e}")
+
 
 class DeepSeekClient(LLMClient):
     """Client for DeepSeek API using OpenAI-compatible interface."""
@@ -230,10 +321,9 @@ class DeepSeekClient(LLMClient):
             api_key: DeepSeek API key
             model: Model name to use
         """
-        self.client = OpenAI(
-            api_key=api_key, 
-            base_url=os.getenv("LLM_API_BASE_URL", "https://api.deepseek.com/v1")
-        )
+        base_url = os.getenv("LLM_API_BASE_URL", "https://api.deepseek.com/v1")
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.async_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self.model = model
     
     def invoke(self, messages: List[Dict[str, str]]) -> str:
@@ -255,6 +345,25 @@ class DeepSeekClient(LLMClient):
         except Exception as e:
             raise Exception(f"Error invoking DeepSeek model: {e}")
     
+    async def async_invoke(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Asynchronously invoke the DeepSeek model with the given messages.
+        
+        Args:
+            messages: List of message dicts with role and content
+            
+        Returns:
+            str: The content of the model's response
+        """
+        try:
+            response = await self.async_client.chat.completions.create(
+                model=self.model,
+                messages=messages
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            raise Exception(f"Error asynchronously invoking DeepSeek model: {e}")
+    
     def parse(self, messages: List[Dict[str, str]], response_model: Type[T]) -> T:
         """
         Parse the DeepSeek response directly into a Pydantic model.
@@ -275,9 +384,6 @@ class DeepSeekClient(LLMClient):
             )
             response_content = completion.choices[0].message.content
             
-            # Save raw response content
-            save_raw_llm_response(response_content)
-            
             # Parse JSON response
             parsed_response = json.loads(response_content)
             try:
@@ -289,6 +395,39 @@ class DeepSeekClient(LLMClient):
             
         except Exception as e:
             raise Exception(f"Error parsing DeepSeek response: {e}")
+    
+    async def async_parse(self, messages: List[Dict[str, str]], response_model: Type[T]) -> T:
+        """
+        Asynchronously parse the DeepSeek response directly into a Pydantic model.
+        
+        Args:
+            messages: List of message dicts with role and content
+            response_model: Pydantic model class to parse the response into
+            
+        Returns:
+            T: Parsed response in the specified Pydantic model
+        """
+        try:
+            # Force JSON response format if supported
+            completion = await self.async_client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                response_format={"type": "json_object"}
+            )
+            response_content = completion.choices[0].message.content
+            
+            # Parse JSON response
+            parsed_response = json.loads(response_content)
+            try:
+                # Try pydantic v2 approach first
+                return response_model.model_validate(parsed_response)
+            except AttributeError:
+                # Fall back to pydantic v1 approach
+                return response_model.parse_obj(parsed_response)
+            
+        except Exception as e:
+            raise Exception(f"Error asynchronously parsing DeepSeek response: {e}")
+
 
 class GeminiClient(LLMClient):
     """Client for Google Gemini API."""
@@ -348,6 +487,19 @@ class GeminiClient(LLMClient):
         except Exception as e:
             raise Exception(f"Error invoking Gemini model: {e}")
     
+    async def async_invoke(self, messages: List[Dict[str, str]]) -> str:
+        """
+        Asynchronously invoke the Gemini model with the given messages.
+        
+        Args:
+            messages: List of message dicts with role and content
+            
+        Returns:
+            str: The content of the model's response
+        """
+        # Use asyncio.to_thread to run the synchronous invoke method in a thread pool
+        return await asyncio.to_thread(self.invoke, messages)
+
     def parse(self, messages: List[Dict[str, str]], response_model: Type[T]) -> T:
         """
         Parse the Gemini response directly into a Pydantic model.
@@ -758,17 +910,41 @@ string json to convert:
         print(f"Error using LLM for JSON conversion: {e}")
         return {"error": str(e)}
 
-# New asynchronous helper to process a single article
-async def process_article(prompt: str, idx: int, llm_client) -> (Optional[Any], str):
+# Nova classe para armazenar artigos com sua sequência original
+class SequencedArticle:
     """
-    Process single article prompt asynchronously.
-    Returns a tuple with the ArticleAnalysis (or None on failure) and the raw response.
+    Stores article data with its original sequence number.
+    """
+    def __init__(self, sequence: int, prompt: str, id: Optional[str] = None):
+        self.sequence = sequence
+        self.prompt = prompt
+        self.id = id
+        self.article_analysis = None
+        self.raw_response = None
+        self.error = None
+    
+    def set_result(self, article_analysis: Optional[ArticleAnalysis], raw_response: str):
+        """Set the result of processing this article."""
+        self.article_analysis = article_analysis
+        self.raw_response = raw_response
+    
+    def set_error(self, error: Exception):
+        """Set error information if processing failed."""
+        self.error = str(error)
+
+# Refactored asynchronous function to process a single article
+async def process_article_async(article: SequencedArticle, llm_client: LLMClient) -> None:
+    """
+    Process single article prompt asynchronously and store result in the article object.
     """
     try:
-        print(f"Processing article {idx+1}...")
-        messages = [{"role": "user", "content": prompt}]
-        # Wrap synchronous invocation in a thread to allow async execution
-        raw_response: str = await asyncio.to_thread(llm_client.invoke, messages)
+        print(f"Processing article {article.sequence+1}...")
+        messages = [{"role": "user", "content": article.prompt}]
+        
+        # Asynchronously invoke LLM
+        raw_response: str = await llm_client.async_invoke(messages)
+        article.raw_response = raw_response
+        
         # Try to parse as JSON
         try:
             # Clean response to extract JSON content
@@ -785,22 +961,22 @@ async def process_article(prompt: str, idx: int, llm_client) -> (Optional[Any], 
                 parsed_response = json.loads(json_content)
             except json.JSONDecodeError:
                 # Primeira tentativa falhou, usar clean_and_parse_json
-                print(f"⚠ JSON decode failed for article {idx+1}, trying advanced cleaning...")
+                print(f"⚠ JSON decode failed for article {article.sequence+1}, trying advanced cleaning...")
                 parsed_response = clean_and_parse_json(raw_response)
                 
                 # Se ainda contiver raw_content, tentar convert_to_json_llm
                 if "raw_content" in parsed_response:
-                    print(f"⚠ Attempting LLM conversion for article {idx+1}")
-                    parsed_response = convert_to_json_llm(parsed_response["raw_content"], llm_client)
+                    print(f"⚠ Attempting LLM conversion for article {article.sequence+1}")
+                    parsed_response = await asyncio.to_thread(convert_to_json_llm, parsed_response["raw_content"], llm_client)
                 
             if "raw_content" in parsed_response:
                 parsed_response = parsed_response["raw_content"]
-            else:
-                raw_response = json.dumps(parsed_response, ensure_ascii=False)
+            
             # Check if response has the {'articles': [...]} structure and extract the article
             if isinstance(parsed_response, dict) and 'articles' in parsed_response and isinstance(parsed_response['articles'], list) and parsed_response['articles']:
                 # Extract the first article from the 'articles' array
                 parsed_response = parsed_response['articles'][0]
+            
             # Convert to ArticleAnalysis
             try:
                 # Try pydantic v2 approach first
@@ -809,26 +985,84 @@ async def process_article(prompt: str, idx: int, llm_client) -> (Optional[Any], 
                 # Fall back to pydantic v1 approach
                 article_analysis = ArticleAnalysis.parse_obj(parsed_response)
             
-            print(f"✓ Article {idx+1} successfully processed")
-            return (article_analysis, raw_response)
+            article.article_analysis = article_analysis
+            print(f"✓ Article {article.sequence+1} successfully processed")
         
         except json.JSONDecodeError as e:
-            print(f"⚠ Error parsing JSON for article {idx+1}: {e}")
+            print(f"⚠ Error parsing JSON for article {article.sequence+1}: {e}")
             print(f"Raw response preview: {raw_response[:200]}...")
-            return (None, raw_response)
+            article.set_error(e)
         except Exception as e:
-            print(f"⚠ Error converting to ArticleAnalysis for article {idx+1}: {e}")
-            return (None, raw_response)
+            print(f"⚠ Error converting to ArticleAnalysis for article {article.sequence+1}: {e}")
+            article.set_error(e)
     
     except Exception as e:
-        print(f"⚠ Error getting response for article {idx+1}: {e}")
-        return (None, "")
+        print(f"⚠ Error getting response for article {article.sequence+1}: {e}")
+        article.set_error(e)
 
-# Refactored asynchronous function to process all articles
-async def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None, 
-                                                output_path: Optional[str] = None) -> List[Any]:
+
+# Function to get rate limit from environment variable
+def get_rate_limit() -> float:
     """
-    Analyze abstracts from BibTeX files using an LLM one article at a time.
+    Get the rate limit (requests per second) from environment variable.
+    
+    Returns:
+        float: Maximum number of requests allowed per second
+    """
+    default_rate_limit = 10.0  # Default to 10 requests per second if not specified
+    rate_limit_str = os.getenv("LLM_SECOND_RATE_LIMITE_ABSTRACT")
+    
+    if not rate_limit_str:
+        print(f"LLM_SECOND_RATE_LIMITE_ABSTRACT not set. Using default rate limit of {default_rate_limit} requests/second")
+        return default_rate_limit
+    
+    try:
+        rate_limit = float(rate_limit_str)
+        if rate_limit <= 0:
+            print(f"Invalid rate limit value: {rate_limit}. Using default of {default_rate_limit} requests/second")
+            return default_rate_limit
+        print(f"Using rate limit of {rate_limit} requests/second")
+        return rate_limit
+    except ValueError:
+        print(f"Could not parse rate limit value: {rate_limit_str}. Using default of {default_rate_limit} requests/second")
+        return default_rate_limit
+
+
+# Modified version of process_article_async with rate limiting
+async def process_article_async_with_rate_limit(article: SequencedArticle, 
+                                               llm_client: LLMClient, 
+                                               semaphore: asyncio.Semaphore,
+                                               min_delay: float) -> None:
+    """
+    Process single article prompt asynchronously with rate limiting.
+    
+    Args:
+        article: SequencedArticle object containing prompt and sequence
+        llm_client: LLM client instance
+        semaphore: Semaphore to control concurrent requests
+        min_delay: Minimum delay between requests in seconds
+    """
+    async with semaphore:
+        # Record start time for rate limiting
+        start_time = asyncio.get_event_loop().time()
+        
+        # Process the article
+        await process_article_async(article, llm_client)
+        
+        # Calculate how long processing took
+        elapsed_time = asyncio.get_event_loop().time() - start_time
+        
+        # If processing was too quick, add a delay to respect rate limit
+        if elapsed_time < min_delay:
+            delay_time = min_delay - elapsed_time
+            await asyncio.sleep(delay_time)
+
+
+# Refactored asynchronous function to process all articles with rate limiting
+async def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None, 
+                                                output_path: Optional[str] = None) -> List[ArticleAnalysis]:
+    """
+    Analyze abstracts from BibTeX files using an LLM one article at a time, with rate limiting.
     
     Args:
         input_bibtex_path: Path to the BibTeX file to analyze
@@ -843,24 +1077,45 @@ async def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str]
     # Setup LLM
     llm_client = setup_llm()
     
-    # Lists to store raw and parsed responses
-    raw_responses = []
-    article_analyses = []
+    # Get rate limit configuration
+    rate_limit = get_rate_limit()  # Requests per second
+    min_delay = 1.0 / rate_limit   # Minimum seconds between requests
+    
+    # Maximum number of concurrent requests (limiting concurrency)
+    max_concurrent = max(1, min(10, int(rate_limit * 1.5)))  # Balancing concurrency with rate limit
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    print(f"Rate limiting: {rate_limit} requests/second, {max_concurrent} concurrent requests, {min_delay:.4f}s minimum delay")
     
     try:
-        print(f"Processing {len(prompt_list)} articles one by one...")
+        print(f"Processing {len(prompt_list)} articles asynchronously with rate limiting...")
         
-        # Process each prompt individually
-        for idx, prompt in enumerate(prompt_list):
-            article_analysis, raw_response = await process_article(prompt, idx, llm_client)
-            raw_responses.append(raw_response)
-            if article_analysis:
-                article_analyses.append(article_analysis)
+        # Etapa 1: Criar lista de artigos sequenciados para manter ordem
+        sequenced_articles = [SequencedArticle(idx, prompt) for idx, prompt in enumerate(prompt_list)]
         
-        # Save all raw responses to files
-        save_raw_llm_responses(raw_responses)
+        # Etapa 2: Criar tarefas assíncronas para cada artigo com rate limiting
+        tasks = [
+            process_article_async_with_rate_limit(article, llm_client, semaphore, min_delay) 
+            for article in sequenced_articles
+        ]
         
-        # Save processed responses to file if output_path is specified
+        # Etapa 3: Executar todas as tarefas em paralelo (com rate limiting)
+        await asyncio.gather(*tasks)
+        
+        # Etapa 4: Processar resultados na ordem original
+        # Coletar respostas brutas para salvar
+        raw_responses = [article.raw_response for article in sequenced_articles if article.raw_response]
+        
+        # Coletar análises de artigos bem-sucedidas
+        article_analyses = [article.article_analysis for article in sequenced_articles 
+                           if article.article_analysis is not None]
+        
+        # Etapa 5: Salvar resultados de forma síncrona
+        # Salvar todas as respostas brutas em arquivos
+        if raw_responses:
+            save_raw_llm_responses(raw_responses)
+        
+        # Salvar respostas processadas no arquivo se output_path for especificado
         if output_path and article_analyses:
             save_llm_responses_to_file(article_analyses, output_path)
         
@@ -869,19 +1124,11 @@ async def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str]
     
     except Exception as e:
         print(f"Error during LLM analysis: {e}")
-        
-        # Save what we have so far
-        if raw_responses:
-            save_raw_llm_responses(raw_responses)
-        
-        if article_analyses and output_path:
-            save_llm_responses_to_file(article_analyses, output_path)
-        
-        return article_analyses
+        return []
 
-# Refactored main function as async
+# Função principal refatorada para usar assincronidade
 async def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None, 
-                                                 output_path: Optional[str] = None):
+                                              output_path: Optional[str] = None):
     """
     Main function to run the LLM analysis pipeline.
     
@@ -898,10 +1145,6 @@ async def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] 
         else:
             print("No valid responses were obtained.")
             return None
-    except Exception as e:
-        print(f"Error in main function: {e}")
-        sys.exit(1)
-        
     except Exception as e:
         print(f"Error in main function: {e}")
         sys.exit(1)

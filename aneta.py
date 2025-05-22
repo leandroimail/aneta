@@ -201,7 +201,7 @@ if __name__ == "__main__":
     run_convert_bibtex_to_json = False
     run_abstract_llm = False
     run_abstract_llm_one_on_one = False
-    run_abstract_llm_one_on_one_async = False  # New variable for async version
+    run_abstract_llm_one_on_one_async = False
     run_process_excel = False  
 
     setup_environment()
