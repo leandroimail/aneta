@@ -14,9 +14,9 @@ ieee: true
 # Generic Search String for all search engines (arxiv, ieee, science_direct, scopus, spring_nature, web_of_science)
 
 search_string: >
-  ("automatic scoping review" OR "automated scoping review" OR "autonomous scoping review" OR "automatically scoping review" OR
-  "automatic scoping mapping" OR "automated scoping mapping" OR "autonomous scoping mapping" OR "automatically scoping mapping" OR
-  "automatic systematic review" OR "automated systematic review" OR "autonomous systematic review" OR "automatically systematic review")
+  ("heterogeneous data" OR "heterogeneous datasets" OR "heterogeneous datasources" OR "heterogeneous information" OR "unstructured data") 
+  AND ("ontology" OR "knowledge graph" OR "semantic") 
+  AND ("data integration" OR "information integration")
 
 
 
@@ -41,24 +41,4 @@ search_string: >
 ##########. DON'T USE lower() and upper() function in the SQL statement. It is not n
 
 filter_string: >
-  (
-    ( 
-      title LIKE '%scoping review%' OR
-      title LIKE '%scoping mapping%' OR
-      title LIKE '%systematic review%' OR
-      abstract LIKE '%scoping review%' OR
-      abstract LIKE '%scoping mapping%' OR
-      abstract LIKE '%systematic review%' OR
-      keywords LIKE '%scoping review%' OR
-      keywords LIKE '%scoping mapping%' OR
-      keywords LIKE '%systematic review%'
-    ) AND
-    (
-      title LIKE '%automat%' OR
-      abstract LIKE '%automat%' OR
-      keywords LIKE '%automat%'
-    ) AND
-    (
-      year >= 2014 AND year <= 2024
-    )
-  )
+    1=1

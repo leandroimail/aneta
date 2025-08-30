@@ -1,28 +1,38 @@
 principal_research_question: >
-  What are the main methods and technologies currently used for automatic generation of scoping review?
+  What techniques have currently been used as a solution for integrating heterogeneous data?
 
 additional_research_questions:
   arq1: >
-    Which research uses machine learning or data science to automate scoping reviews or systematic reviews?
-  arq2: >
-    What research or algorithms does AI Generative and LLM use?
-  arq3: >
-    Is there any model, benchmark or methodology to validate the accuracy of the automatically generated systematic review or scoping review?
+    How to generate integrated data models from distributed and heterogeneous databases?
+
+supporting_questions:
+  sq1: >
+    Does the study directly address heterogeneous data integration or integrated data modeling from databases, i.e., does it answer one of the research questions?
+    (Possible classes: Yes; Partially; No)
+  sq2: >
+    Does the article present the employed technique of the proposed solution in detail?
+    (Possible classes: Yes; Partially; No)
 
 rejection_criteria:
   rc1: >
-    The article is not a systematic review or scoping review.
+    The study is a secondary study.
   rc2: >
-    The article does not address technologies or methods for reviewing for automation of systematics or scoping review.
+    The study is a secondary study that is not related.
   rc3: >
-    The article is not in English.
+    False positive.
   rc4: >
-    The article is not a scientific article, such as a blog post, opinion piece, or news article.
+    False positive after screening.
   rc5: >
-    The article is a duplicate of another article already included in the dataset.
+    Published before 2015.
+  rc6: >
+    Publication is not peer-reviewed.
 
 accepted_criteria:
   ac1: >
-    The main topic of the article should be about scoping review or systematic review, not just mentioning scoping review or systematic review
+    The study aims at integrating heterogeneous data.
   ac2: >
-    The article must address technologies or methods for reviewing for automation of systematics or scoping review.
+    The study addresses, applies, and discusses the results of applying heterogeneous data integration techniques.
+  ac3: >
+    The study aims at integrated data modeling from distributed and heterogeneous databases.
+  ac4: >
+    The study addresses, applies, and discusses the results of applying integrated data modeling techniques on distributed and heterogeneous databases.
