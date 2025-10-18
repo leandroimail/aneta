@@ -79,7 +79,11 @@ def converte_para_bibtex(record):
         authors_data = [author.get("$", "") for author in authors_data["author"]]
         authors = "; ".join(authors_data)     
     
-    title = record.get("dc:title", "").strip()
+    title = record.get("dc:title", "")
+    if isinstance(title, str):
+        title = title.strip().replace("\n", " ").replace("  ", " ")
+    elif title is None:
+        title = ""
     abstract = record.get("dc:description", "")
     cover_date = record.get("prism:coverDate", "")
     year = extrai_ano(cover_date)

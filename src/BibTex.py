@@ -3,7 +3,6 @@ import bibtexparser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.bparser import BibTexParser
-from bibtexparser.customization import convert_to_unicode
 import os
 import chardet
 
@@ -15,7 +14,6 @@ def read_bibtex(path):
         # 1. Attempt UTF-8 first (most common)
         with open(path, "r", encoding='utf-8') as bibtex_file:
             parser = BibTexParser()
-            parser.customization = convert_to_unicode
             bib_database = bibtexparser.load(bibtex_file, parser=parser)
             return bib_database.entries
     except UnicodeDecodeError:
@@ -28,7 +26,7 @@ def read_bibtex(path):
             # 3. Retry with the detected encoding
             with open(path, "r", encoding=encoding) as bibtex_file:
                 parser = BibTexParser()
-                parser.customization = convert_to_unicode
+                # Remove the problematic convert_to_unicode customization
                 bib_database = bibtexparser.load(bibtex_file, parser=parser)
                 return bib_database.entries
         except Exception as e:  # Catch other potential errors

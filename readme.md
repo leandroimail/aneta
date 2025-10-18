@@ -140,3 +140,9 @@ R -e 'library(bibliometrix); biblioshiny();'
 
 ## TODO: Implementar LLM Abstract assincrono
 ## TODO: Implementar parada e retomada por id do bibtex no one:one
+
+
+
+
+
+## TODO: uv pip install docling

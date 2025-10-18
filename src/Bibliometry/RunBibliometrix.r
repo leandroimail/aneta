@@ -193,12 +193,34 @@ if (is.null(df_works)) {
   stop("DataFrame not created.")
 }
 
+# Verificar se df_works tem dados suficientes
+if (nrow(df_works) == 0) {
+  log_message("DataFrame is empty. No data to analyze.", "ERROR", error_log_file)
+  stop("No data available for bibliometric analysis.")
+}
+
+log_message(paste("DataFrame created with", nrow(df_works), "rows and", ncol(df_works), "columns."), "INFO", log_file)
+
 
 # Generating bibliometric results
 bibliometrics_data <- tryCatch(
   {
-    log_message("Performing bibliometric analysis with oa2bibliometrix.", "INFO", log_file)
-    M <- oa2bibliometrix(df_works)
+    log_message("Performing bibliometric analysis with convert2df.", "INFO", log_file)
+    
+    # Verificar se df_works é válido antes da conversão
+    if (!is.data.frame(df_works)) {
+      stop("df_works is not a valid data frame")
+    }
+    
+    # Tentar primeiro com convert2df
+    M <- tryCatch({
+      convert2df(df_works, dbsource = "openalex", format = "api")
+    }, error = function(e) {
+      log_message(paste("Error with convert2df, trying direct approach:", e$message), "WARNING", log_file)
+      # Se falhar, usar df_works diretamente se já estiver no formato correto
+      df_works
+    })
+    
     res_analysis <- biblioAnalysis(M, sep = ";")
     summary_res <- summary(res_analysis, k = 30, pause = FALSE, verbose = FALSE)
     result <- list(M = M, res = res_analysis, summary = summary_res)

@@ -1,38 +1,34 @@
 principal_research_question: >
-  What techniques have currently been used as a solution for integrating heterogeneous data?
+  What organizational structures have been proposed in Generative AI multi-agent systems?
 
 additional_research_questions:
   arq1: >
-    How to generate integrated data models from distributed and heterogeneous databases?
+    What are the work coordination patterns for Generative AI multi-agents?
 
 supporting_questions:
   sq1: >
-    Does the study directly address heterogeneous data integration or integrated data modeling from databases, i.e., does it answer one of the research questions?
-    (Possible classes: Yes; Partially; No)
+    What are the frameworks that address the organization and work coordination of multi-agents?
   sq2: >
-    Does the article present the employed technique of the proposed solution in detail?
-    (Possible classes: Yes; Partially; No)
+    What are the most used communication patterns between agents?
+  sq3: >
+    What are the main factors to consider when choosing an organization and work coordination system? Examples (financial and economic factors, security and robustness factors, latency and response time factors, implementation and maintenance complexity factors, other factors to be identified)
+  sq4: >
+    Are there hybrid multi-agent organizations and coordination systems that include humans? How do they work?
 
 rejection_criteria:
   rc1: >
-    The study is a secondary study.
+    Single-Agent Systems: Studies that focus only on single-agent systems are excluded.
   rc2: >
-    The study is a secondary study that is not related.
+    Non-LLM-Based Systems: Articles on multi-agent systems that do not use LLMs are rejected.
   rc3: >
-    False positive.
+    Exclusive Focus on Applications: Works that only describe the application of a system without providing details on one of the following: architecture or design patterns, description of work coordination mechanisms, or description of organizational structural patterns of multi-agents.
   rc4: >
-    False positive after screening.
-  rc5: >
-    Published before 2015.
-  rc6: >
-    Publication is not peer-reviewed.
+    Focus on the Model, Not the System: Articles whose main focus is the training, internal architecture, or fine-tuning of the LLM, rather than the interaction and organization of the agents.
 
 accepted_criteria:
   ac1: >
-    The study aims at integrating heterogeneous data.
+    The article discusses multi-agent systems that use Large Language Models (LLMs) as their core component and their organizational or work coordination structures.
   ac2: >
-    The study addresses, applies, and discusses the results of applying heterogeneous data integration techniques.
+    The content discusses the architecture, frameworks, organization, collaboration, or design patterns of multi-agent systems.
   ac3: >
-    The study aims at integrated data modeling from distributed and heterogeneous databases.
-  ac4: >
-    The study addresses, applies, and discusses the results of applying integrated data modeling techniques on distributed and heterogeneous databases.
+    The article directly addresses at least one of the main or additional research questions of the systematic review.

@@ -23,10 +23,10 @@ load_dotenv(os.path.abspath("Config/.env"))
 
 class AnswerWithComment(BaseModel):
     """
-    Model for answers that include a YES/NO response with explanatory comment.
+    Model for answers that include a yes/no response with explanatory comment.
     
     Attributes:
-        answer (str): Binary response to a question or criterion (YES or NO)
+        answer (str): Binary response to a question or criterion (yes or no)
         comment (str): Explanation justifying the answer
     """
     answer: str = Field(..., description="Binary response to a question or criterion")
@@ -35,15 +35,15 @@ class AnswerWithComment(BaseModel):
     @field_validator('answer')  # Substituído validator por field_validator
     @classmethod  # Necessário no field_validator
     def answer_must_be_yes_or_no(cls, v):
-        """Validate that answer is either YES or NO."""
-        if v not in ["YES", "NO"]:
-            raise ValueError('answer must be either "YES" or "NO"')
+        """Validate that answer is either yes or no."""
+        if v not in ["yes", "no"]:
+            raise ValueError('answer must be either "yes" or "no"')
         return v
 
 class SupportingQuestionAnswer(BaseModel):
     """
     Model for flexible answers that include a response with explanatory comment.
-    Unlike AnswerWithComment, this allows any string as an answer, not just YES/NO.
+    Unlike AnswerWithComment, this allows any string as an answer, not just yes/no.
     
     Attributes:
         answer (str): Response to a question, which can be any classification or certainty level
@@ -471,8 +471,9 @@ class GeminiClient(LLMClient):
             # Check if the model is from the gemini-2.5-flash family to add thinking_config
             model_lower = self.model_name.lower()
             if model_lower.startswith("gemini-2.5-flash") and not is_reasonear:
+                # For non-reasoning mode, create ThinkingConfig without thinking_budget parameter
                 config = genai_types.GenerateContentConfig(
-                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0)
+                    thinking_config=genai_types.ThinkingConfig()
                 )
                 response = self.client.models.generate_content(
                     model=self.model_name,

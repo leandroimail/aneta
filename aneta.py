@@ -13,11 +13,12 @@ from src.Bibliometry import run_bibliometry as run_bibliometry_func
 from src.BibliometryAsync import run_bibliometry as run_bibliometry_async_func
 from src.DonwloadPapers import download_all_papers
 
-from GenerativeAI.LLMSelectPapersByAbstract import run_select_bibs_filtered_by_abstract
-from GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_one_on_one
+from src.GenerativeAI.LLMSelectPapersByAbstract import run_select_bibs_filtered_by_abstract
+from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_one_on_one
 from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOneAsync import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_async
 from src.GenerativeAI.LLMUtils import bibtex_to_json_schema
 from src.GenerativeAI.LLMUtilExcel import process_responses_to_excel
+# from src.PDFReader import read_pdfs_with_docling
 
 def setup_environment():
     load_dotenv(os.path.abspath(".conf"))
@@ -160,6 +161,60 @@ def run_process_responses_to_excel():
     print(f"- Simple Excel file: {simple_path}")
     return True
 
+def run_pdf_reader():
+    """
+    Execute PDF reading using Docling parser with configurable output options.
+    
+    Returns:
+        bool: True if the operation was completed successfully
+    """
+    # Get configuration from environment variables
+    pdf_pre_selection_folder = os.getenv("PDF_PRE_SELECTION_FOLDER", "PDFs_PreSelection")
+    pdf_post_selection_folder = os.getenv("PDF_POST_SELECTION_FOLDER", "PDFs_PostSelection")
+    generate_markdown = os.getenv("GENERATE_MARKDOWN_OUTPUT", "true").lower() == "true"
+    markdown_output_folder = os.getenv("MARKDOWN_OUTPUT_FOLDER", "MarkdownOutputs")
+    
+    # Get the base data path
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    
+    # Construct full paths for PDF folders
+    pre_selection_path = os.path.join(path_data, pdf_pre_selection_folder)
+    post_selection_path = os.path.join(path_data, pdf_post_selection_folder)
+    markdown_path = os.path.join(path_data, markdown_output_folder) if generate_markdown else None
+    
+    print(f"PDF Reader Configuration:")
+    print(f"- Pre-selection folder: {pre_selection_path}")
+    print(f"- Post-selection folder: {post_selection_path}")
+    print(f"- Generate Markdown: {generate_markdown}")
+    if generate_markdown:
+        print(f"- Markdown output folder: {markdown_path}")
+    
+    # Process pre-selection PDFs
+    print("\n=== Processing Pre-selection PDFs ===")
+    pre_success = read_pdfs_with_docling(
+        folder_path=pre_selection_path,
+        generate_markdown=generate_markdown,
+        markdown_output_folder=os.path.join(markdown_path, "PreSelection") if markdown_path else None
+    )
+    
+    # Process post-selection PDFs
+    print("\n=== Processing Post-selection PDFs ===")
+    post_success = read_pdfs_with_docling(
+        folder_path=post_selection_path,
+        generate_markdown=generate_markdown,
+        markdown_output_folder=os.path.join(markdown_path, "PostSelection") if markdown_path else None
+    )
+    
+    # Return True if at least one processing was successful
+    success = pre_success or post_success
+    
+    if success:
+        print("\n✅ PDF processing completed successfully!")
+    else:
+        print("\n❌ PDF processing failed for both folders.")
+    
+    return success
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Executa diferentes funcionalidades do projeto ASRL',
@@ -184,6 +239,7 @@ def parse_arguments():
     group.add_argument('--abstract_classifier_llm_one_on_one_async', action='store_true', help='Realiza a classificação de abstracts usando LLM de forma assíncrona (modo One-on-One)')
     group.add_argument('--bibtex_to_json', action='store_true', help='Converte arquivo BibTeX para formato JSON com schema específico')
     group.add_argument('--process_responses', action='store_true', help='Processa respostas LLM para arquivos Excel')
+    group.add_argument('--read_pdfs', action='store_true', help='Parse PDF documents using Docling and optionally generate Markdown files')
 
     return parser.parse_args(), parser
 
@@ -195,14 +251,15 @@ if __name__ == "__main__":
     run_enrich_bibtex_async = False
     run_selection_bibtex = False
     run_bibliometry_async_var = False
-    run_bibliometry = False
+    run_bibliometry = True
     run_download_papers = False
     run_deprecated_abstract = False
     run_convert_bibtex_to_json = False
     run_abstract_llm = False
     run_abstract_llm_one_on_one = False
     run_abstract_llm_one_on_one_async = False
-    run_process_excel = False  
+    run_process_excel = False
+    run_pdf_reader_var = False  
 
     setup_environment()
     
@@ -236,6 +293,8 @@ if __name__ == "__main__":
         run_bibtex_to_json_schema()
     elif args.process_responses:  # Add new command line argument handler
         run_process_responses_to_excel()
+    elif args.read_pdfs:
+        run_pdf_reader()
     elif run_search_database:
         run_search()
     elif run_enrich_bibtex:
@@ -262,6 +321,8 @@ if __name__ == "__main__":
         run_bibtex_to_json_schema()
     elif run_process_excel:  # Add script mode handler for new function
         run_process_responses_to_excel()
+    elif run_pdf_reader_var:
+        run_pdf_reader()
     else:
         parser.print_help()
         sys.exit(1)

@@ -10,7 +10,7 @@ enrich_arxiv: false
 
 ######################## Bibliometry options ########################
 bibliometry_using_openalex: true
-bibliometry_for_arxiv: true
+bibliometry_for_arxiv: false
 
 ###### Not implemented yet ######
 bibliometry_using_scopus: false 

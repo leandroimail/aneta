@@ -6,7 +6,7 @@ from src.SeachDataBases.ieee import search as ieee_search
 from src.SeachDataBases.science_direct import search_metadata as sd_search
 from src.SeachDataBases.spring_nature import search as spring_search
 from src.SeachDataBases.web_of_science import search_start as wos_search
-from SeachDataBases.scopus import search_get as scopus_search
+from src.SeachDataBases.scopus import search_get as scopus_search
 # from SeachDataBases.scopus import search as scopus_search
 
 # Carrega as variáveis do .env

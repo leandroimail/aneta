@@ -2,3 +2,14 @@ Sandbox
 /Sandbox
 Sandbox/*
 !.gitignore
+
+.vscode
+.venv
+.sandbox
+.github
+.data
+
+src/Bibliometry
+src/Deprecated
+
+src/ASRL.egg-info

@@ -18,7 +18,7 @@ base_prompt: >
   # Questions
 
   You will receive a JSON with the abstracts, title and keywords of the articles found in the search. 
-  Based on the JSON of article, you must analyze the abstracts,title, keywords and answer the following research questions. Answer YES or NO:
+  Based on the JSON of article, you must analyze the abstracts,title, keywords and answer the following research questions. Answer yes or no:
 
 
   {{questions}}
@@ -33,10 +33,10 @@ base_prompt: >
 
   # Rejection Criteria
 
-  The answers to the above questions must always be YES or NO.  
-  Additionally, for each question key, add a short comment explaining why the answer is YES or NO.
+  The answers to the above questions must always be yes or no.  
+  Additionally, for each question key, add a short comment explaining why the answer is yes or no.
 
-  Classify the articles according to the following rejection criteria. Answer YES or NO:
+  Classify the articles according to the following rejection criteria. Answer yes or no:
 
 
   {{rejection_criteria}} 
@@ -44,7 +44,7 @@ base_prompt: >
 
   # Acceptance Criteria
 
-  Classify the articles according to the following acceptance criteria. Answer YES or NO:
+  Classify the articles according to the following acceptance criteria. Answer yes or no:
 
 
   {{accepted_criteria}}
@@ -52,11 +52,11 @@ base_prompt: >
 
   # Final Classification
 
-  Finally, you must provide if the articles are relevant to the research question, and if they are accepted or rejected.  Answer YES or NO:
+  Finally, you must provide if the articles are relevant to the research question, and if they are accepted or rejected.  Answer yes or no:
 
   You must also provide a comment explaining why the articles are relevant or not.
 
-  The articles are relevant if they are accepted and the principal research question is YES.
+  The articles are relevant if they are accepted and the principal research question is yes.
 
   The articles are accepted if they meet the acceptance criteria. Acceptance criteria override the rejection criteria.
 
@@ -100,23 +100,23 @@ base_prompt: >
     "id": "10.1234/abcd",
     "research_questions": {
       "principal_research_question": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
       },
       "arq1": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
       },
       "arqN": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
       },
       ...
       },
       "supporting_questions": {
         "sq1": {
-          "answer": "YES, NO, MAYBE or NOT SURE",
-          "comment": "Comment explaining why the answer is YES, NO, MAYBE or NOT SURE."
+          "answer": "yes, no, maybe or not sure",
+          "comment": "Comment explaining why the answer is yes, NO, MAYBE or NOT SURE."
         },
         "sq2": {
           "answer": "CLASS 1, CLASS 2,  NOT CLASSIFIED or NOT SURE",
@@ -126,29 +126,29 @@ base_prompt: >
       },
     "accepted_criteria": {
       "ac1": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
       },
       "acN": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
       },
       ...
     },
     "rejection_criteria": {
       "rc1": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
       },
       "rcN": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
       },
       ...
     },
     "is_relevant": {
-        "answer": "YES or NO",
-        "comment": "Comment explaining why the answer is YES or NO."
+        "answer": "yes or no",
+        "comment": "Comment explaining why the answer is yes or no."
     },
     "additional_questions_by_article": {
       "adq_a1": "Answer to additional question 1",

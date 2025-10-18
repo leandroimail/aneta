@@ -2,22 +2,21 @@
 # Databases Engines Supported: arxiv, ieee, science_direct, scopus, spring_nature, web_of_science
 # ACM Digital Library not supported yet. Engine not has Rest API (only to enrich file)
 
-arxiv: true
-science_direct: true
-scopus: true
-spring_nature: true
-acm: true                   
-web_of_science: true
+arxiv: false
+science_direct: false
+spring_nature: false
+acm: false     
+web_of_science: false
 ieee: true
+scopus: false
 
 
 # Generic Search String for all search engines (arxiv, ieee, science_direct, scopus, spring_nature, web_of_science)
 
 search_string: >
-  ("heterogeneous data" OR "heterogeneous datasets" OR "heterogeneous datasources" OR "heterogeneous information" OR "unstructured data") 
-  AND ("ontology" OR "knowledge graph" OR "semantic") 
-  AND ("data integration" OR "information integration")
-
+  ("agents" AND "multi") AND ("LLM" OR "large language model" OR "generative AI") 
+  AND ("organization" OR "coordination" OR "topology" OR "organizational structures" 
+  OR "design patterns" OR "structural patterns")
 
 
 ############ filter_string ############
@@ -41,4 +40,23 @@ search_string: >
 ##########. DON'T USE lower() and upper() function in the SQL statement. It is not n
 
 filter_string: >
-    1=1
+  (
+      (lower(title) LIKE '%agents%' OR lower(abstract) LIKE '%agents%' OR lower(keywords) LIKE '%agents%')
+      AND
+      (lower(title) LIKE '%multi%' OR lower(abstract) LIKE '%multi%' OR lower(keywords) LIKE '%multi%')
+  )
+  AND
+  (
+      lower(title) LIKE '%llm%' OR lower(abstract) LIKE '%llm%' OR lower(keywords) LIKE '%llm%' OR
+      lower(title) LIKE '%large language model%' OR lower(abstract) LIKE '%large language model%' OR lower(keywords) LIKE '%large language model%' OR
+      lower(title) LIKE '%generative ai%' OR lower(abstract) LIKE '%generative ai%' OR lower(keywords) LIKE '%generative ai%'
+  )
+  AND
+  (
+      lower(title) LIKE '%organization%' OR lower(abstract) LIKE '%organization%' OR lower(keywords) LIKE '%organization%' OR
+      lower(title) LIKE '%coordination%' OR lower(abstract) LIKE '%coordination%' OR lower(keywords) LIKE '%coordination%' OR
+      lower(title) LIKE '%topology%' OR lower(abstract) LIKE '%topology%' OR lower(keywords) LIKE '%topology%' OR
+      lower(title) LIKE '%organizational structures%' OR lower(abstract) LIKE '%organizational structures%' OR lower(keywords) LIKE '%organizational structures%' OR
+      lower(title) LIKE '%design patterns%' OR lower(abstract) LIKE '%design patterns%' OR lower(keywords) LIKE '%design patterns%' OR
+      lower(title) LIKE '%structural patterns%' OR lower(abstract) LIKE '%structural patterns%' OR lower(keywords) LIKE '%structural patterns%'
+  )

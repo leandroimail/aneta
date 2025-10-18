@@ -98,7 +98,7 @@
       "properties": {
         "answer": {
           "type": "string",
-          "enum": ["YES", "NO"],
+          "enum": ["yes", "no"],
           "description": "Binary response to a question or criterion"
         },
         "comment": {
