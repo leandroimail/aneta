@@ -44,6 +44,7 @@ dependencies = [
     "openai>=1.78.0",
     "matplotlib>=3.10.3",
     "seaborn>=0.13.2",
+    "docling>=2.57.0",
 ]
 
 [project.optional-dependencies]
