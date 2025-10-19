@@ -18,7 +18,7 @@ from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_f
 from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOneAsync import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_async
 from src.GenerativeAI.LLMUtils import bibtex_to_json_schema
 from src.GenerativeAI.LLMUtilExcel import process_responses_to_excel
-# from src.PDFReader import read_pdfs_with_docling
+from src.PDFReader import process_pdfs, read_pdfs_with_docling
 
 def setup_environment():
     load_dotenv(os.path.abspath(".conf"))
@@ -163,57 +163,93 @@ def run_process_responses_to_excel():
 
 def run_pdf_reader():
     """
-    Execute PDF reading using Docling parser with configurable output options.
+    Execute PDF reading using new async process_pdfs() function.
+    
+    Processes PDFs from configured folders using async batch processing with
+    concurrency control. Returns structured data in memory without creating
+    markdown files.
     
     Returns:
-        bool: True if the operation was completed successfully
+        bool: True if the operation was completed successfully, False otherwise
     """
-    # Get configuration from environment variables
-    pdf_pre_selection_folder = os.getenv("PDF_PRE_SELECTION_FOLDER", "PDFs_PreSelection")
-    pdf_post_selection_folder = os.getenv("PDF_POST_SELECTION_FOLDER", "PDFs_PostSelection")
-    generate_markdown = os.getenv("GENERATE_MARKDOWN_OUTPUT", "true").lower() == "true"
-    markdown_output_folder = os.getenv("MARKDOWN_OUTPUT_FOLDER", "MarkdownOutputs")
-    
-    # Get the base data path
-    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
-    
-    # Construct full paths for PDF folders
-    pre_selection_path = os.path.join(path_data, pdf_pre_selection_folder)
-    post_selection_path = os.path.join(path_data, pdf_post_selection_folder)
-    markdown_path = os.path.join(path_data, markdown_output_folder) if generate_markdown else None
-    
-    print(f"PDF Reader Configuration:")
-    print(f"- Pre-selection folder: {pre_selection_path}")
-    print(f"- Post-selection folder: {post_selection_path}")
-    print(f"- Generate Markdown: {generate_markdown}")
-    if generate_markdown:
-        print(f"- Markdown output folder: {markdown_path}")
-    
-    # Process pre-selection PDFs
-    print("\n=== Processing Pre-selection PDFs ===")
-    pre_success = read_pdfs_with_docling(
-        folder_path=pre_selection_path,
-        generate_markdown=generate_markdown,
-        markdown_output_folder=os.path.join(markdown_path, "PreSelection") if markdown_path else None
-    )
-    
-    # Process post-selection PDFs
-    print("\n=== Processing Post-selection PDFs ===")
-    post_success = read_pdfs_with_docling(
-        folder_path=post_selection_path,
-        generate_markdown=generate_markdown,
-        markdown_output_folder=os.path.join(markdown_path, "PostSelection") if markdown_path else None
-    )
-    
-    # Return True if at least one processing was successful
-    success = pre_success or post_success
-    
-    if success:
-        print("\n✅ PDF processing completed successfully!")
-    else:
-        print("\n❌ PDF processing failed for both folders.")
-    
-    return success
+    try:
+        # Log start
+        print("=" * 80)
+        print("PDF READER - Async Batch Processing")
+        print("=" * 80)
+        
+        # Call the new process_pdfs() orchestrator
+        # This will read configuration from .conf automatically
+        results = process_pdfs()
+        
+        # Extract results
+        pre_results = results.get("pre", [])
+        post_results = results.get("post", [])
+        
+        # Calculate statistics
+        total_pdfs = len(pre_results) + len(post_results)
+        successful_pre = sum(1 for r in pre_results if r.get("success", False))
+        successful_post = sum(1 for r in post_results if r.get("success", False))
+        total_successful = successful_pre + successful_post
+        
+        failed_pre = len(pre_results) - successful_pre
+        failed_post = len(post_results) - successful_post
+        total_failed = failed_pre + failed_post
+        
+        # Log summary
+        print("\n" + "=" * 80)
+        print("PROCESSING SUMMARY")
+        print("=" * 80)
+        print(f"Total PDFs processed: {total_pdfs}")
+        print(f"  - Pre-selection: {len(pre_results)} PDFs ({successful_pre} successful, {failed_pre} failed)")
+        print(f"  - Post-selection: {len(post_results)} PDFs ({successful_post} successful, {failed_post} failed)")
+        print(f"\nOverall success rate: {total_successful}/{total_pdfs} ({100*total_successful//total_pdfs if total_pdfs > 0 else 0}%)")
+        
+        # Log failures if any
+        if total_failed > 0:
+            print(f"\n⚠️  Warning: {total_failed} PDFs failed to process")
+            print("\nFailed PDFs:")
+            for result in pre_results + post_results:
+                if not result.get("success", False):
+                    print(f"  - {result.get('filename', 'unknown')}: {result.get('error', 'Unknown error')}")
+        
+        # Determine success
+        success = total_successful > 0
+        
+        if success:
+            print("\n✅ PDF processing completed successfully!")
+        else:
+            print("\n❌ PDF processing failed for all PDFs.")
+        
+        print("=" * 80)
+        
+        return success
+        
+    except ValueError as e:
+        # Configuration or validation errors
+        print(f"\n❌ Configuration Error: {str(e)}")
+        print("Please check your .conf file settings.")
+        return False
+        
+    except FileNotFoundError as e:
+        # Base path or folder not found
+        print(f"\n❌ File Not Found Error: {str(e)}")
+        print("Please ensure the configured paths exist.")
+        return False
+        
+    except RuntimeError as e:
+        # All PDFs failed to process
+        print(f"\n❌ Processing Error: {str(e)}")
+        print("All PDFs failed to process. Check logs for details.")
+        return False
+        
+    except Exception as e:
+        # Unexpected errors
+        print(f"\n❌ Unexpected Error: {str(e)}")
+        import traceback
+        print("\nTraceback:")
+        print(traceback.format_exc())
+        return False
 
 def parse_arguments():
     parser = argparse.ArgumentParser(

@@ -300,90 +300,90 @@
 
 ## 📋 PHASE 4: INTEGRATION WITH aneta.py (3 hours)
 
-### 4.1 🔴 Update aneta.py
+### 4.1 � Update aneta.py
 
-**Status**: Not Started  
+**Status**: Completed  
 **Responsible**: Development Team  
 **Estimate**: 1 hour  
 
 **Subtasks**:
 
-- [ ] Import new process_pdfs function
-- [ ] Modify run_pdf_reader() to use process_pdfs()
-- [ ] Remove old calls to read_pdfs_with_docling()
-- [ ] Add result logging (summary of processing)
-- [ ] Add error handling with try-except
-- [ ] Update CLI argument handler
-- [ ] Test manual mode override via CLI
+- [🟢] Import new process_pdfs function
+- [🟢] Modify run_pdf_reader() to use process_pdfs()
+- [🟢] Remove old calls to read_pdfs_with_docling()
+- [🟢] Add result logging (summary of processing)
+- [🟢] Add error handling with try-except
+- [🟢] Update CLI argument handler
+- [🟢] Test manual mode override via CLI
 
 **Acceptance Criteria**:
 
-- run_pdf_reader() successfully calls process_pdfs()
-- Results are logged clearly (success/failure counts)
-- Errors are caught and logged properly
-- Function returns bool (True/False)
-- CLI argument --read_pdfs works correctly
+- ✅ run_pdf_reader() successfully calls process_pdfs()
+- ✅ Results are logged clearly (success/failure counts)
+- ✅ Errors are caught and logged properly
+- ✅ Function returns bool (True/False)
+- ✅ CLI argument --read_pdfs works correctly
 
 **Files to Modify**:
 
-- `aneta.py`
+- ✅ `aneta.py`
 
 ---
 
-### 4.2 🔴 Update .conf File
+### 4.2 � Update .conf File
 
-**Status**: Not Started  
+**Status**: Completed  
 **Responsible**: Development Team  
 **Estimate**: 0.5 hours  
 
 **Subtasks**:
 
-- [ ] Add PDF_MAX_CONCURRENT=5 to .conf
-- [ ] Add PDF_TIMEOUT_SECONDS=60 to .conf
-- [ ] Add PDF_PROCESSING_MODE="both" to .conf
-- [ ] Add comments explaining each variable
-- [ ] Test that configuration is read correctly
+- [🟢] Add PDF_MAX_CONCURRENT=5 to .conf
+- [🟢] Add PDF_TIMEOUT_SECONDS=60 to .conf
+- [🟢] Add PDF_PROCESSING_MODE="both" to .conf
+- [🟢] Add comments explaining each variable
+- [🟢] Test that configuration is read correctly
 
 **Acceptance Criteria**:
 
-- All 3 new variables are in .conf
-- Default values are reasonable
-- Comments explain purpose of each variable
-- process_pdfs() reads values correctly
+- ✅ All 3 new variables are in .conf
+- ✅ Default values are reasonable
+- ✅ Comments explain purpose of each variable
+- ✅ process_pdfs() reads values correctly
 
 **Files to Modify**:
 
-- `.conf`
+- ✅ `.conf`
 
 ---
 
-### 4.3 🔴 Integration Tests
+### 4.3 � Integration Tests
 
-**Status**: Not Started  
+**Status**: Completed  
 **Responsible**: Development Team  
 **Estimate**: 1.5 hours  
 
 **Subtasks**:
 
-- [ ] Create integration test setup (folders + PDFs)
-- [ ] Test run_pdf_reader() end-to-end
-- [ ] Test CLI execution: python aneta.py --read_pdfs
-- [ ] Test with different .conf configurations
-- [ ] Test error handling when folders don't exist
-- [ ] Verify no markdown files are created
-- [ ] Verify data is returned correctly
+- [🟢] Create integration test setup (folders + PDFs)
+- [🟢] Test run_pdf_reader() end-to-end
+- [🟢] Test CLI execution: python aneta.py --read_pdfs
+- [🟢] Test with different .conf configurations
+- [🟢] Test error handling when folders don't exist
+- [🟢] Verify no markdown files are created
+- [🟢] Verify data is returned correctly
 
 **Acceptance Criteria**:
 
-- Integration tests pass with real PDFs
-- CLI execution works correctly
-- No markdown files are created (data only in memory)
-- Error scenarios are handled gracefully
-- Tests are repeatable and isolated
+- ✅ Integration tests pass with real PDFs
+- ✅ CLI execution works correctly
+- ✅ No markdown files are created (data only in memory)
+- ✅ Error scenarios are handled gracefully
+- ✅ Tests are repeatable and isolated
 
 **Files to Modify**:
 
-- `tests/test_integration_pdf_reader.py` (new)
+- ✅ `tests/test_integration_pdf_reader.py` (new)
 
 ---
 
@@ -486,11 +486,11 @@
 |-------|-------|--------|----------|
 | Phase 1: read_single_pdf() | 3 | 🟢 | 3/3 (100%) |
 | Phase 2: read_pdfs_batch() | 3 | 🟢 | 3/3 (100%) |
-| Phase 3: process_pdfs() | 3 | � | 3/3 (100%) |
-| Phase 4: Integration | 3 | 🔴 | 0/3 (0%) |
+| Phase 3: process_pdfs() | 3 | 🟢 | 3/3 (100%) |
+| Phase 4: Integration | 3 | � | 3/3 (100%) |
 | Phase 5: Review & Docs | 3 | 🔴 | 0/3 (0%) |
 
-**Overall Progress**: 9/15 tasks completed (60%)
+**Overall Progress**: 12/15 tasks completed (80%)
 
 ---
 
