@@ -20,7 +20,7 @@ import tempfile
 # Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from PDFReader import read_single_pdf, read_pdfs_batch
+from PDFReader import read_single_pdf, read_pdfs_batch, process_pdfs, _get_pdf_filenames, _optimize_post_processing
 
 
 class TestReadSinglePDF:
@@ -589,6 +589,282 @@ class TestReadPDFsBatch:
             
             for result in results:
                 assert set(result.keys()) == required_keys
+
+
+class TestProcessPDFs:
+    """Test suite for process_pdfs() orchestration function."""
+    
+    def test_invalid_mode_raises_valueerror(self):
+        """Test that invalid mode raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            process_pdfs(mode="invalid_mode")
+        
+        assert "invalid mode" in str(exc_info.value).lower()
+    
+    @patch.dict(os.environ, {}, clear=True)
+    def test_missing_path_data_raises_valueerror(self):
+        """Test that missing PATH_DATA configuration raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            process_pdfs()
+        
+        assert "path_data not found" in str(exc_info.value).lower()
+    
+    @patch.dict(os.environ, {
+        'PATH_DATA': '/nonexistent/path',
+        'PDF_PRE_SELECTION_FOLDER': 'PDFs_PreSelection',
+        'PDF_POST_SELECTION_FOLDER': 'PDFs',
+        'PDF_MAX_CONCURRENT': '5',
+        'PDF_TIMEOUT_SECONDS': '60',
+        'PDF_PROCESSING_MODE': 'both'
+    })
+    def test_nonexistent_base_path_raises_filenotfounderror(self):
+        """Test that non-existent base path raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError) as exc_info:
+            process_pdfs()
+        
+        assert "base data path does not exist" in str(exc_info.value).lower()
+    
+    @patch.dict(os.environ, {
+        'PATH_DATA': 'invalid',
+        'PDF_MAX_CONCURRENT': 'abc',
+    })
+    def test_invalid_max_concurrent_raises_valueerror(self):
+        """Test that invalid max_concurrent value raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ['PATH_DATA'] = tmpdir
+            
+            with pytest.raises(ValueError) as exc_info:
+                process_pdfs()
+            
+            assert "invalid pdf_max_concurrent" in str(exc_info.value).lower()
+    
+    @patch('PDFReader.DocumentConverter')
+    @patch('PDFReader.asyncio.run')
+    def test_mode_pre_only_processes_pre_folder(self, mock_asyncio_run, mock_converter):
+        """Test that mode='pre' only processes pre-selection folder."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Setup folders
+            pre_folder = Path(tmpdir) / "PDFs_PreSelection"
+            post_folder = Path(tmpdir) / "PDFs"
+            pre_folder.mkdir()
+            post_folder.mkdir()
+            
+            # Create dummy PDFs
+            (pre_folder / "pre1.pdf").write_bytes(b'%PDF-1.4 dummy')
+            (post_folder / "post1.pdf").write_bytes(b'%PDF-1.4 dummy')
+            
+            # Mock async function to return results
+            mock_asyncio_run.return_value = [
+                {
+                    "markdown": "# Pre PDF",
+                    "filename": "pre1.pdf",
+                    "page_count": 1,
+                    "processing_time": 0.5,
+                    "file_size_mb": 0.01,
+                    "success": True,
+                    "error": None
+                }
+            ]
+            
+            # Configure environment
+            with patch.dict(os.environ, {
+                'PATH_DATA': tmpdir,
+                'PDF_PRE_SELECTION_FOLDER': 'PDFs_PreSelection',
+                'PDF_POST_SELECTION_FOLDER': 'PDFs',
+                'PDF_MAX_CONCURRENT': '5',
+                'PDF_PROCESSING_MODE': 'both'
+            }):
+                # Execute with mode override
+                results = process_pdfs(mode="pre")
+            
+            # Assertions
+            assert len(results["pre"]) == 1
+            assert len(results["post"]) == 0
+            assert results["pre"][0]["filename"] == "pre1.pdf"
+    
+    @patch('PDFReader.DocumentConverter')
+    @patch('PDFReader.asyncio.run')
+    def test_mode_post_only_processes_post_folder(self, mock_asyncio_run, mock_converter):
+        """Test that mode='post' only processes post-selection folder."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Setup folders
+            pre_folder = Path(tmpdir) / "PDFs_PreSelection"
+            post_folder = Path(tmpdir) / "PDFs"
+            pre_folder.mkdir()
+            post_folder.mkdir()
+            
+            # Create dummy PDFs
+            (pre_folder / "pre1.pdf").write_bytes(b'%PDF-1.4 dummy')
+            (post_folder / "post1.pdf").write_bytes(b'%PDF-1.4 dummy')
+            
+            # Mock async function to return results
+            mock_asyncio_run.return_value = [
+                {
+                    "markdown": "# Post PDF",
+                    "filename": "post1.pdf",
+                    "page_count": 1,
+                    "processing_time": 0.5,
+                    "file_size_mb": 0.01,
+                    "success": True,
+                    "error": None
+                }
+            ]
+            
+            # Configure environment
+            with patch.dict(os.environ, {
+                'PATH_DATA': tmpdir,
+                'PDF_PRE_SELECTION_FOLDER': 'PDFs_PreSelection',
+                'PDF_POST_SELECTION_FOLDER': 'PDFs',
+                'PDF_MAX_CONCURRENT': '5',
+                'PDF_PROCESSING_MODE': 'both'
+            }):
+                # Execute with mode override
+                results = process_pdfs(mode="post")
+            
+            # Assertions
+            assert len(results["pre"]) == 0
+            assert len(results["post"]) == 1
+            assert results["post"][0]["filename"] == "post1.pdf"
+    
+    @patch('PDFReader.DocumentConverter')
+    @patch('PDFReader.asyncio.run')
+    def test_mode_both_applies_deduplication(self, mock_asyncio_run, mock_converter):
+        """Test that mode='both' applies deduplication to post folder."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Setup folders
+            pre_folder = Path(tmpdir) / "PDFs_PreSelection"
+            post_folder = Path(tmpdir) / "PDFs"
+            pre_folder.mkdir()
+            post_folder.mkdir()
+            
+            # Create dummy PDFs - duplicate.pdf exists in both
+            (pre_folder / "duplicate.pdf").write_bytes(b'%PDF-1.4 dummy')
+            (pre_folder / "pre_only.pdf").write_bytes(b'%PDF-1.4 dummy')
+            (post_folder / "duplicate.pdf").write_bytes(b'%PDF-1.4 dummy')
+            (post_folder / "post_only.pdf").write_bytes(b'%PDF-1.4 dummy')
+            
+            # Mock async function - first call for pre, second for post
+            mock_asyncio_run.side_effect = [
+                # Pre-selection results (both files)
+                [
+                    {
+                        "markdown": "# Pre",
+                        "filename": "duplicate.pdf",
+                        "page_count": 1,
+                        "processing_time": 0.5,
+                        "file_size_mb": 0.01,
+                        "success": True,
+                        "error": None
+                    },
+                    {
+                        "markdown": "# Pre Only",
+                        "filename": "pre_only.pdf",
+                        "page_count": 1,
+                        "processing_time": 0.5,
+                        "file_size_mb": 0.01,
+                        "success": True,
+                        "error": None
+                    }
+                ],
+                # Post-selection results (only post_only.pdf - duplicate filtered out)
+                [
+                    {
+                        "markdown": "# Post Only",
+                        "filename": "post_only.pdf",
+                        "page_count": 1,
+                        "processing_time": 0.5,
+                        "file_size_mb": 0.01,
+                        "success": True,
+                        "error": None
+                    }
+                ]
+            ]
+            
+            # Configure environment
+            with patch.dict(os.environ, {
+                'PATH_DATA': tmpdir,
+                'PDF_PRE_SELECTION_FOLDER': 'PDFs_PreSelection',
+                'PDF_POST_SELECTION_FOLDER': 'PDFs',
+                'PDF_MAX_CONCURRENT': '5',
+                'PDF_PROCESSING_MODE': 'both'
+            }):
+                # Execute
+                results = process_pdfs(mode="both")
+            
+            # Assertions
+            assert len(results["pre"]) == 2  # Both pre PDFs processed
+            assert len(results["post"]) == 1  # Only unique post PDF processed
+            
+            # Verify duplicate.pdf is NOT in post results
+            post_filenames = [r["filename"] for r in results["post"]]
+            assert "duplicate.pdf" not in post_filenames
+            assert "post_only.pdf" in post_filenames
+    
+    @patch('PDFReader.DocumentConverter')
+    @patch('PDFReader.asyncio.run')
+    def test_empty_folders_return_empty_results(self, mock_asyncio_run, mock_converter):
+        """Test that empty folders return empty result lists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Setup empty folders
+            pre_folder = Path(tmpdir) / "PDFs_PreSelection"
+            post_folder = Path(tmpdir) / "PDFs"
+            pre_folder.mkdir()
+            post_folder.mkdir()
+            
+            # Mock returns empty list for empty folders
+            mock_asyncio_run.return_value = []
+            
+            # Configure environment
+            with patch.dict(os.environ, {
+                'PATH_DATA': tmpdir,
+                'PDF_PRE_SELECTION_FOLDER': 'PDFs_PreSelection',
+                'PDF_POST_SELECTION_FOLDER': 'PDFs',
+                'PDF_MAX_CONCURRENT': '5',
+                'PDF_PROCESSING_MODE': 'both'
+            }):
+                results = process_pdfs()
+            
+            # Assertions
+            assert len(results["pre"]) == 0
+            assert len(results["post"]) == 0
+    
+    def test_get_pdf_filenames_helper(self):
+        """Test _get_pdf_filenames() helper function."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            
+            # Create test PDFs
+            (folder / "file1.pdf").write_bytes(b'dummy')
+            (folder / "file2.pdf").write_bytes(b'dummy')
+            (folder / "file3.txt").write_bytes(b'dummy')  # Not a PDF
+            
+            filenames = _get_pdf_filenames(folder)
+            
+            assert len(filenames) == 2
+            assert "file1.pdf" in filenames
+            assert "file2.pdf" in filenames
+            assert "file3.txt" not in filenames
+    
+    def test_optimize_post_processing_helper(self):
+        """Test _optimize_post_processing() helper function."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pre_folder = Path(tmpdir) / "pre"
+            post_folder = Path(tmpdir) / "post"
+            pre_folder.mkdir()
+            post_folder.mkdir()
+            
+            # Create PDFs - duplicate.pdf in both
+            (pre_folder / "duplicate.pdf").write_bytes(b'dummy')
+            (pre_folder / "pre_only.pdf").write_bytes(b'dummy')
+            (post_folder / "duplicate.pdf").write_bytes(b'dummy')
+            (post_folder / "post_unique.pdf").write_bytes(b'dummy')
+            
+            # Get optimized list
+            optimized = _optimize_post_processing(pre_folder, post_folder)
+            
+            # Should only return post_unique.pdf
+            assert len(optimized) == 1
+            assert optimized[0].name == "post_unique.pdf"
 
 
 if __name__ == "__main__":

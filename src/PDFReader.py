@@ -17,7 +17,10 @@ from docling.document_converter import DocumentConverter
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+from dotenv import load_dotenv
 
+# Load environment variables from .conf file
+load_dotenv('.conf')
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -306,6 +309,342 @@ async def read_pdfs_batch(folder_path: str, max_concurrent: int = 5) -> List[Dic
     
     # Return all results (successful and failed mixed)
     return processed_results
+
+
+def _get_pdf_filenames(folder_path: Path) -> set[str]:
+    """
+    Get set of PDF filenames in a folder.
+    
+    Helper function that returns only the filenames (not full paths) of all PDF files
+    in a folder. Used for efficient deduplication between folders.
+    
+    Args:
+        folder_path (Path): Path object pointing to the folder to scan
+        
+    Returns:
+        set[str]: Set of PDF filenames (e.g., {"paper1.pdf", "paper2.pdf"})
+        
+    Examples:
+        >>> folder = Path("/data/pdfs")
+        >>> filenames = _get_pdf_filenames(folder)
+        >>> print(f"Found {len(filenames)} unique PDF filenames")
+    """
+    try:
+        if not folder_path.exists() or not folder_path.is_dir():
+            logger.warning(f"Folder does not exist or is not a directory: {folder_path}")
+            return set()
+        
+        # Get all PDF files and extract just the filenames
+        pdf_files = folder_path.glob("*.pdf")
+        filenames = {pdf_file.name for pdf_file in pdf_files}
+        
+        logger.debug(f"Found {len(filenames)} PDF filenames in {folder_path}")
+        return filenames
+        
+    except Exception as e:
+        logger.error(f"Error getting PDF filenames from {folder_path}: {str(e)}")
+        return set()
+
+
+def _optimize_post_processing(pre_folder: Path, post_folder: Path) -> List[Path]:
+    """
+    Get list of PDFs from post folder that don't exist in pre folder.
+    
+    This function implements deduplication optimization by filtering out PDFs
+    from the post-selection folder that already exist in the pre-selection folder.
+    Uses set operations for O(n) performance.
+    
+    Args:
+        pre_folder (Path): Path to pre-selection folder
+        post_folder (Path): Path to post-selection folder
+        
+    Returns:
+        List[Path]: List of Path objects for PDFs in post folder that should be processed
+        
+    Examples:
+        >>> pre = Path("/data/PDFs_PreSelection")
+        >>> post = Path("/data/PDFs")
+        >>> unique_pdfs = _optimize_post_processing(pre, post)
+        >>> print(f"Processing {len(unique_pdfs)} unique PDFs from post folder")
+    """
+    try:
+        # Get filenames from pre folder
+        pre_filenames = _get_pdf_filenames(pre_folder)
+        logger.info(f"Pre-selection folder has {len(pre_filenames)} PDFs")
+        
+        # Get all PDFs from post folder
+        if not post_folder.exists() or not post_folder.is_dir():
+            logger.warning(f"Post folder does not exist or is not a directory: {post_folder}")
+            return []
+        
+        all_post_pdfs = list(post_folder.glob("*.pdf"))
+        logger.info(f"Post-selection folder has {len(all_post_pdfs)} PDFs")
+        
+        # Filter out PDFs that exist in pre folder (using set for O(1) lookups)
+        unique_post_pdfs = [
+            pdf_file for pdf_file in all_post_pdfs
+            if pdf_file.name not in pre_filenames
+        ]
+        
+        # Calculate optimization statistics
+        duplicates_skipped = len(all_post_pdfs) - len(unique_post_pdfs)
+        if duplicates_skipped > 0:
+            logger.info(
+                f"Optimization: Skipping {duplicates_skipped} duplicate PDFs "
+                f"already processed in pre-selection folder"
+            )
+        
+        logger.info(f"Will process {len(unique_post_pdfs)} unique PDFs from post folder")
+        return unique_post_pdfs
+        
+    except Exception as e:
+        logger.error(f"Error optimizing post processing: {str(e)}")
+        logger.debug(f"Optimization error traceback: {traceback.format_exc()}")
+        # On error, return all post PDFs (no optimization)
+        try:
+            return list(post_folder.glob("*.pdf"))
+        except Exception:
+            return []
+
+
+def process_pdfs(mode: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Main orchestrator function to process PDFs from configured folders.
+    
+    This function reads configuration from .conf file, processes PDFs from
+    pre-selection and/or post-selection folders based on the mode, and optimizes
+    by avoiding duplicate processing of PDFs that exist in both folders.
+    
+    Args:
+        mode (Optional[str]): Processing mode override. Valid values:
+            - "pre": Process only pre-selection folder
+            - "post": Process only post-selection folder
+            - "both": Process both folders with deduplication (default)
+            - None: Use mode from configuration file
+            
+    Returns:
+        Dict[str, List[Dict[str, Any]]]: Dictionary with keys "pre" and "post",
+                                         each containing a list of result dictionaries
+                                         from read_single_pdf()
+        
+    Raises:
+        ValueError: If configuration is invalid or mode is not valid
+        FileNotFoundError: If base data path does not exist
+        
+    Examples:
+        >>> # Process both folders using config
+        >>> results = process_pdfs()
+        >>> print(f"Pre: {len(results['pre'])}, Post: {len(results['post'])}")
+        
+        >>> # Process only pre-selection folder
+        >>> results = process_pdfs(mode="pre")
+        >>> print(f"Processed {len(results['pre'])} pre-selection PDFs")
+        
+        >>> # Check for failures
+        >>> all_results = results['pre'] + results['post']
+        >>> failures = [r for r in all_results if not r['success']]
+        >>> print(f"Failed: {len(failures)}")
+    """
+    # Load configuration from .conf file
+    logger.info("Loading configuration from .conf file...")
+    
+    # Get base data path
+    path_data = os.getenv('PATH_DATA')
+    if not path_data:
+        error_msg = "PATH_DATA not found in configuration (.conf file)"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    # Validate base path exists
+    base_path = Path(path_data)
+    if not base_path.exists():
+        error_msg = f"Base data path does not exist: {path_data}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+    
+    # Get PDF folder paths
+    pre_folder_name = os.getenv('PDF_PRE_SELECTION_FOLDER', 'PDFs_PreSelection')
+    post_folder_name = os.getenv('PDF_POST_SELECTION_FOLDER', 'PDFs')
+    
+    pre_folder_path = base_path / pre_folder_name
+    post_folder_path = base_path / post_folder_name
+    
+    # Get processing configuration
+    max_concurrent_str = os.getenv('PDF_MAX_CONCURRENT', '5')
+    try:
+        max_concurrent = int(max_concurrent_str)
+        if max_concurrent < 1:
+            raise ValueError("max_concurrent must be >= 1")
+    except ValueError as e:
+        error_msg = f"Invalid PDF_MAX_CONCURRENT value '{max_concurrent_str}': {str(e)}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    timeout_str = os.getenv('PDF_TIMEOUT_SECONDS', '60')
+    try:
+        timeout = int(timeout_str)
+        if timeout < 1:
+            raise ValueError("timeout must be >= 1")
+    except ValueError as e:
+        error_msg = f"Invalid PDF_TIMEOUT_SECONDS value '{timeout_str}': {str(e)}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    # Determine processing mode
+    if mode is None:
+        mode = os.getenv('PDF_PROCESSING_MODE', 'both')
+    
+    # Validate mode
+    valid_modes = ['pre', 'post', 'both']
+    if mode not in valid_modes:
+        error_msg = f"Invalid mode '{mode}'. Must be one of: {', '.join(valid_modes)}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    # Log configuration
+    logger.info(f"Configuration loaded successfully:")
+    logger.info(f"  - Base path: {path_data}")
+    logger.info(f"  - Pre-selection folder: {pre_folder_path}")
+    logger.info(f"  - Post-selection folder: {post_folder_path}")
+    logger.info(f"  - Max concurrent: {max_concurrent}")
+    logger.info(f"  - Timeout: {timeout}s")
+    logger.info(f"  - Processing mode: {mode}")
+    
+    # Initialize result structure
+    results: Dict[str, List[Dict[str, Any]]] = {
+        "pre": [],
+        "post": []
+    }
+    
+    # Process based on mode
+    try:
+        if mode in ["pre", "both"]:
+            # Process pre-selection folder
+            logger.info("=" * 60)
+            logger.info("Processing PRE-SELECTION folder...")
+            logger.info("=" * 60)
+            
+            if pre_folder_path.exists():
+                # Use asyncio.run to execute async function in sync context
+                pre_results = asyncio.run(
+                    read_pdfs_batch(str(pre_folder_path), max_concurrent)
+                )
+                results["pre"] = pre_results
+                
+                # Log summary
+                successful = sum(1 for r in pre_results if r["success"])
+                logger.info(
+                    f"Pre-selection processing complete: "
+                    f"{successful}/{len(pre_results)} successful"
+                )
+            else:
+                logger.warning(f"Pre-selection folder does not exist: {pre_folder_path}")
+        
+        if mode in ["post", "both"]:
+            # Process post-selection folder with optimization
+            logger.info("=" * 60)
+            logger.info("Processing POST-SELECTION folder...")
+            logger.info("=" * 60)
+            
+            if post_folder_path.exists():
+                # Determine which PDFs to process
+                if mode == "both":
+                    # Apply deduplication optimization
+                    logger.info("Applying deduplication optimization...")
+                    post_pdfs = _optimize_post_processing(pre_folder_path, post_folder_path)
+                    
+                    if post_pdfs:
+                        # Create temporary folder reference for batch processing
+                        # We'll process the specific list of files
+                        post_results = []
+                        
+                        # Process the filtered list using individual calls wrapped in async
+                        async def process_optimized_batch():
+                            semaphore = asyncio.Semaphore(max_concurrent)
+                            loop = asyncio.get_event_loop()
+                            
+                            async def process_pdf_async(pdf_path: Path):
+                                async with semaphore:
+                                    with ThreadPoolExecutor(max_workers=1) as executor:
+                                        result = await loop.run_in_executor(
+                                            executor,
+                                            read_single_pdf,
+                                            str(pdf_path)
+                                        )
+                                    return result
+                            
+                            tasks = [process_pdf_async(pdf) for pdf in post_pdfs]
+                            return await asyncio.gather(*tasks, return_exceptions=True)
+                        
+                        # Execute optimized batch
+                        raw_results = asyncio.run(process_optimized_batch())
+                        
+                        # Process results (handle exceptions)
+                        for i, result in enumerate(raw_results):
+                            if isinstance(result, Exception):
+                                error_result = {
+                                    "markdown": "",
+                                    "filename": post_pdfs[i].name,
+                                    "page_count": 0,
+                                    "processing_time": 0.0,
+                                    "file_size_mb": 0.0,
+                                    "success": False,
+                                    "error": f"Unexpected exception: {str(result)}"
+                                }
+                                post_results.append(error_result)
+                            else:
+                                post_results.append(result)
+                        
+                        results["post"] = post_results
+                        
+                        # Log summary
+                        successful = sum(1 for r in post_results if r["success"])
+                        logger.info(
+                            f"Post-selection processing complete: "
+                            f"{successful}/{len(post_results)} successful"
+                        )
+                    else:
+                        logger.info("No unique PDFs to process in post-selection folder")
+                else:
+                    # Process all PDFs in post folder (mode == "post")
+                    post_results = asyncio.run(
+                        read_pdfs_batch(str(post_folder_path), max_concurrent)
+                    )
+                    results["post"] = post_results
+                    
+                    # Log summary
+                    successful = sum(1 for r in post_results if r["success"])
+                    logger.info(
+                        f"Post-selection processing complete: "
+                        f"{successful}/{len(post_results)} successful"
+                    )
+            else:
+                logger.warning(f"Post-selection folder does not exist: {post_folder_path}")
+        
+        # Final summary
+        logger.info("=" * 60)
+        logger.info("PROCESSING COMPLETE")
+        logger.info("=" * 60)
+        total_pre = len(results["pre"])
+        total_post = len(results["post"])
+        total_successful = (
+            sum(1 for r in results["pre"] if r["success"]) +
+            sum(1 for r in results["post"] if r["success"])
+        )
+        total_pdfs = total_pre + total_post
+        
+        logger.info(f"Total PDFs processed: {total_pdfs}")
+        logger.info(f"  - Pre-selection: {total_pre}")
+        logger.info(f"  - Post-selection: {total_post}")
+        logger.info(f"  - Successful: {total_successful}/{total_pdfs}")
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in process_pdfs orchestration: {str(e)}")
+        logger.debug(f"Orchestration error traceback: {traceback.format_exc()}")
+        raise
+
 
 def read_pdfs_with_docling(folder_path: str, generate_markdown: bool = False, markdown_output_folder: Optional[str] = None) -> bool:
     """
