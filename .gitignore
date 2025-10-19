@@ -32,8 +32,6 @@ data/*
 .data/
 .data/*
 
-.github/
-.github/*
 
 ### RStudio ###
 .Rproj.user
