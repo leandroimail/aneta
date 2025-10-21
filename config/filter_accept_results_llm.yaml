@@ -4,7 +4,7 @@
 
 filter: >
   ((is_relevant_yes_percent >= 65
-  AND total_models_answered >= 2)
+  AND total_responses >= 2)
   AND
   (
     principal_research_question_yes_percent >= 65

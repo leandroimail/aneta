@@ -166,6 +166,19 @@ def run_process_responses_to_excel():
     print(f"- Consolidated Excel file: {consolidated_path}")
     return True
 
+def run_filter_relevant_papers():
+    """
+    Execute filtering of LLM-classified papers using SQL criteria.
+    
+    Filters LLM response JSON using DuckDB with configurable SQL WHERE clause,
+    then matches filtered records to BibTeX entries and generates outputs.
+    
+    Returns:
+        bool: True if the operation was completed successfully, False otherwise
+    """
+    from src.FilterRelevantPapers import filter_relevant_papers
+    return filter_relevant_papers()
+
 def run_pdf_reader():
     """
     Execute PDF reading using new async process_pdfs() function.
@@ -280,6 +293,7 @@ def parse_arguments():
     group.add_argument('--abstract_classifier_llm_one_on_one_async', action='store_true', help='Realiza a classificação de abstracts usando LLM de forma assíncrona (modo One-on-One)')
     group.add_argument('--bibtex_to_json', action='store_true', help='Converte arquivo BibTeX para formato JSON com schema específico')
     group.add_argument('--process_responses', action='store_true', help='Processa respostas LLM para arquivos Excel')
+    group.add_argument('--filter_relevant_papers', action='store_true', help='Filtra papers relevantes das respostas LLM usando critérios SQL configuráveis')
     group.add_argument('--read_pdfs', action='store_true', help='Parse PDF documents using Docling and optionally generate Markdown files')
 
     return parser.parse_args(), parser
@@ -300,6 +314,7 @@ if __name__ == "__main__":
     run_abstract_llm_one_on_one = False
     run_abstract_llm_one_on_one_async = False
     run_process_excel = True
+    run_filter_relevant_papers_var = False
     run_pdf_reader_var = False  
 
     setup_environment()
@@ -334,6 +349,8 @@ if __name__ == "__main__":
         run_bibtex_to_json_schema()
     elif args.process_responses:  # Add new command line argument handler
         run_process_responses_to_excel()
+    elif args.filter_relevant_papers:
+        run_filter_relevant_papers()
     elif args.read_pdfs:
         run_pdf_reader()
     elif run_search_database:
@@ -362,6 +379,8 @@ if __name__ == "__main__":
         run_bibtex_to_json_schema()
     elif run_process_excel:  # Add script mode handler for new function
         run_process_responses_to_excel()
+    elif run_filter_relevant_papers_var:
+        run_filter_relevant_papers()
     elif run_pdf_reader_var:
         run_pdf_reader()
     else:
