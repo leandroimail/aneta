@@ -66,7 +66,7 @@ If `<base_path_task_list>/development_request.md` or `<base_path_task_list>/task
      - Summary of actions (files changed, commands executed, key decisions).
      - Tests run (commands, results, evidence).
      - Final outcome (Success / Failure).
-     - Estimated time invested and noteworthy observations.
+     - Noteworthy observations.
    - Document new insights (risks, impacts, future dependencies) in both the task notes and the log.
 
 ## BUG, FAILURE, AND RISK HANDLING
@@ -153,7 +153,6 @@ When finishing or pausing:
 - Tests:
   - <Command> → <Result>
 - Outcome: Success | Failure (reason)
-- Time Spent: <Estimate>
 - Notes: <Observations, risks, decisions, dependencies>
 ```
 
