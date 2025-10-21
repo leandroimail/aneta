@@ -34,6 +34,7 @@ import os
 import json
 import re
 import time
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional
 
@@ -63,6 +64,8 @@ class FilterConfig:
         unrelevant_output_path: Path to output JSON file (unrelevant papers)
         yaml_filter_path: Path to YAML configuration with SQL filter
         filter_clause: SQL WHERE clause extracted from YAML
+        markdown_report_path: Path to Markdown execution report
+        markdown_report_path: Path to Markdown execution report
     """
     path_data: str
     bib_file_path: str
@@ -72,6 +75,7 @@ class FilterConfig:
     unrelevant_output_path: str
     yaml_filter_path: str
     filter_clause: str = ""
+    markdown_report_path: str = ""
 
 
 @dataclass
@@ -150,6 +154,7 @@ def load_configuration() -> FilterConfig:
     bib_output_path = path_data.replace(".bibs", required_vars["RELEVANT_ABSTRACT_PAPERS_BIBs_OUTPUT"])
     unrelevant_output_path = path_data.replace(".bibs", required_vars["UNRELEVANT_ABSTRACT_PAPERS_OUTPUT"])
     yaml_filter_path = os.path.abspath(required_vars["FILTER_LLM_CONFIG_PATH"])
+    markdown_report_path = os.path.splitext(json_output_path)[0] + "_report.md"
     
     # Load SQL filter from YAML
     filter_clause = load_yaml_filter(yaml_filter_path)
@@ -163,7 +168,8 @@ def load_configuration() -> FilterConfig:
         bib_output_path=bib_output_path,
         unrelevant_output_path=unrelevant_output_path,
         yaml_filter_path=yaml_filter_path,
-        filter_clause=filter_clause
+        filter_clause=filter_clause,
+        markdown_report_path=markdown_report_path
     )
     
     return config
@@ -845,6 +851,111 @@ def write_filtered_outputs(filtered_json: List[Dict], matched_bibtex: List[Dict]
 # STATISTICS AND REPORTING
 # ============================================================================
 
+def build_markdown_report(input_count: int, filtered_count: int, unrelevant_count: int,
+                          stats: MatchingStats, execution_time: float,
+                          config: FilterConfig) -> str:
+    """Build the markdown execution report string.
+
+    The markdown structure mirrors the console output to keep both
+    representations consistent. Percentages are guarded against
+    division-by-zero to avoid runtime errors.
+
+    Args:
+        input_count: Number of input records.
+        filtered_count: Number of filtered records.
+        unrelevant_count: Number of unrelevant records.
+        stats: Matching statistics container.
+        execution_time: Total execution time in seconds.
+        config: Configuration object with paths and filter clause.
+
+    Returns:
+        Markdown-formatted string ready to be persisted.
+    """
+    # Step 1: Prepare helper computations for percentages.
+    relevant_percentage = (filtered_count / input_count * 100) if input_count else 0.0
+    unrelevant_percentage = (unrelevant_count / input_count * 100) if input_count else 0.0
+    doi_pct = (stats.matched_doi / stats.total_filtered * 100) if stats.total_filtered else 0.0
+    title_pct = (stats.matched_title / stats.total_filtered * 100) if stats.total_filtered else 0.0
+    id_pct = (stats.matched_id / stats.total_filtered * 100) if stats.total_filtered else 0.0
+    unmatched_pct = (stats.unmatched / stats.total_filtered * 100) if stats.total_filtered else 0.0
+    matched_total = stats.matched_doi + stats.matched_title + stats.matched_id
+    records_per_sec = (input_count / execution_time) if execution_time > 0 else 0.0
+
+    # Step 2: Build markdown content incrementally.
+    lines: List[str] = []
+    lines.append("# Filter Relevant Papers - Execution Report")
+    lines.append("")
+    lines.append(f"Generated at: {datetime.now().isoformat(timespec='seconds')}")
+    lines.append("")
+
+    # Configuration section.
+    lines.append("## Configuration")
+    lines.append(f"- Configuration file: `.conf`")
+    lines.append(f"- Filter configuration: `{config.yaml_filter_path}`")
+    lines.append(f"- SQL filter: `{config.filter_clause}`")
+    lines.append("")
+
+    # Input section.
+    lines.append("## Input Data")
+    lines.append(f"- JSON records loaded: **{input_count:,}**")
+    lines.append(f"- JSON source file: `{config.json_input_path}`")
+    lines.append(f"- BibTeX source file: `{config.bib_file_path}`")
+    lines.append("")
+
+    # Filtering section.
+    lines.append("## Filtering Results")
+    lines.append(f"- Relevant papers: **{filtered_count:,}** ({relevant_percentage:.1f}% of input)")
+    lines.append(f"- Unrelevant papers: **{unrelevant_count:,}** ({unrelevant_percentage:.1f}% of input)")
+    lines.append("")
+
+    # Matching section.
+    lines.append("## Entry Matching")
+    if stats.total_filtered:
+        lines.append(f"- DOI matches: **{stats.matched_doi:,}** ({doi_pct:.1f}%)")
+        lines.append(f"- Title matches: **{stats.matched_title:,}** ({title_pct:.1f}%)")
+        lines.append(f"- ID matches: **{stats.matched_id:,}** ({id_pct:.1f}%)")
+        lines.append(f"- Total matched: **{matched_total:,}** ({100 - unmatched_pct:.1f}%)")
+        lines.append(f"- Unmatched: **{stats.unmatched:,}** ({unmatched_pct:.1f}%)")
+
+        if stats.unmatched_entries:
+            lines.append("")
+            lines.append("### Unmatched Entries (sample)")
+            display_count = min(5, len(stats.unmatched_entries))
+            for entry in stats.unmatched_entries[:display_count]:
+                truncated_title = entry.get('title', 'N/A')
+                if len(truncated_title) > 100:
+                    truncated_title = truncated_title[:100].rstrip() + "..."
+                lines.append(
+                    f"- ID: `{entry.get('id', 'N/A')}` · DOI: `{entry.get('doi', 'N/A')}` · Title: {truncated_title}"
+                )
+
+            if len(stats.unmatched_entries) > display_count:
+                lines.append(f"- ...and {len(stats.unmatched_entries) - display_count} more unmatched entries")
+    else:
+        lines.append("- No records to match (empty filter result)")
+    lines.append("")
+
+    # Output section.
+    lines.append("## Output Files")
+    lines.append(f"- Relevant JSON: `{config.json_output_path}` (records: {filtered_count:,})")
+    lines.append(f"- Unrelevant JSON: `{config.unrelevant_output_path}` (records: {unrelevant_count:,})")
+    lines.append(f"- BibTeX output: `{config.bib_output_path}` (entries: {matched_total:,})")
+    lines.append(f"- Markdown report: `{config.markdown_report_path}`")
+    lines.append("")
+
+    # Performance section.
+    lines.append("## Performance")
+    lines.append(f"- Execution time: {execution_time:.3f} seconds")
+    lines.append(f"- Processing speed: {records_per_sec:.0f} records/second")
+    lines.append("")
+
+    # Completion note.
+    lines.append("✅ Filtering completed successfully.")
+
+    # Step 3: Join lines with newline separators for final markdown.
+    return "\n".join(lines)
+
+
 def report_statistics(input_count: int, filtered_count: int, unrelevant_count: int,
                      stats: MatchingStats, execution_time: float,
                      config: FilterConfig) -> None:
@@ -860,6 +971,8 @@ def report_statistics(input_count: int, filtered_count: int, unrelevant_count: i
     - Unmatched entries list (if any)
     - Output file generation results
     - Execution time
+    Additionally, the report is persisted to a Markdown file located in the
+    same directory as the JSON outputs for traceability.
     
     Args:
         input_count: Number of input records
@@ -952,6 +1065,30 @@ def report_statistics(input_count: int, filtered_count: int, unrelevant_count: i
     print("\n" + "="*70)
     print("✓ FILTERING COMPLETED SUCCESSFULLY")
     print("="*70 + "\n")
+
+    # Persist markdown report alongside JSON outputs for auditing.
+    try:
+        # Ensure parent directory exists before persisting.
+        report_dir = os.path.dirname(config.markdown_report_path)
+        if report_dir and not os.path.exists(report_dir):
+            os.makedirs(report_dir, exist_ok=True)
+
+        markdown_content = build_markdown_report(
+            input_count=input_count,
+            filtered_count=filtered_count,
+            unrelevant_count=unrelevant_count,
+            stats=stats,
+            execution_time=execution_time,
+            config=config
+        )
+
+        with open(config.markdown_report_path, "w", encoding="utf-8") as report_file:
+            report_file.write(markdown_content)
+
+        print(f"  ✓ Markdown report saved: {config.markdown_report_path}")
+
+    except OSError as error:
+        print(f"  ⚠ Warning: Failed to save markdown report: {error}")
 
 
 # ============================================================================
