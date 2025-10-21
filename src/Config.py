@@ -2,13 +2,13 @@
 from dotenv import load_dotenv
 import os
 
-from Config.Deprecated.DeprecatedConfigPythonFile.Config import regex_expression_include as regex_expression_include_deprecated
-from Config.Deprecated.DeprecatedConfigPythonFile.Config import regex_expression_exclude as regex_expression_exclude_deprecated
-from Config.Deprecated.DeprecatedConfigPythonFile.Config import condition_include as condition_include_deprecated
-from Config.Deprecated.DeprecatedConfigPythonFile.Config import condition_exclude as condition_exclude_deprecated
+from config.Deprecated.DeprecatedConfigPythonFile.Config import regex_expression_include as regex_expression_include_deprecated
+from config.Deprecated.DeprecatedConfigPythonFile.Config import regex_expression_exclude as regex_expression_exclude_deprecated
+from config.Deprecated.DeprecatedConfigPythonFile.Config import condition_include as condition_include_deprecated
+from config.Deprecated.DeprecatedConfigPythonFile.Config import condition_exclude as condition_exclude_deprecated
 
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 #####################  SYSTEM CONFIG #####################
 #####################  SYSTEM CONFIG #####################

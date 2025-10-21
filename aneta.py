@@ -3,7 +3,11 @@ import os
 import sys
 import argparse
 import asyncio
+import warnings
 from dotenv import load_dotenv
+
+# Suppress SyntaxWarning from third-party libraries (scholarly)
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 from src.Search import run_search as search_run
 from src.EnrichBibtex import enrich_bibtex as enrich_bibtex_sync
@@ -154,11 +158,12 @@ def run_process_responses_to_excel():
         bool: True if the operation was completed successfully
     """
     # Call the process_responses_to_excel function
-    full_path, simple_path = process_responses_to_excel()
+    full_path, simple_path, consolidated_path = process_responses_to_excel()
     
     print(f"Excel files created successfully:")
     print(f"- Full Excel file: {full_path}")
     print(f"- Simple Excel file: {simple_path}")
+    print(f"- Consolidated Excel file: {consolidated_path}")
     return True
 
 def run_pdf_reader():
@@ -287,14 +292,14 @@ if __name__ == "__main__":
     run_enrich_bibtex_async = False
     run_selection_bibtex = False
     run_bibliometry_async_var = False
-    run_bibliometry = True
+    run_bibliometry = False
     run_download_papers = False
     run_deprecated_abstract = False
     run_convert_bibtex_to_json = False
     run_abstract_llm = False
     run_abstract_llm_one_on_one = False
     run_abstract_llm_one_on_one_async = False
-    run_process_excel = False
+    run_process_excel = True
     run_pdf_reader_var = False  
 
     setup_environment()

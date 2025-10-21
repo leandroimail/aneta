@@ -230,6 +230,7 @@ def save_unconverted_files_log(unconverted_files: List[str], base_dir: Optional[
 def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """
     Lê todos os arquivos de resposta do diretório raw_responses e seus subdiretórios.
+    Prioriza leitura de JSONs já processados em final_json para evitar reprocessamento.
     
     Args:
         base_path: Caminho base dos arquivos de resposta
@@ -237,6 +238,12 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
     Returns:
         Dicionário com os dados extraídos organizados por provedor
     """
+    # Determinar diretório base do projeto
+    # base_path é .data/OUTPUTS/raw_responses
+    # Precisamos .data/OUTPUTS/processed_responses/final_json
+    outputs_dir = os.path.dirname(base_path)  # .data/OUTPUTS
+    processed_json_base = os.path.join(outputs_dir, "processed_responses", "final_json")
+    
     # Carregar perguntas de pesquisa para uso na extração de texto bruto
     yaml_path = os.path.join(os.path.dirname(base_path), "..", "..", "Config", "research_questions.yaml")
     research_questions = {}
@@ -248,6 +255,8 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
     
     results = {}
     unconverted_files = []  # Track files that couldn't be converted
+    reused_count = 0  # Track how many JSONs were reused
+    processed_count = 0  # Track how many files were processed
     
     # Percorrer todos os subdiretórios
     for root, dirs, files in os.walk(base_path):
@@ -266,9 +275,6 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
                 file_path = os.path.join(root, file)
                 
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    
                     # Extrair informações do nome do arquivo
                     pattern = r'response_(\d+)_([^_]+)_([^_]+)_raw\.txt'
                     match = re.search(pattern, file)
@@ -288,45 +294,67 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
                         else:
                             response_id, provider_name, model = "", provider, "unknown"
                     
-                    response_id = "'" + str(response_id).zfill(5)
+                    response_id_formatted = "'" + str(response_id).zfill(5)
                     
-                    # Tentar analisar o conteúdo JSON
-                    parsed_content = clean_and_parse_json(content)
+                    # NOVA LÓGICA: Verificar se já existe JSON processado
+                    json_filename = file.replace("_raw.txt", ".json")
+                    processed_json_path = os.path.join(processed_json_base, provider_name, model, json_filename)
                     
-                    # Verificar se o conteúdo analisado possui informações úteis
-                    if "raw_content" in parsed_content:
-                        # Tentar extrair respostas do texto bruto usando o LLM
-                        parsed_content = convert_to_json_llm(parsed_content['raw_content'])
+                    parsed_content = None
+                    
+                    # Tentar ler JSON já processado primeiro
+                    if os.path.exists(processed_json_path):
+                        try:
+                            with open(processed_json_path, 'r', encoding='utf-8') as f:
+                                parsed_content = json.load(f)
+                            reused_count += 1
+                            # print(f"Reusando JSON processado: {json_filename}")
+                        except Exception as e:
+                            print(f"Erro ao ler JSON processado {processed_json_path}: {e}")
+                            parsed_content = None
+                    
+                    # Se não encontrou JSON processado, processar o raw
+                    if parsed_content is None:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
                         
-                        # Check if conversion was successful
+                        # Tentar analisar o conteúdo JSON
+                        parsed_content = clean_and_parse_json(content)
+                        
+                        # Verificar se o conteúdo analisado possui informações úteis
                         if "raw_content" in parsed_content:
-                            # Conversion failed, add to list of unconverted files
-                            unconverted_files.append(file_path)
-                            print(f"Warning: Failed to convert {file_path} using LLM")
+                            # Tentar extrair respostas do texto bruto usando o LLM
+                            parsed_content = convert_to_json_llm(parsed_content['raw_content'])
+                            
+                            # Check if conversion was successful
+                            if "raw_content" in parsed_content:
+                                # Conversion failed, add to list of unconverted files
+                                unconverted_files.append(file_path)
+                                print(f"Warning: Failed to convert {file_path} using LLM")
+                        
+                        processed_count += 1
+                        
+                        # Salvar o JSON processado para reuso futuro
+                        if parsed_content and "raw_content" not in parsed_content and "error" not in parsed_content:
+                            save_parsed_json(parsed_content, provider_name, model, file)
                     
                     if parsed_content:
                         # Adicionar metadados
                         if isinstance(parsed_content, list):
                             for item in parsed_content:
                                 if isinstance(item, dict):  # Check if item is a dictionary
-                                    item['_response_id'] = response_id
+                                    item['_response_id'] = response_id_formatted
                                     item['_provider'] = provider_name
                                     item['_model'] = model
                                     item['_file'] = file
-                                    # Save the parsed JSON to a file
-                                    json_path = save_parsed_json(item, provider_name, model, file)
-                                    if json_path:
-                                        item['_json_path'] = json_path
+                                    item['_json_path'] = processed_json_path
                                     results[provider].append(item)
                         else:
-                            parsed_content['_response_id'] = response_id
+                            parsed_content['_response_id'] = response_id_formatted
                             parsed_content['_provider'] = provider_name
                             parsed_content['_model'] = model
                             parsed_content['_file'] = file
-                            # Save the parsed JSON to a file
-                            json_path = save_parsed_json(parsed_content, provider_name, model, file)
-                            if json_path:
-                                parsed_content['_json_path'] = json_path
+                            parsed_content['_json_path'] = processed_json_path
                             results[provider].append(parsed_content)
                 except Exception as e:
                     print(f"Erro ao processar arquivo {file_path}: {e}")
@@ -335,6 +363,13 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
     # Save log of unconverted files
     if unconverted_files:
         save_unconverted_files_log(unconverted_files)
+    
+    # Imprimir estatísticas de reuso
+    total_files = reused_count + processed_count
+    if total_files > 0:
+        print(f"\nEstatísticas de processamento:")
+        print(f"  - JSONs reutilizados: {reused_count}/{total_files} ({100*reused_count//total_files if total_files > 0 else 0}%)")
+        print(f"  - Arquivos processados: {processed_count}/{total_files} ({100*processed_count//total_files if total_files > 0 else 0}%)")
     
     return results
 
@@ -439,36 +474,36 @@ def flatten_json_response(response: Dict[str, Any], articles: Dict[str, Dict[str
         for q_key, q_value in response['research_questions'].items():
             if isinstance(q_value, dict):
                 for sub_key, sub_value in q_value.items():
-                    flat_response[f'rq_{q_key}_{sub_key}'] = sub_value
+                    flat_response[f'{q_key}_{sub_key}'] = sub_value
             else:
-                flat_response[f'rq_{q_key}'] = q_value
+                flat_response[f'{q_key}'] = q_value
     
     # Processar perguntas de suporte
     if 'supporting_questions' in response:
         for q_key, q_value in response['supporting_questions'].items():
             if isinstance(q_value, dict):
                 for sub_key, sub_value in q_value.items():
-                    flat_response[f'sq_{q_key}_{sub_key}'] = sub_value
+                    flat_response[f'{q_key}_{sub_key}'] = sub_value
             else:
-                flat_response[f'sq_{q_key}'] = q_value
+                flat_response[f'{q_key}'] = q_value
     
     # Processar critérios de aceitação
     if 'accepted_criteria' in response:
         for c_key, c_value in response['accepted_criteria'].items():
             if isinstance(c_value, dict):
                 for sub_key, sub_value in c_value.items():
-                    flat_response[f'ac_{c_key}_{sub_key}'] = sub_value
+                    flat_response[f'{c_key}_{sub_key}'] = sub_value
             else:
-                flat_response[f'ac_{c_key}'] = c_value
+                flat_response[f'{c_key}'] = c_value
     
     # Processar critérios de rejeição
     if 'rejection_criteria' in response:
         for c_key, c_value in response['rejection_criteria'].items():
             if isinstance(c_value, dict):
                 for sub_key, sub_value in c_value.items():
-                    flat_response[f'rc_{c_key}_{sub_key}'] = sub_value
+                    flat_response[f'{c_key}_{sub_key}'] = sub_value
             else:
-                flat_response[f'rc_{c_key}'] = c_value
+                flat_response[f'{c_key}'] = c_value
     
     # Processar relevância
     if 'is_relevant' in response:
@@ -498,6 +533,275 @@ def flatten_json_response(response: Dict[str, Any], articles: Dict[str, Dict[str
     return flat_response
 
 
+def classify_answer(value: Any) -> str:
+    """
+    Classifica um valor de resposta em: 'positive', 'negative' ou 'other'.
+    
+    Args:
+        value: Valor a ser verificado
+        
+    Returns:
+        String indicando o tipo de resposta: 'positive', 'negative' ou 'other'
+    """
+    if not isinstance(value, str):
+        return 'other'
+    
+    normalized_value = value.lower().strip()
+    
+    # Respostas positivas
+    if normalized_value in ['yes', 'sim']:
+        return 'positive'
+    
+    # Respostas negativas
+    if normalized_value in ['no', 'não', 'nao']:
+        return 'negative'
+    
+    # Outras respostas (not sure, maybe, etc.)
+    return 'other'
+
+
+def is_positive_answer(value: Any) -> bool:
+    """
+    Verifica se um valor representa uma resposta positiva.
+    Mantida para compatibilidade, mas usa classify_answer internamente.
+    
+    Args:
+        value: Valor a ser verificado
+        
+    Returns:
+        True se o valor for uma resposta positiva, False caso contrário
+    """
+    return classify_answer(value) == 'positive'
+
+
+def consolidate_responses_by_doi(responses_data: Dict[str, List[Dict]], 
+                                  articles: Dict[str, Dict[str, str]]) -> List[Dict[str, Any]]:
+    """
+    Consolida respostas por _response_id, somando contagens de todos os modelos.
+    
+    Args:
+        responses_data: Dados de respostas organizados por provedor
+        articles: Informações dos artigos
+        
+    Returns:
+        Lista de dicionários consolidados por _response_id com somatória de todos os modelos
+    """
+    # Dicionário para agrupar respostas por _response_id
+    consolidated: Dict[str, Dict[str, Any]] = {}
+    
+    # Coletar todos os campos de resposta (answer) existentes
+    all_answer_fields = set()
+    
+    # Primeira passagem: identificar todos os campos answer
+    for provider, responses in responses_data.items():
+        for response in responses:
+            flat_response = flatten_json_response(response, articles)
+            
+            # Coletar campos answer
+            for key in flat_response.keys():
+                if key.endswith('_answer'):
+                    # Extrair o prefixo do campo (ex: rq_principal_research_question, is_relevant)
+                    field_prefix = key.replace('_answer', '')
+                    all_answer_fields.add(field_prefix)
+    
+    # Segunda passagem: consolidar respostas por _response_id
+    for provider, responses in responses_data.items():
+        for response in responses:
+            flat_response = flatten_json_response(response, articles)
+            
+            # Obter identificadores
+            response_id = flat_response.get('_response_id', '')
+            if not response_id:
+                continue
+            
+            # Usar _response_id como chave única
+            key = response_id
+            
+            # Inicializar entrada se não existir
+            if key not in consolidated:
+                consolidated[key] = {
+                    '_response_id': response_id,
+                    'id': flat_response.get('id', ''),
+                    'doi': flat_response.get('doi', ''),
+                    'article_title': flat_response.get('article_title', ''),
+                    'article_abstract': flat_response.get('article_abstract', ''),
+                    'article_keywords': flat_response.get('article_keywords', ''),
+                    'total_responses': 0,
+                    'providers': set(),
+                    'models': set()
+                }
+                
+                # Inicializar contadores para cada campo de resposta (sem prefixo de modelo)
+                for field_prefix in all_answer_fields:
+                    consolidated[key][f'{field_prefix}_yes_count'] = 0
+                    consolidated[key][f'{field_prefix}_no_count'] = 0
+                    consolidated[key][f'{field_prefix}_other_count'] = 0
+                    consolidated[key][f'{field_prefix}_total_count'] = 0
+                    consolidated[key][f'{field_prefix}_yes_percent'] = 0.0
+                    consolidated[key][f'{field_prefix}_no_percent'] = 0.0
+                    consolidated[key][f'{field_prefix}_other_percent'] = 0.0
+            else:
+                # Atualizar id e doi se estiverem vazios e agora temos valores
+                if not consolidated[key]['id'] and flat_response.get('id'):
+                    consolidated[key]['id'] = flat_response.get('id', '')
+                if not consolidated[key]['doi'] and flat_response.get('doi'):
+                    consolidated[key]['doi'] = flat_response.get('doi', '')
+                if not consolidated[key]['article_title'] and flat_response.get('article_title'):
+                    consolidated[key]['article_title'] = flat_response.get('article_title', '')
+                if not consolidated[key]['article_abstract'] and flat_response.get('article_abstract'):
+                    consolidated[key]['article_abstract'] = flat_response.get('article_abstract', '')
+                if not consolidated[key]['article_keywords'] and flat_response.get('article_keywords'):
+                    consolidated[key]['article_keywords'] = flat_response.get('article_keywords', '')
+            
+            # Atualizar contadores gerais
+            consolidated[key]['total_responses'] += 1
+            consolidated[key]['providers'].add(flat_response.get('_provider', 'unknown'))
+            
+            # Obter modelo da resposta
+            model = flat_response.get('_model', 'unknown')
+            consolidated[key]['models'].add(model)
+            
+            # Contar respostas (positivas, negativas, outras) para cada campo answer
+            # Soma de todos os modelos (sem prefixo de modelo)
+            for field_prefix in all_answer_fields:
+                answer_key = f'{field_prefix}_answer'
+                if answer_key in flat_response:
+                    answer_value = flat_response[answer_key]
+                    consolidated[key][f'{field_prefix}_total_count'] += 1
+                    
+                    # Classificar resposta
+                    answer_type = classify_answer(answer_value)
+                    if answer_type == 'positive':
+                        consolidated[key][f'{field_prefix}_yes_count'] += 1
+                    elif answer_type == 'negative':
+                        consolidated[key][f'{field_prefix}_no_count'] += 1
+                    else:
+                        consolidated[key][f'{field_prefix}_other_count'] += 1
+    
+    # Converter sets para strings, calcular percentuais e preparar resultado final
+    result = []
+    for key, data in consolidated.items():
+        data['providers'] = ', '.join(sorted(data['providers']))
+        data['models'] = ', '.join(sorted(data['models']))
+        
+        # Calcular percentuais para cada campo
+        for field_prefix in all_answer_fields:
+            total = data[f'{field_prefix}_total_count']
+            if total > 0:
+                data[f'{field_prefix}_yes_percent'] = round((data[f'{field_prefix}_yes_count'] / total) * 100, 2)
+                data[f'{field_prefix}_no_percent'] = round((data[f'{field_prefix}_no_count'] / total) * 100, 2)
+                data[f'{field_prefix}_other_percent'] = round((data[f'{field_prefix}_other_count'] / total) * 100, 2)
+        
+        result.append(data)
+    
+    # Ordenar por _response_id
+    result.sort(key=lambda x: x.get('_response_id', ''))
+    
+    return result
+
+
+def create_consolidated_excel(consolidated_data: List[Dict[str, Any]], 
+                               output_path: str,
+                               questions: Optional[Dict[str, str]] = None) -> None:
+    """
+    Cria arquivo Excel consolidado com contagens de respostas por _response_id (somatória de todos os modelos).
+    
+    Args:
+        consolidated_data: Dados consolidados por _response_id
+        output_path: Caminho para salvar o arquivo Excel consolidado
+        questions: Dicionário com siglas e perguntas de pesquisa (opcional)
+    """
+    if not consolidated_data:
+        print("Nenhum dado consolidado para gerar Excel")
+        return
+    
+    # Converter para DataFrame
+    df = pd.DataFrame(consolidated_data)
+    
+    # Reordenar colunas para melhor legibilidade
+    # Colunas básicas primeiro
+    basic_cols = ['_response_id', 'id', 'doi', 'article_title', 'article_abstract', 'article_keywords', 
+                  'total_responses', 'providers', 'models']
+    
+    # Colunas de contagem (sem prefixo de modelo)
+    count_cols = [col for col in df.columns if col not in basic_cols]
+    
+    # Extrair campos únicos
+    fields = set()
+    for col in count_cols:
+        # Remover sufixos para encontrar o campo base
+        for suffix in ['_total_count', '_yes_count', '_no_count', '_other_count',
+                      '_yes_percent', '_no_percent', '_other_percent']:
+            if col.endswith(suffix):
+                field = col.replace(suffix, '')
+                fields.add(field)
+                break
+    
+    # Separar campos prioritários
+    priority_fields = []
+    other_fields = []
+    
+    # Primeiro adicionar is_relevant e principal_research_question se existirem
+    if 'is_relevant' in fields:
+        priority_fields.append('is_relevant')
+    if 'principal_research_question' in fields:
+        priority_fields.append('principal_research_question')
+    
+    # Adicionar outros campos em ordem alfabética
+    for field in sorted(fields):
+        if field not in priority_fields:
+            other_fields.append(field)
+    
+    # Ordenar colunas: campos prioritários primeiro, depois outros campos ordenados
+    count_cols_sorted = []
+    for field in priority_fields + other_fields:
+        for suffix in ['_total_count', '_yes_count', '_no_count', '_other_count',
+                      '_yes_percent', '_no_percent', '_other_percent']:
+            col_name = f'{field}{suffix}'
+            if col_name in count_cols:
+                count_cols_sorted.append(col_name)
+    
+    # Adicionar colunas que não foram processadas
+    for col in count_cols:
+        if col not in count_cols_sorted:
+            count_cols_sorted.append(col)
+    
+    # Combinar todas as colunas na ordem desejada
+    ordered_cols = [col for col in basic_cols if col in df.columns] + count_cols_sorted
+    df = df[ordered_cols]
+    
+    # Criar arquivo Excel
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Consolidated', index=False)
+        
+        # Adicionar aba Research Questions se fornecida
+        if questions:
+            questions_df = pd.DataFrame({
+                'question_id': list(questions.keys()),
+                'question_text': list(questions.values())
+            })
+            questions_df.to_excel(writer, sheet_name='Research Questions', index=False)
+        
+        # Ajustar largura das colunas (opcional, para melhor visualização)
+        worksheet = writer.sheets['Consolidated']
+        from openpyxl.utils import get_column_letter
+        for idx, col in enumerate(df.columns, 1):
+            max_length = max(
+                df[col].astype(str).apply(len).max(),
+                len(col)
+            )
+            # Limitar largura máxima para evitar colunas muito largas
+            max_length = min(max_length, 50)
+            worksheet.column_dimensions[get_column_letter(idx)].width = max_length + 2
+    
+    print(f"Arquivo Excel consolidado criado: {output_path}")
+    
+    # Exportar também para JSON
+    json_output_path = output_path.replace('.xlsx', '.json')
+    df.to_json(json_output_path, orient='records', indent=2, force_ascii=False)
+    print(f"Arquivo JSON consolidado criado: {json_output_path}")
+
+
 def create_excel_from_data(responses_data: Dict[str, List[Dict]], 
                             questions: Dict[str, str], 
                             articles: Dict[str, Dict[str, str]], 
@@ -513,6 +817,7 @@ def create_excel_from_data(responses_data: Dict[str, List[Dict]],
         output_path: Caminho para salvar o arquivo Excel completo
         simple_output_path: Caminho para salvar o arquivo Excel simplificado
     """
+
     # Criar objetos writer para os dois arquivos
     writer_full = pd.ExcelWriter(output_path, engine='openpyxl')
     writer_simple = pd.ExcelWriter(simple_output_path, engine='openpyxl')
@@ -553,14 +858,16 @@ def create_excel_from_data(responses_data: Dict[str, List[Dict]],
             # Excel simplificado (campos específicos)
             required_cols = ['_response_id', '_provider', '_model', '_file', 'id', 'doi']
             
-            # Filtrar colunas de perguntas e respostas, excluindo as iniciadas com aq_adq_a
-            # e excluindo também as que terminam com "comment"
+            # Filtrar colunas de perguntas e respostas
+            # Agora os campos não têm mais prefixos duplicados (ex: ac1_answer em vez de ac_ac1_answer)
+            # Incluir campos que começam com padrões conhecidos ou is_relevant
             question_cols = [col for col in df.columns 
-                            if (col.startswith('rq_') or 
-                                col.startswith('sq_') or 
-                                col.startswith('ac_') or 
-                                col.startswith('rc_') or
-                                col.startswith('is_relevant')) and (  # Modificado para incluir todos os campos is_relevant
+                            if ((col.startswith('principal_research_question') or 
+                                 col.startswith('arq') or
+                                 col.startswith('sq') or 
+                                 col.startswith('ac') or 
+                                 col.startswith('rc') or
+                                 col.startswith('is_relevant')) and 
                                 not col.startswith('aq_adq_a') and
                                 not col.endswith('comment'))]
             
@@ -583,7 +890,7 @@ def create_excel_from_data(responses_data: Dict[str, List[Dict]],
     writer_simple.close()
 
 
-def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str]:
+def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str, str]:
     """
     Função principal para processar respostas e criar os arquivos Excel.
     
@@ -591,7 +898,7 @@ def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str
         base_dir: Diretório base do projeto (opcional)
         
     Returns:
-        Tupla com os caminhos para os arquivos Excel gerados (completo, simplificado)
+        Tupla com os caminhos para os arquivos Excel gerados (completo, simplificado, consolidado)
     """
     # Definir caminhos
     if base_dir is None:
@@ -603,6 +910,7 @@ def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str
     output_dir = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses")
     output_path = os.path.join(output_dir, "combined_responses_full.xlsx")
     simple_output_path = os.path.join(output_dir, "combined_responses_simple.xlsx")
+    consolidated_output_path = os.path.join(output_dir, "combined_responses_consolidated.xlsx")
     # Garantir que o diretório de saída exista
     os.makedirs(output_dir, exist_ok=True)
     
@@ -618,10 +926,15 @@ def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str
     print("Criando arquivos Excel...")
     create_excel_from_data(responses_data, questions, articles, str(output_path), str(simple_output_path))
     
+    print("Criando arquivo Excel consolidado...")
+    consolidated_data = consolidate_responses_by_doi(responses_data, articles)
+    create_consolidated_excel(consolidated_data, str(consolidated_output_path), questions)
+    
     print(f"Arquivos Excel criados com sucesso:")
     print(f"- Arquivo completo: {output_path}")
     print(f"- Arquivo simplificado: {simple_output_path}")
-    return str(output_path), str(simple_output_path)
+    print(f"- Arquivo consolidado: {consolidated_output_path}")
+    return str(output_path), str(simple_output_path), str(consolidated_output_path)
 
 
 
