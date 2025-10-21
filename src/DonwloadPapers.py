@@ -7,7 +7,8 @@ import argparse
 import time  
 import random
 import yaml
-from typing import Optional, Tuple
+import re
+from typing import Optional, Tuple, Dict, List, Set
 from dotenv import load_dotenv
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
@@ -35,7 +36,25 @@ except ImportError as error:
 db = create_lancedb_instance()
 load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("config/.env"))
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Connection': 'keep-alive',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+}
+
+PDF_DOWNLOAD_HEADERS = {
+    'Accept': 'application/pdf,application/octet-stream;q=0.9,*/*;q=0.8',
+    'Accept-Language': HEADERS.get('Accept-Language', 'en-US,en;q=0.9'),
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+}
+
+SESSION = requests.Session()
+SESSION.headers.update(HEADERS)
+SESSION_PREPARED_HOSTS: Set[str] = set()
 
 
 
@@ -46,6 +65,146 @@ def sanitize_filename(doi):
     """
     doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
     return urllib.parse.quote(doi, safe='')
+
+
+def normalize_doi(doi: str) -> str:
+    """Normaliza um DOI para comparação (sem prefixo e em minúsculas)."""
+    if not doi:
+        return ""
+    normalized = doi.strip().lower()
+    normalized = normalized.replace("https://doi.org/", "").replace("http://doi.org/", "")
+    return normalized
+
+
+def prepare_session_for_domain(session: requests.Session, url: str, timeout: int = 20) -> None:
+    """Garantir que o domínio possua cookies básicos antes de baixar PDFs."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError:
+        return
+    host = (parsed.netloc or "").lower()
+    if not host or host in SESSION_PREPARED_HOSTS:
+        return
+
+    base_url = urllib.parse.urlunsplit((parsed.scheme or "https", parsed.netloc, "/", "", ""))
+    try:
+        session.get(base_url, timeout=timeout, allow_redirects=True)
+    except requests.RequestException as exc:
+        print(f"Falha ao inicializar sessão para {base_url}: {exc}")
+    SESSION_PREPARED_HOSTS.add(host)
+
+
+def warmup_session(session: requests.Session, url: Optional[str], timeout: int = 20) -> None:
+    """Realiza uma requisição HTML para configurar cookies/redirecionamentos necessários."""
+    if not url:
+        return
+    if url.lower().endswith(".pdf"):
+        return
+    try:
+        session.get(url, timeout=timeout, allow_redirects=True)
+    except requests.RequestException as exc:
+        print(f"Falha ao aquecer sessão com {url}: {exc}")
+
+
+def build_pdf_referers(original_url: str, sanitized: Optional[str], sanitized_alt: Optional[str]) -> List[str]:
+    """Gera candidatos de Referer/URLs HTML a visitar antes de tentar baixar o PDF."""
+    referers: List[str] = []
+
+    def add_candidate(candidate: Optional[str]) -> None:
+        if candidate and candidate not in referers:
+            referers.append(candidate)
+
+    add_candidate(sanitized)
+    add_candidate(sanitized_alt)
+
+    try:
+        parsed = urllib.parse.urlsplit(original_url)
+    except ValueError:
+        parsed = urllib.parse.SplitResult("", "", "", "", "")
+
+    netloc_lower = parsed.netloc.lower()
+    base_url = urllib.parse.urlunsplit((parsed.scheme or "https", parsed.netloc, "/", "", ""))
+    path = parsed.path or ""
+
+    if "mdpi.com" in netloc_lower and "/pdf" in path:
+        add_candidate(urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path.replace("/pdf", ""), "", "")))
+
+    if "ieeexplore.ieee.org" in netloc_lower:
+        match = re.search(r'/(\d+)\.pdf', path)
+        if match:
+            article_id = match.group(1)
+            base_doc = f"{parsed.scheme}://{parsed.netloc}/document/{article_id}"
+            stamp = f"{parsed.scheme}://{parsed.netloc}/stamp/stamp.jsp?tp=&arnumber={article_id}"
+            add_candidate(base_doc)
+            add_candidate(stamp)
+
+    if "sciencedirect.com" in netloc_lower:
+        trimmed_path = path
+        if "/pdf" in trimmed_path:
+            trimmed_path = trimmed_path.split("/pdf", 1)[0]
+        add_candidate(urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, trimmed_path, "", "")))
+
+    add_candidate(base_url)
+    return referers
+
+
+def extract_pdf_from_html(base_url: str, html_content: str) -> Optional[str]:
+    """
+    Procura referências a PDFs dentro de uma resposta HTML (IEEEXplore, etc.).
+    Retorna a URL absoluta do PDF se encontrar.
+    """
+    if not html_content:
+        return None
+
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        BeautifulSoup = None
+
+    # Tentativas usando BeautifulSoup (mais robusto)
+    if BeautifulSoup:
+        soup = BeautifulSoup(html_content, "html.parser")
+
+        iframe = soup.find("iframe", src=lambda s: isinstance(s, str) and s.lower().endswith(".pdf"))
+        if iframe and iframe.get("src"):
+            return urllib.parse.urljoin(base_url, iframe["src"])
+
+        meta_refresh = soup.find("meta", attrs={"http-equiv": lambda v: isinstance(v, str) and v.lower() == "refresh"})
+        if meta_refresh:
+            content = meta_refresh.get("content", "")
+            if "url=" in content.lower():
+                target = content.split("=", 1)[-1].strip()
+                if target.lower().endswith(".pdf"):
+                    return urllib.parse.urljoin(base_url, target)
+
+        link = soup.find("a", href=lambda h: isinstance(h, str) and h.lower().endswith(".pdf"))
+        if link and link.get("href"):
+            return urllib.parse.urljoin(base_url, link["href"])
+
+    # Fallback com regex simples (caso BeautifulSoup não esteja instalado)
+    candidates = []
+
+    # Atributos comuns (href/src/etc)
+    attribute_pattern = r'(?:href|src|content|data-[\w-]+)\s*=\s*["\']([^"\']+\.pdf(?:\?[^"\']*)?)["\']'
+    candidates.extend(re.findall(attribute_pattern, html_content, flags=re.IGNORECASE))
+
+    # JS ou JSON embutido (ex.: pdfUrl="...")
+    js_pattern = r'pdf\s*url[^"\']*["\':=]\s*["\']([^"\']+\.pdf(?:\?[^"\']*)?)["\']'
+    candidates.extend(re.findall(js_pattern, html_content, flags=re.IGNORECASE))
+
+    # Qualquer string .pdf entre aspas
+    generic_pattern = r'["\']([^"\']+\.pdf(?:\?[^"\']*)?)["\']'
+    candidates.extend(re.findall(generic_pattern, html_content, flags=re.IGNORECASE))
+
+    for candidate in candidates:
+        normalized = candidate.strip()
+        if not normalized:
+            continue
+        # Poucos casos trazem HTML escaped (&amp;)
+        normalized = normalized.replace("&amp;", "&")
+        return urllib.parse.urljoin(base_url, normalized)
+
+    return None
 
 def validate_pdf_file(file_path: str, expected_size: Optional[int] = None, min_size_bytes: int = 1024) -> Tuple[bool, str]:
     """Validate if a PDF file has the expected structure and size."""
@@ -141,7 +300,18 @@ def _save_response_content(response: requests.Response, file_path: str, binary: 
             os.remove(temp_path)
 
 
-def download_file(url, file_path, binary=True, timeout=20, skip_validation=False):
+def download_file(
+    url,
+    file_path,
+    binary=True,
+    timeout=20,
+    skip_validation=False,
+    session: Optional[requests.Session] = None,
+    extra_headers: Optional[Dict[str, str]] = None,
+    allow_redirects: bool = True,
+    depth: int = 0,
+    visited: Optional[Set[str]] = None,
+):
     """
     Tenta fazer download do conteúdo da URL e salvar em file_path.
     
@@ -151,14 +321,76 @@ def download_file(url, file_path, binary=True, timeout=20, skip_validation=False
         binary: Whether to save as binary file
         timeout: Request timeout in seconds
         skip_validation: If True, skips PDF validation checks
+        session: Optional requests.Session to reuse cookies
+        extra_headers: Headers adicionais para a requisição
+        allow_redirects: Whether to allow HTTP redirects
     
     Returns:
         bool: True if download was successful, False otherwise
     """
     response: Optional[requests.Response] = None
+    visited = visited or set()
+    if url in visited:
+        print(f"URL {url} já foi visitada nesta cadeia. Interrompendo para evitar loop.")
+        return False
+    visited.add(url)
+    if depth > 3:
+        print(f"Profundidade máxima atingida ao tentar baixar {url}.")
+        return False
     try:
-        response = requests.get(url, stream=True, timeout=timeout, headers=HEADERS)
+        http_client = session or requests
+        headers = dict(HEADERS)
+        if extra_headers:
+            headers.update(extra_headers)
+        response = http_client.get(
+            url,
+            stream=True,
+            timeout=timeout,
+            headers=headers,
+            allow_redirects=allow_redirects,
+        )
         if response.status_code == 200:
+            content_type = response.headers.get("Content-Type", "")
+            if (
+                binary
+                and file_path.lower().endswith(".pdf")
+                and not skip_validation
+                and content_type
+                and "pdf" not in content_type.lower()
+                and "octet-stream" not in content_type.lower()
+                and "html" not in content_type.lower()
+            ):
+                print(
+                    f"Conteúdo inesperado ao baixar {url}. Content-Type: {content_type}"
+                )
+                return False
+            if (
+                binary
+                and file_path.lower().endswith(".pdf")
+                and content_type
+                and "html" in content_type.lower()
+            ):
+                html = response.text
+                pdf_candidate = extract_pdf_from_html(response.url, html)
+                if pdf_candidate:
+                    print(f"HTML retornou referência para PDF: {pdf_candidate}")
+                    new_headers = dict(PDF_DOWNLOAD_HEADERS)
+                    if extra_headers:
+                        new_headers.update(extra_headers)
+                    new_headers.setdefault("Referer", response.url)
+                    return download_file(
+                        pdf_candidate,
+                        file_path,
+                        binary=binary,
+                        timeout=timeout,
+                        skip_validation=skip_validation,
+                        session=session,
+                        extra_headers=new_headers,
+                        allow_redirects=allow_redirects,
+                        depth=depth + 1,
+                        visited=visited,
+                    )
+                return False
             if _save_response_content(response, file_path, binary=binary, skip_validation=skip_validation):
                 return True
             print(f"Verificação de integridade falhou para {url}")
@@ -178,6 +410,126 @@ def download_file(url, file_path, binary=True, timeout=20, skip_validation=False
     finally:
         if response is not None:
             response.close()
+
+
+def download_pdf_url(url: Optional[str], file_path: str, timeout: int = 20, skip_validation: bool = False) -> bool:
+    """
+    Envelopa download_file para lidar com URLs de PDF com queries, cookies e bloqueios.
+    Tenta a URL original, versões sanitizadas e combinações de Referer/cookies para domínios mais exigentes.
+    """
+    if not url:
+        return False
+
+    session = SESSION
+    prepare_session_for_domain(session, url, timeout)
+
+    url_candidates: List[str] = []
+
+    def add_candidate(candidate: Optional[str]) -> None:
+        if candidate:
+            candidate = candidate.strip()
+            if candidate and candidate not in url_candidates:
+                url_candidates.append(candidate)
+
+    add_candidate(url)
+
+    try:
+        parsed_original = urllib.parse.urlsplit(url)
+    except ValueError:
+        parsed_original = urllib.parse.SplitResult("", "", "", "", "")
+
+    sanitized_no_query = urllib.parse.urlunsplit(
+        (parsed_original.scheme, parsed_original.netloc, parsed_original.path, "", "")
+    )
+    add_candidate(sanitized_no_query)
+
+    decoded_path_original = urllib.parse.unquote(parsed_original.path or "")
+    sanitized_decoded = None
+    if "?" in decoded_path_original:
+        sanitized_decoded = urllib.parse.urlunsplit(
+            (parsed_original.scheme, parsed_original.netloc, decoded_path_original.split("?", 1)[0], "", "")
+        )
+        add_candidate(sanitized_decoded)
+
+    tried: Set[str] = set()
+    for candidate in url_candidates:
+        if not candidate or candidate in tried:
+            continue
+        tried.add(candidate)
+
+        prepare_session_for_domain(session, candidate, timeout)
+
+        try:
+            parsed_candidate = urllib.parse.urlsplit(candidate)
+        except ValueError:
+            parsed_candidate = urllib.parse.SplitResult("", "", "", "", "")
+
+        sanitized_candidate = urllib.parse.urlunsplit(
+            (parsed_candidate.scheme, parsed_candidate.netloc, parsed_candidate.path, "", "")
+        )
+        decoded_candidate_path = urllib.parse.unquote(parsed_candidate.path or "")
+        sanitized_candidate_alt = None
+        if "?" in decoded_candidate_path:
+            sanitized_candidate_alt = urllib.parse.urlunsplit(
+                (parsed_candidate.scheme, parsed_candidate.netloc, decoded_candidate_path.split("?", 1)[0], "", "")
+            )
+
+        referers = build_pdf_referers(candidate, sanitized_candidate, sanitized_candidate_alt)
+        looks_like_pdf = sanitized_candidate.lower().endswith(".pdf")
+
+        if not looks_like_pdf:
+            warmup_session(session, candidate, timeout)
+            html_referers: List[Optional[str]] = [None] + referers
+            for html_ref in html_referers:
+                if html_ref:
+                    prepare_session_for_domain(session, html_ref, timeout)
+                    warmup_session(session, html_ref, timeout)
+                html_headers = {'Referer': html_ref} if html_ref else None
+                if download_file(
+                    candidate,
+                    file_path,
+                    binary=True,
+                    timeout=timeout,
+                    skip_validation=skip_validation,
+                    session=session,
+                    extra_headers=html_headers,
+                ):
+                    if candidate != url:
+                        print(f"Download obtido via URL alternativa: {candidate}")
+                    return True
+
+        for referer in referers:
+            prepare_session_for_domain(session, referer, timeout)
+            warmup_session(session, referer, timeout)
+            pdf_headers = dict(PDF_DOWNLOAD_HEADERS)
+            pdf_headers["Referer"] = referer
+            if download_file(
+                candidate,
+                file_path,
+                binary=True,
+                timeout=timeout,
+                skip_validation=skip_validation,
+                session=session,
+                extra_headers=pdf_headers,
+            ):
+                if candidate != url:
+                    print(f"Download do PDF bem-sucedido usando URL sanitizada: {candidate}")
+                return True
+
+        if download_file(
+            candidate,
+            file_path,
+            binary=True,
+            timeout=timeout,
+            skip_validation=skip_validation,
+            session=session,
+            extra_headers=PDF_DOWNLOAD_HEADERS,
+        ):
+            if candidate != url:
+                print(f"Download do PDF bem-sucedido usando URL sanitizada: {candidate}")
+            return True
+    return False
+
 
 # =====================================================================
 # Carregamento de configurações
@@ -301,7 +653,7 @@ def download_arxiv_entry(entry, pdf_dir, logs, skip_validation=False):
         return True
     
     print(f"Baixando PDF do arXiv: {pdf_url}")
-    if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
+    if download_pdf_url(pdf_url, pdf_path, skip_validation=skip_validation):
         print(f"PDF salvo: {pdf_path}\n")
         logs["downloaded"].append(f"{doi} -> PDF via arXiv (direto)")
         return True
@@ -347,8 +699,7 @@ def get_crossref_pdf_link(doi, timeout=10):
             print(f"Erro ao buscar registro no banco de dados: {e}")
             data = None
         if not data:
-            headers = HEADERS
-            headers['Accept'] = 'application/json'
+            headers = {**HEADERS, 'Accept': 'application/json'}
             response = requests.get(url, headers=headers, timeout=timeout)
             if response.status_code == 404:
                 print(f"Erro ao buscar PDF no Crossref. Status code: {response.status_code}")
@@ -417,11 +768,7 @@ def get_openalex_pdf_link(doi, timeout=10, email=""):
             print(f"Erro ao buscar registro no banco de dados: {e}")
             data = None
         if not data:
-            headers = {
-                'Accept': 'application/json',
-                'From': email  # Melhora prioridade na API :cite[3]
-            }
-            headers = {**headers, **HEADERS}
+            headers = {**HEADERS, 'Accept': 'application/json', 'From': email}
             url = f"https://api.openalex.org/works/https://doi.org/{doi}"
             response = requests.get(url, headers=headers, timeout=timeout)
             if response.status_code == 200:
@@ -529,6 +876,7 @@ def fetch_article_by_doi(doi, timeout=20):
     Adicionado timeout para a busca no scholarly e delay randomico.
     Retorna a URL do PDF (string) se encontrada ou None.
     """
+    target_doi = normalize_doi(doi)
     try:
         # Introduce random delay before Google Scholar search
         delay = random.randint(1, 20)
@@ -536,22 +884,34 @@ def fetch_article_by_doi(doi, timeout=20):
         time.sleep(delay)
 
         search_query = scholarly.search_pubs(doi)
-        article = next(search_query, None)
+        for index, article in enumerate(search_query):
+            if index >= 5:
+                break
+            try:
+                scholarly.fill(article)
+            except Exception as fill_error:
+                print(f"Falha ao carregar detalhes do resultado {index + 1}: {fill_error}")
+                continue
 
-        if article:
-            scholarly.fill(article) # Removido timeout daqui
-            pdf_url = article.get('eprint_url', None)
+            bib = article.get('bib', {})
+            result_doi = normalize_doi(bib.get('doi', ''))
+            if target_doi and result_doi and result_doi != target_doi:
+                print(f"Resultado {index + 1} retornou DOI diferente ({result_doi}). Buscando próximo.")
+                continue
+
+            pdf_url = article.get('eprint_url') or bib.get('eprint_url')
+            if not pdf_url:
+                pub_url = article.get('pub_url')
+                if pub_url and pub_url.lower().endswith(".pdf"):
+                    pdf_url = pub_url
+
             if pdf_url:
                 print(f"URL do PDF encontrada no Google Scholar (por DOI): {pdf_url}")
                 return pdf_url
             else:
-                print(f"Campo 'eprint_url' não encontrado no Google Scholar para DOI: {doi}")
-                return None
-        else:
-            print(f"Artigo não encontrado no Google Scholar para DOI: {doi}")
-            return None
-    except StopIteration:
-        print(f"Nenhum resultado encontrado no Google Scholar para DOI: {doi}")
+                print(f"Resultado {index + 1} sem campo 'eprint_url'. Tentando próximo.")
+
+        print(f"Artigo não encontrado no Google Scholar para DOI: {doi}")
         return None
     except Exception as e:
         print(f"Erro ao buscar PDF no Google Scholar por DOI: {e} - Timeout possivelmente atingido.")
@@ -572,23 +932,31 @@ def fetch_article_by_title(title, timeout=20):
         time.sleep(delay)
 
         search_query = scholarly.search_pubs(title)
-        article = next(search_query, None)
+        for index, article in enumerate(search_query):
+            if index >= 5:
+                break
+            try:
+                scholarly.fill(article)
+            except Exception as fill_error:
+                print(f"Falha ao carregar detalhes do resultado {index + 1}: {fill_error}")
+                continue
 
-        if article:
-            scholarly.fill(article) # Removido timeout daqui
-            pdf_url = article.get('eprint_url', None)
+            pdf_url = article.get('eprint_url')
+            if not pdf_url:
+                bib = article.get('bib', {})
+                pdf_url = bib.get('eprint_url')
+            if not pdf_url:
+                pub_url = article.get('pub_url')
+                if pub_url and pub_url.lower().endswith(".pdf"):
+                    pdf_url = pub_url
+
             if pdf_url:
                 print(f"URL do PDF encontrada no Google Scholar (por título): {pdf_url}")
                 return pdf_url
             else:
-                print(f"Campo 'eprint_url' não encontrado no Google Scholar para título: {title}")
-                return None
-        else:
-            print(f"Artigo não encontrado no Google Scholar para título: {title}")
-            return None
+                print(f"Resultado {index + 1} sem campo 'eprint_url'. Tentando próximo.")
 
-    except StopIteration:
-        print(f"Nenhum resultado encontrado no Google Scholar para título: {title}")
+        print(f"Artigo não encontrado no Google Scholar para título: {title}")
         return None
     except Exception as e:
         print(f"Erro ao buscar PDF no Google Scholar por título: {e} - Timeout possivelmente atingido.")
@@ -635,7 +1003,7 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=Fal
     url_pdf = entry.get("url_pdf", "")
     print(f"Tentando download via campo url_pdf: {url_pdf}")
     if url_pdf:
-        if download_file(url_pdf, pdf_path, skip_validation=skip_validation):
+        if download_pdf_url(url_pdf, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via campo url_pdf")
             return True
@@ -647,7 +1015,13 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=Fal
     print(f"Tentando download direto via DOI: {doi_url}")
     response: Optional[requests.Response] = None
     try:
-        response = requests.get(doi_url, stream=True, timeout=20, headers=HEADERS)
+        response = requests.get(
+            doi_url,
+            stream=True,
+            timeout=20,
+            headers=HEADERS,
+            allow_redirects=True,
+        )
         content_type = response.headers.get("Content-Type", "") if response else ""
         if response is not None and response.status_code == 200 and "pdf" in content_type.lower():
             if _save_response_content(response, pdf_path, binary=True, skip_validation=skip_validation):
@@ -667,16 +1041,16 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=Fal
     print("Tentando busca PDF via Crossref API...")
     pdf_url = get_crossref_pdf_link(doi)
     if pdf_url:
-        if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
+        if download_pdf_url(pdf_url, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via Crossref API")
             return True
-        
+    
     # 5. Buscar PDF via OpenAlex
     print("Tentando buscar PDF via OpenAlex...")
     pdf_url = get_openalex_pdf_link(doi)
     if pdf_url:
-        if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
+        if download_pdf_url(pdf_url, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via OpenAlex")
             return True
@@ -685,7 +1059,7 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=Fal
     print("Tentando buscar PDF via Unpaywall...")
     pdf_url = get_unpaywall_pdf_link(doi)
     if pdf_url:
-        if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
+        if download_pdf_url(pdf_url, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via Unpaywall")
             return True
@@ -742,7 +1116,7 @@ def batch_download_google_scholar(failed_entries, pdf_dir, logs, skip_validation
             print(f"Tentando buscar PDF via Google Scholar (por DOI): {doi}")
             pdf_url = fetch_article_by_doi(doi)
             if pdf_url and pdf_url != 'PDF não encontrado.' and pdf_url != "Artigo não encontrado." and not pdf_url.startswith("Erro ao buscar artigo"):
-                if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
+                if download_pdf_url(pdf_url, pdf_path, skip_validation=skip_validation):
                     print(f"PDF salvo: {pdf_path}\n")
                     logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por DOI) em lote")
                     success = True
@@ -755,10 +1129,16 @@ def batch_download_google_scholar(failed_entries, pdf_dir, logs, skip_validation
     
     return still_failed
 
-def batch_download_pypaperbot(failed_entries, pdf_dir, logs):
+def batch_download_pypaperbot(failed_entries, pdf_dir, logs, skip_validation=False):
     """
     Tenta baixar em lote todos os artigos falhos usando o PyPaperBot.
     Se falhar, tenta baixar o HTML e converter para Markdown como último recurso.
+    
+    Args:
+        failed_entries: Lista de entradas que falharam nas tentativas anteriores.
+        pdf_dir: Diretório onde os PDFs devem ser salvos.
+        logs: Dicionário para registrar sucessos, falhas e markdowns.
+        skip_validation: Se True, não valida os PDFs gerados pelo PyPaperBot.
     """
     config = load_config()
     if not config.get('enable_PyPaperBot_download', False):
@@ -796,6 +1176,19 @@ def batch_download_pypaperbot(failed_entries, pdf_dir, logs):
                     filename = sanitize_filename(doi) + ".pdf"
                     pdf_path = os.path.join(pdf_dir, filename)
                     if os.path.exists(pdf_path):
+                        if not skip_validation and pdf_path.lower().endswith(".pdf"):
+                            is_valid, message = validate_pdf_file(pdf_path)
+                            if not is_valid:
+                                print(f"PDF inválido gerado pelo PyPaperBot ({doi}): {message}")
+                                logs["failed"].append(f"{doi} -> PyPaperBot retornou arquivo inválido: {message}")
+                                try:
+                                    os.remove(pdf_path)
+                                    print(f"Arquivo inválido removido: {pdf_path}")
+                                except OSError as exc:
+                                    print(f"Não foi possível remover o arquivo inválido {pdf_path}: {exc}")
+                                still_failed_entries.append(entry)
+                                continue
+                            print(f"Verificação do PDF (PyPaperBot): {message}")
                         print(f"PyPaperBot baixou com sucesso: {doi}")
                         logs["downloaded"].append(f"{doi} -> PDF via PyPaperBot em lote")
                     else:
@@ -827,7 +1220,7 @@ def batch_download_pypaperbot(failed_entries, pdf_dir, logs):
             print(f"Tentando baixar HTML para {doi} e converter para Markdown...")
             
             try:
-                response = requests.get(doi_url, timeout=20, headers=HEADERS)
+                response = requests.get(doi_url, timeout=20, headers=HEADERS, allow_redirects=True)
                 if response.status_code == 200:
                     temp_html = os.path.join(tempfile.gettempdir(), sanitize_filename(doi) + ".html")
                     with open(temp_html, "w", encoding="utf-8") as f:
@@ -927,15 +1320,14 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
 
     # Processamento em lote dos artigos que falharam
     if failed_entries:
-        print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais...\n")
-        # Primeiro, tenta Google Scholar em lote
-        failed_entries = batch_download_pypaperbot(failed_entries, pdf_dir, logs)
-        
-    # Depois, tenta PyPaperBot em lote para os que ainda falharam
-    print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais...\n")
-    if failed_entries:
+        print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais via Google Scholar...\n")
         failed_entries = batch_download_google_scholar(failed_entries, pdf_dir, logs, skip_validation=skip_validation)
-        
+
+    # Depois, tenta PyPaperBot em lote para os que ainda falharam
+    if failed_entries:
+        print(f"\nTentando baixar {len(failed_entries)} artigos restantes via PyPaperBot...\n")
+        failed_entries = batch_download_pypaperbot(failed_entries, pdf_dir, logs, skip_validation=skip_validation)
+
     if failed_entries:
         print(f"\n{len(failed_entries)} artigos ainda falharam após tentativas em lote.\n")
         # Exibir detalhes dos artigos que falharam
