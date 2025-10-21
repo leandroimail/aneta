@@ -7,7 +7,7 @@ import sys
 from dotenv import load_dotenv
 
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 # ============================================================
 # Configurações iniciais

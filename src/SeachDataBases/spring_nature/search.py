@@ -7,7 +7,7 @@ import yaml
 from dotenv import load_dotenv
 
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 # Obtém a chave e removemos a constante fixa
 API_KEY = os.getenv("SPRINGER_API_KEY", "")
@@ -181,12 +181,12 @@ def main(query, path_data):
         print("Aviso: o tamanho da página para a API Springer Nature é limitado a 25 resultados.")
     
     if not query:
-        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
         query = config.get("search_string", config.get("search_string", None)) 
     
     if not query:
-        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
+        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
     
     query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
     

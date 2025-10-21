@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 from src.Config import list_abstract, list_title, list_keywords, list_author, list_year, list_publication, list_issn, list_doi, list_type_publication
 from src.Config import condition_include, condition_exclude, path_exlude_file, path_include_file, path_directory_bibs
@@ -509,7 +509,7 @@ def pre_include_sql(list_bib):
         return []
     
     try:
-        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
         filter_string = search_config["filter_string"]
     except KeyError as keyerror:
@@ -517,7 +517,7 @@ def pre_include_sql(list_bib):
     except FileNotFoundError as fileerror:
         raise FileNotFoundError(f"FileNotFoundError: search_config.yaml not found in Config folder")
     except Exception as e:
-        raise Exception(f"Error on read filter_string in file {os.path.abspath("Config/search_config.yaml")}. Error: {e}")
+        raise Exception(f"Error on read filter_string in file {os.path.abspath("config/search_config.yaml")}. Error: {e}")
     
     conn = get_database(list_bib)
     query = f"""

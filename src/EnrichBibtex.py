@@ -9,7 +9,7 @@ from src.BibTex import read_bibtex, write_bibtex
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 db = create_lancedb_instance()
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
@@ -241,7 +241,7 @@ def enrich_bibtex_dois(email="leandroimail@gmail.com"):
         return
     path_data = os.path.join(path_data, ".bibs")
     try:
-        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -455,7 +455,7 @@ def enrich_bibtex_abstract():
     path_data = os.path.join(path_data, ".bibs")
     
     try:
-        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -697,7 +697,7 @@ def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
     path_data = os.path.join(path_data, ".bibs")
     
     try:
-        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -897,7 +897,7 @@ def enrich_bibtex_jcr_scimago():
         return
     path_data = os.path.join(path_data, ".bibs")
     try:
-        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
             search_config = yaml.safe_load(f)
     except Exception as e:
         raise Exception(f"Erro ao ler o arquivo de configuração: {e}")
@@ -944,7 +944,7 @@ def enrich_bibtex_jcr_scimago():
 
 def enrich_bibtex():
     try:
-        with open(os.path.abspath("Config/general_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/general_config.yaml"), "r", encoding="utf-8") as f:
             enrich_config = yaml.safe_load(f)
             os.environ["ENRICH_ARXIV"] = str(enrich_config.get("enrich_arxiv", False))
             

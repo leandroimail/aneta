@@ -13,7 +13,7 @@ from src.GenerativeAI.LLMUtils import run_prepare_base_prompt
 
 # Load environment variables
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 class AnswerWithComment(BaseModel):
     """

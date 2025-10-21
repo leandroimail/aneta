@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import shutil
 
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 API_KEY = os.getenv("ELSEVIER_API_KEY", "")
 BASE_URL = 'https://api.elsevier.com/content/search/scopus'
@@ -140,12 +140,12 @@ def main(query, path_data):
         query = query.replace('  ', ' ')
         
     if not query:
-        with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+        with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
         query = config.get("search_string", config.get("search_string", None))
         
     if not query:
-        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
+        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
     
     print("Iniciando coleta de registros da API Scopus...\n")
     # Use o parâmetro "query" para construir a requisição, por exemplo:

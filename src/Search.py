@@ -11,7 +11,7 @@ from src.SeachDataBases.scopus import search_get as scopus_search
 
 # Carrega as variáveis do .env
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 
 def run_search():
     # Parâmetros principais
@@ -19,13 +19,13 @@ def run_search():
     PATH_DATA = os.path.join(PATH_DATA, ".bibs")
 
     # Lê config YAML para definir quais buscas executar
-    with open(os.path.abspath("Config/search_config.yaml"), "r", encoding="utf-8") as f:
+    with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
         
     SEARCH_STRING = config.get("search_string", config.get("search_string", None))    
 
     if not SEARCH_STRING:
-        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração Config/search_config.yaml não foi definida")
+        raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
 
     # Orquestração das buscas conforme flags do YAML
     if config.get("arxiv", False):

@@ -1,0 +1,12 @@
+
+# YAML configuration for filtering accepted results from LLM processing in .data/OUTPUTS/processed_responses/combined_responses_consolidated.json
+# This filter is a SQL WHERE clause applied to the consolidated LLM response data to select only relevant entries for final output.
+
+filter: >
+  ((is_relevant_yes_percent >= 65
+  AND total_models_answered >= 2)
+  AND
+  (
+    principal_research_question_yes_percent >= 65
+    AND principal_research_question_total_count >= 2
+  ))

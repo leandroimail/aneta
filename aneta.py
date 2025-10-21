@@ -26,7 +26,7 @@ from src.PDFReader import process_pdfs, read_pdfs_with_docling
 
 def setup_environment():
     load_dotenv(os.path.abspath(".conf"))
-    load_dotenv(os.path.abspath("Config/.env"))
+    load_dotenv(os.path.abspath("config/.env"))
     global PROJECT_PATH
     PROJECT_PATH = os.path.dirname(os.path.abspath(__file__))
     os.environ["PROJECT_PATH"] = PROJECT_PATH
@@ -56,7 +56,7 @@ def run_bibliometry_async():
     return True
 
 def run_download():
-    bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
+    bib_file = os.getenv("BIB_FILE_DOWNLOAD_PDF", ".OUTPUTS/select_bibs.bib")
     folder_save_pdf = os.getenv("FOLDER_SAVE_PDF", "PDFs")
     
     path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))

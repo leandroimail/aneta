@@ -33,7 +33,7 @@ except ImportError as error:
 
 db = create_lancedb_instance()
 load_dotenv(os.path.abspath(".conf"))
-load_dotenv(os.path.abspath("Config/.env"))
+load_dotenv(os.path.abspath("config/.env"))
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
 
@@ -80,7 +80,7 @@ def load_config():
     """
     Carrega as configurações do arquivo YAML.
     """
-    config_path = os.path.abspath("Config/general_config.yaml")
+    config_path = os.path.abspath("config/general_config.yaml")
     try:
         with open(config_path, 'r') as file:
             config = yaml.safe_load(file)
