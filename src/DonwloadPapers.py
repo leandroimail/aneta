@@ -81,8 +81,18 @@ def validate_pdf_file(file_path: str, expected_size: Optional[int] = None, min_s
     return True, f"PDF válido ({file_size} bytes)."
 
 
-def _save_response_content(response: requests.Response, file_path: str, binary: bool = True) -> bool:
-    """Persist HTTP response content to disk using a temporary file and integrity checks."""
+def _save_response_content(response: requests.Response, file_path: str, binary: bool = True, skip_validation: bool = False) -> bool:
+    """Persist HTTP response content to disk using a temporary file and integrity checks.
+    
+    Args:
+        response: HTTP response object
+        file_path: Path where to save the file
+        binary: Whether to save as binary file
+        skip_validation: If True, skips PDF validation checks
+    
+    Returns:
+        bool: True if save was successful, False otherwise
+    """
     temp_path = f"{file_path}.part"
     success = False
     expected_length: Optional[int] = None
@@ -103,18 +113,20 @@ def _save_response_content(response: requests.Response, file_path: str, binary: 
                         temp_file.write(chunk)
                         bytes_written += len(chunk)
 
-            if expected_length is not None and bytes_written != expected_length:
+            if not skip_validation and expected_length is not None and bytes_written != expected_length:
                 print(
                     "Tamanho de arquivo recebido difere do esperado. Tentando próxima estratégia."
                 )
                 return False
 
-            if file_path.lower().endswith(".pdf"):
+            if file_path.lower().endswith(".pdf") and not skip_validation:
                 is_valid, message = validate_pdf_file(temp_path, expected_size=expected_length)
                 if not is_valid:
                     print(f"Falha na validação do PDF: {message}")
                     return False
                 print(f"Verificação do PDF concluída: {message}")
+            elif skip_validation and file_path.lower().endswith(".pdf"):
+                print(f"⚠️  Validação de PDF ignorada. Arquivo salvo com {bytes_written} bytes.")
 
         else:
             response.encoding = response.encoding or "utf-8"
@@ -129,16 +141,25 @@ def _save_response_content(response: requests.Response, file_path: str, binary: 
             os.remove(temp_path)
 
 
-def download_file(url, file_path, binary=True, timeout=20):
+def download_file(url, file_path, binary=True, timeout=20, skip_validation=False):
     """
     Tenta fazer download do conteúdo da URL e salvar em file_path.
-    Retorna True se o download foi bem-sucedido e o arquivo passou na validação, False caso contrário.
+    
+    Args:
+        url: URL to download from
+        file_path: Path where to save the file
+        binary: Whether to save as binary file
+        timeout: Request timeout in seconds
+        skip_validation: If True, skips PDF validation checks
+    
+    Returns:
+        bool: True if download was successful, False otherwise
     """
     response: Optional[requests.Response] = None
     try:
         response = requests.get(url, stream=True, timeout=timeout, headers=HEADERS)
         if response.status_code == 200:
-            if _save_response_content(response, file_path, binary=binary):
+            if _save_response_content(response, file_path, binary=binary, skip_validation=skip_validation):
                 return True
             print(f"Verificação de integridade falhou para {url}")
             return False
@@ -247,7 +268,7 @@ def merge_doi_lists(bibtex_doi_entries, external_doi_list):
 # Funções de download para cada tipo de entrada
 # =====================================================================
 
-def download_arxiv_entry(entry, pdf_dir, logs):
+def download_arxiv_entry(entry, pdf_dir, logs, skip_validation=False):
     """
     Faz o download de um artigo arXiv.
     Tenta:
@@ -255,6 +276,12 @@ def download_arxiv_entry(entry, pdf_dir, logs):
       2. Se falhar, baixa o HTML (substituindo "abs" por "html"), converte para Markdown
          e salva na pasta "markdown" (dentro de pdf_dir).
     Registra no log o método utilizado.
+    
+    Args:
+        entry: BibTeX entry dictionary
+        pdf_dir: Directory to save PDFs
+        logs: Logs dictionary
+        skip_validation: If True, skips PDF validation checks
     """
     url = entry.get("url", "")
     if not url:
@@ -274,7 +301,7 @@ def download_arxiv_entry(entry, pdf_dir, logs):
         return True
     
     print(f"Baixando PDF do arXiv: {pdf_url}")
-    if download_file(pdf_url, pdf_path):
+    if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
         print(f"PDF salvo: {pdf_path}\n")
         logs["downloaded"].append(f"{doi} -> PDF via arXiv (direto)")
         return True
@@ -282,7 +309,7 @@ def download_arxiv_entry(entry, pdf_dir, logs):
         print("Falha no download do PDF. Tentando HTML para Markdown...")
         html_url = url.replace("abs", "html")
         temp_html = os.path.join(tempfile.gettempdir(), sanitize_filename(doi) + ".html")
-        if download_file(html_url, temp_html, binary=False):
+        if download_file(html_url, temp_html, binary=False, skip_validation=skip_validation):
             try:
                 with open(temp_html, "r", encoding="utf-8") as f:
                     html_content = f.read()
@@ -568,7 +595,7 @@ def fetch_article_by_title(title, timeout=20):
         return None
 
 
-def download_doi_entry(entry, pdf_dir, logs, failed_entries):
+def download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=False):
     """
     Faz o download de um artigo identificado por DOI.
     Estratégia:
@@ -579,6 +606,13 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
       5. Buscar via OpenAlex
       6. Buscar via Unpaywall
     Se todas estas estratégias falharem, adiciona à lista de failed_entries para tentar depois.
+    
+    Args:
+        entry: BibTeX entry dictionary
+        pdf_dir: Directory to save PDFs
+        logs: Logs dictionary
+        failed_entries: List to store failed entries
+        skip_validation: If True, skips PDF validation checks
     """
     doi = entry.get("doi", "").strip()
     title = entry.get("title", "").strip()
@@ -601,7 +635,7 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
     url_pdf = entry.get("url_pdf", "")
     print(f"Tentando download via campo url_pdf: {url_pdf}")
     if url_pdf:
-        if download_file(url_pdf, pdf_path):
+        if download_file(url_pdf, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via campo url_pdf")
             return True
@@ -616,7 +650,7 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
         response = requests.get(doi_url, stream=True, timeout=20, headers=HEADERS)
         content_type = response.headers.get("Content-Type", "") if response else ""
         if response is not None and response.status_code == 200 and "pdf" in content_type.lower():
-            if _save_response_content(response, pdf_path, binary=True):
+            if _save_response_content(response, pdf_path, binary=True, skip_validation=skip_validation):
                 print(f"PDF salvo: {pdf_path}\n")
                 logs["downloaded"].append(f"{doi} -> PDF via DOI direto")
                 return True
@@ -633,7 +667,7 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
     print("Tentando busca PDF via Crossref API...")
     pdf_url = get_crossref_pdf_link(doi)
     if pdf_url:
-        if download_file(pdf_url, pdf_path):
+        if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via Crossref API")
             return True
@@ -642,7 +676,7 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
     print("Tentando buscar PDF via OpenAlex...")
     pdf_url = get_openalex_pdf_link(doi)
     if pdf_url:
-        if download_file(pdf_url, pdf_path):
+        if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via OpenAlex")
             return True
@@ -651,7 +685,7 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
     print("Tentando buscar PDF via Unpaywall...")
     pdf_url = get_unpaywall_pdf_link(doi)
     if pdf_url:
-        if download_file(pdf_url, pdf_path):
+        if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
             print(f"PDF salvo: {pdf_path}\n")
             logs["downloaded"].append(f"{doi} -> PDF via Unpaywall")
             return True
@@ -667,10 +701,16 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
 # Processamento em lote dos artigos que falharam
 # =====================================================================
 
-def batch_download_google_scholar(failed_entries, pdf_dir, logs):
+def batch_download_google_scholar(failed_entries, pdf_dir, logs, skip_validation=False):
     """
     Tenta baixar em lote todos os artigos falhos usando o Google Scholar.
     Retorna a lista de entradas que ainda falharam.
+    
+    Args:
+        failed_entries: List of failed BibTeX entries
+        pdf_dir: Directory to save PDFs
+        logs: Logs dictionary
+        skip_validation: If True, skips PDF validation checks
     """
     config = load_config()
     if not config.get('enable_search_link_file_by_google_scholars', False):
@@ -702,7 +742,7 @@ def batch_download_google_scholar(failed_entries, pdf_dir, logs):
             print(f"Tentando buscar PDF via Google Scholar (por DOI): {doi}")
             pdf_url = fetch_article_by_doi(doi)
             if pdf_url and pdf_url != 'PDF não encontrado.' and pdf_url != "Artigo não encontrado." and not pdf_url.startswith("Erro ao buscar artigo"):
-                if download_file(pdf_url, pdf_path):
+                if download_file(pdf_url, pdf_path, skip_validation=skip_validation):
                     print(f"PDF salvo: {pdf_path}\n")
                     logs["downloaded"].append(f"{doi} -> PDF via busca Google Scholar (por DOI) em lote")
                     success = True
@@ -814,7 +854,7 @@ def batch_download_pypaperbot(failed_entries, pdf_dir, logs):
 # Função principal para download de todos os artigos
 # =====================================================================
 
-def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
+def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip_validation=False):
     """
     Função principal que realiza:
       - Leitura do BibTeX e do arquivo de DOIs.
@@ -822,7 +862,11 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
         usando todas as estratégias disponíveis.
       - Mantém logs de sucesso e falhas, imprimindo cada etapa no console.
 
-    Os parâmetros podem ser passados diretamente ou via linha de comando.
+    Args:
+        bibtex_path: Path to BibTeX file
+        pdf_dir: Directory to save PDFs
+        doi_file_path: Path to DOI list file
+        skip_validation: If True, skips PDF validation checks (faster but less safe)
     """
     print(f"\nArquivo BibTeX usado para download: {bibtex_path}")
     print(f"\nPasta de destino dos PDFs: {pdf_dir}")
@@ -868,15 +912,17 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
         doi_entries = doi_bibtex_entries
 
     print("\nProcessando entradas do arXiv...\n")
+    if skip_validation:
+        print("⚠️  AVISO: Validação de PDF DESABILITADA - arquivos serão salvos sem verificação de integridade\n")
     for entry in arxiv_entries:
         print("--------------------------------------------------")
-        download_arxiv_entry(entry, pdf_dir, logs)
+        download_arxiv_entry(entry, pdf_dir, logs, skip_validation=skip_validation)
         print("--------------------------------------------------\n")
 
     print("\nProcessando entradas com DOI...\n")
     for entry in doi_entries:
         print("--------------------------------------------------")
-        download_doi_entry(entry, pdf_dir, logs, failed_entries)
+        download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=skip_validation)
         print("--------------------------------------------------\n")
 
     # Processamento em lote dos artigos que falharam
@@ -888,7 +934,7 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
     # Depois, tenta PyPaperBot em lote para os que ainda falharam
     print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais...\n")
     if failed_entries:
-        failed_entries = batch_download_google_scholar(failed_entries, pdf_dir, logs)
+        failed_entries = batch_download_google_scholar(failed_entries, pdf_dir, logs, skip_validation=skip_validation)
         
     if failed_entries:
         print(f"\n{len(failed_entries)} artigos ainda falharam após tentativas em lote.\n")

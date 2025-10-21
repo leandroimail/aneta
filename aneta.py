@@ -55,7 +55,7 @@ def run_bibliometry_async():
     run_bibliometry_async_func()
     return True
 
-def run_download():
+def run_download(skip_validation=False):
     bib_file = os.getenv("BIB_FILE_DOWNLOAD_PDF", ".OUTPUTS/select_bibs.bib")
     folder_save_pdf = os.getenv("FOLDER_SAVE_PDF", "PDFs")
     
@@ -64,7 +64,12 @@ def run_download():
     
     path_directory_file_bib = path_data.replace(".bibs", bib_file)
     folder_save_pdf = path_data.replace(".bibs", folder_save_pdf)
-    download_all_papers(path_directory_file_bib, folder_save_pdf)
+    
+    if skip_validation:
+        print("\n⚠️  MODO DE DOWNLOAD RÁPIDO ATIVADO")
+        print("Validações de PDF desabilitadas - arquivos serão salvos sem verificação de integridade\n")
+    
+    download_all_papers(path_directory_file_bib, folder_save_pdf, skip_validation=skip_validation)
     return True
 
 def deprecated_abstract():
@@ -287,6 +292,7 @@ def parse_arguments():
     group.add_argument('--bibliometry', action='store_true', help='Executa a bibliometria completa do bibtex selecionado')
     group.add_argument('--bibliometry_async', action='store_true', help='Executa de forma assíncrona a bibliometria completa do bibtex selecionado')
     group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers')
+    group.add_argument('--download_pdf_fast', action='store_true', help='Executa o download dos papers SEM validação (mais rápido, menos seguro)')
     group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
     group.add_argument('--abstract_classifier_llm', action='store_true', help='Realiza a classificação de abstracts usando LLM')
     group.add_argument('--abstract_classifier_llm_one_on_one', action='store_true', help='Realiza a classificação de abstracts usando LLM (modo One-on-One)')
@@ -337,6 +343,8 @@ if __name__ == "__main__":
         run_bibliometry_function()
     elif args.download_pdf:
         run_download()
+    elif args.download_pdf_fast:
+        run_download(skip_validation=True)
     elif args.deprecated_abstract:
         deprecated_abstract()
     elif args.abstract_classifier_llm:
