@@ -1261,6 +1261,10 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
         doi_file_path: Path to DOI list file
         skip_validation: If True, skips PDF validation checks (faster but less safe)
     """
+    config = load_config()
+    gs_enabled = config.get('enable_search_link_file_by_google_scholars', False)
+    pypaperbot_enabled = config.get('enable_PyPaperBot_download', False)
+
     print(f"\nArquivo BibTeX usado para download: {bibtex_path}")
     print(f"\nPasta de destino dos PDFs: {pdf_dir}")
     
@@ -1320,13 +1324,29 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
 
     # Processamento em lote dos artigos que falharam
     if failed_entries:
-        print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais via Google Scholar...\n")
-        failed_entries = batch_download_google_scholar(failed_entries, pdf_dir, logs, skip_validation=skip_validation)
+        if gs_enabled:
+            print(f"\nTentando baixar {len(failed_entries)} artigos que falharam nos métodos principais via Google Scholar...\n")
+            failed_entries = batch_download_google_scholar(
+                failed_entries,
+                pdf_dir,
+                logs,
+                skip_validation=skip_validation,
+            )
+        else:
+            print("\nBusca via Google Scholar desabilitada nas configurações. Pulando etapa.\n")
 
     # Depois, tenta PyPaperBot em lote para os que ainda falharam
     if failed_entries:
-        print(f"\nTentando baixar {len(failed_entries)} artigos restantes via PyPaperBot...\n")
-        failed_entries = batch_download_pypaperbot(failed_entries, pdf_dir, logs, skip_validation=skip_validation)
+        if pypaperbot_enabled:
+            print(f"\nTentando baixar {len(failed_entries)} artigos restantes via PyPaperBot...\n")
+            failed_entries = batch_download_pypaperbot(
+                failed_entries,
+                pdf_dir,
+                logs,
+                skip_validation=skip_validation,
+            )
+        else:
+            print("\nDownload via PyPaperBot desabilitado nas configurações. Pulando etapa.\n")
 
     if failed_entries:
         print(f"\n{len(failed_entries)} artigos ainda falharam após tentativas em lote.\n")
@@ -1361,7 +1381,7 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
             f.write("\n".join(logs["downloaded"]))
         with open(failed_log_path, "w", encoding="utf-8") as f:
             f.write("\n".join(logs["failed"]))
-        if load_config().get('enable_save_md_to_lost_papers', False):
+        if config.get('enable_save_md_to_lost_papers', False):
             with open(markdown_log_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(logs["markdown_saved"]))
             print(f"Logs salvos:\n - Sucesso: {downloaded_log_path}\n - Falhas: {failed_log_path}\n - Markdown: {markdown_log_path}\n")

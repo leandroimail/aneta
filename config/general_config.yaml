@@ -18,6 +18,6 @@ bibliometry_using_scopus: false
 
 
 #################### Download PDF Papers  options ####################
-enable_PyPaperBot_download: True
-enable_search_link_file_by_google_scholars: True
-enable_save_md_to_lost_papers: False
+enable_PyPaperBot_download: false
+enable_search_link_file_by_google_scholars: false
+enable_save_md_to_lost_papers: false
