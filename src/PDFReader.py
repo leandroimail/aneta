@@ -13,11 +13,16 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import traceback
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.datamodel.pipeline_options import PdfPipelineOptions, TableStructureOptions
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from dotenv import load_dotenv
+
+try:
+    from docling_core.types.doc import TableItem, PictureItem, TextItem, KeyValueItem
+except ImportError:  # pragma: no cover - fallback when optional extras are missing
+    TableItem = PictureItem = TextItem = KeyValueItem = None  # type: ignore[assignment]
 
 # Load environment variables from .conf file
 load_dotenv('.conf')
@@ -25,6 +30,78 @@ load_dotenv('.conf')
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _summarize_document_items(document: Any) -> Dict[str, int]:
+    """Summarize structured content extracted from a Docling document.
+
+    Args:
+        document (Any): Document object returned by Docling conversion.
+
+    Returns:
+        Dict[str, int]: Totals for tables, pictures, key-value pairs and text blocks.
+    """
+    stats: Dict[str, int] = {
+        "tables": 0,
+        "pictures": 0,
+        "key_values": 0,
+        "text_blocks": 0,
+    }
+
+    try:
+        # Iterate over each document item to capture detailed counts
+        for item, _ in document.iterate_items():
+            label_name = getattr(getattr(item, "label", None), "name", None)
+
+            # Count tables via class check or label name
+            if TableItem and isinstance(item, TableItem):
+                stats["tables"] += 1
+            elif label_name == "TABLE":
+                stats["tables"] += 1
+
+            # Count pictures to highlight visual elements
+            if PictureItem and isinstance(item, PictureItem):
+                stats["pictures"] += 1
+            elif label_name == "PICTURE":
+                stats["pictures"] += 1
+
+            # Count key-value pairs for structured metadata insights
+            if KeyValueItem and isinstance(item, KeyValueItem):
+                stats["key_values"] += 1
+            elif label_name == "KEY_VALUE":
+                stats["key_values"] += 1
+
+            # Count text blocks to convey narrative density
+            if TextItem and isinstance(item, TextItem):
+                stats["text_blocks"] += 1
+            elif label_name == "TEXT":
+                stats["text_blocks"] += 1
+
+    except AttributeError as exc:
+        # Gracefully handle document types that do not expose iterate_items()
+        logger.debug(f"Unable to summarize document items: {str(exc)}")
+
+    return stats
+
+
+def _aggregate_content_statistics(results: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Aggregate content statistics across multiple processing results."""
+    aggregate: Dict[str, int] = {
+        "tables": 0,
+        "pictures": 0,
+        "key_values": 0,
+        "text_blocks": 0,
+    }
+
+    # Merge each content summary into the global totals
+    for result in results:
+        summary = result.get("content_summary", {})
+        aggregate["tables"] += summary.get("tables", 0)
+        aggregate["pictures"] += summary.get("pictures", 0)
+        aggregate["key_values"] += summary.get("key_values", 0)
+        aggregate["text_blocks"] += summary.get("text_blocks", 0)
+
+    return aggregate
 
 
 def read_single_pdf(pdf_path: str) -> Dict[str, Any]:
@@ -47,6 +124,7 @@ def read_single_pdf(pdf_path: str) -> Dict[str, Any]:
             - file_size_mb (float): File size in megabytes (0.0 on error)
             - success (bool): True if processing succeeded, False otherwise
             - error (Optional[str]): Error message if processing failed, None otherwise
+            - document (Any): Docling document object for export operations
             
     Examples:
         >>> result = read_single_pdf("path/to/paper.pdf")
@@ -67,7 +145,16 @@ def read_single_pdf(pdf_path: str) -> Dict[str, Any]:
         "processing_time": 0.0,
         "file_size_mb": 0.0,
         "success": False,
-        "error": None
+        "error": None,
+        "content_summary": {
+            "tables": 0,
+            "pictures": 0,
+            "key_values": 0,
+            "text_blocks": 0,
+        },
+        "markdown_saved": False,
+        "markdown_char_count": 0,
+        "document": None,  # Store document for later export operations
     }
     
     try:
@@ -103,9 +190,23 @@ def read_single_pdf(pdf_path: str) -> Dict[str, Any]:
         pipeline_options.do_ocr = True  # Enable OCR for scanned PDFs
         pipeline_options.do_table_structure = True  # Extract table structure
         
-        doc_converter = DocumentConverter(
-            format_options={InputFormat.PDF: pipeline_options}
+        # Force use of granite_docling model for table structure extraction
+        pipeline_options.table_structure_options = TableStructureOptions(
+            do_cell_matching=True,
+            mode="accurate"  # Use accurate mode with granite_docling model
         )
+        
+        # Configure the PDF format option to explicitly set pipeline settings and backend
+        pdf_format_option = PdfFormatOption(
+            pipeline_options=pipeline_options,
+            backend=PyPdfiumDocumentBackend,
+        )
+
+        doc_converter = DocumentConverter(
+            format_options={InputFormat.PDF: pdf_format_option}
+        )
+        
+        logger.info(f"Using Docling with granite_docling model for accurate table extraction")
         
         # Convert PDF using Docling (this is the time-intensive operation)
         try:
@@ -125,10 +226,15 @@ def read_single_pdf(pdf_path: str) -> Dict[str, Any]:
             result["processing_time"] = time.time() - start_time
             return result
         
+        # Store document for later export operations
+        result["document"] = document
+        
         # Extract markdown content
         try:
             markdown_content = document.export_to_markdown()
             result["markdown"] = markdown_content
+            result["markdown_saved"] = bool(markdown_content.strip())
+            result["markdown_char_count"] = len(markdown_content)
         except Exception as e:
             error_msg = f"Markdown export error for {pdf_file.name}: {str(e)}"
             logger.error(error_msg)
@@ -143,18 +249,39 @@ def read_single_pdf(pdf_path: str) -> Dict[str, Any]:
             logger.warning(f"Could not get page count for {pdf_file.name}: {str(e)}")
             result["page_count"] = 0
         
+        # Compile a detailed content summary for downstream logging and reporting
+        content_summary = _summarize_document_items(document)
+        result["content_summary"] = content_summary
+
         # Calculate processing time
         result["processing_time"] = round(time.time() - start_time, 2)
         
         # Mark as successful
         result["success"] = True
         
-        # Log success
+                # Log success
         logger.info(
-            f"Successfully processed {pdf_file.name}: "
+            f"✓ Successfully processed {pdf_file.name}: "
             f"{result['page_count']} pages, "
             f"{result['processing_time']}s"
         )
+
+        # Provide additional context about the extracted structures
+        logger.info(
+            "  → Content: tables=%d, pictures=%d, key-values=%d, text blocks=%d",
+            content_summary.get("tables", 0),
+            content_summary.get("pictures", 0),
+            content_summary.get("key_values", 0),
+            content_summary.get("text_blocks", 0),
+        )
+
+        if result["markdown_saved"]:
+            logger.info(
+                "  → Markdown: %d characters captured in memory",
+                result["markdown_char_count"],
+            )
+        else:
+            logger.info("  ⚠ No markdown content captured")
         
         return result
         
@@ -407,6 +534,251 @@ def _optimize_post_processing(pre_folder: Path, post_folder: Path) -> List[Path]
             return []
 
 
+def _save_markdown_files(results: List[Dict[str, Any]], output_folder: str, base_path: Path) -> List[Dict[str, str]]:
+    """
+    Save markdown content from processing results to files.
+    
+    Args:
+        results: List of processing results from read_single_pdf()
+        output_folder: Relative path to output folder (e.g., "OUTPUTS/markdowns")
+        base_path: Base data path (e.g., ".data")
+        
+    Returns:
+        List of dictionaries with saved file information
+    """
+    saved_files = []
+    
+    # Create full output path - concatenate base_path with output_folder string
+    full_output_path = Path(str(base_path)) / output_folder
+    full_output_path.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"Saving markdown files to: {full_output_path}")
+    
+    for result in results:
+        if not result.get("success") or not result.get("markdown"):
+            continue
+            
+        try:
+            filename = Path(result["filename"]).stem + ".md"
+            filepath = full_output_path / filename
+            
+            # Write markdown content
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result["markdown"])
+            
+            # Calculate file size
+            file_size_kb = round(len(result["markdown"].encode('utf-8')) / 1024, 2)
+            
+            saved_files.append({
+                'filename': filename,
+                'path': str(filepath),
+                'size_kb': file_size_kb,
+                'char_count': result.get("markdown_char_count", 0)
+            })
+            
+            logger.info(f"  ✓ Saved: {filename} ({file_size_kb} KB)")
+            
+        except Exception as e:
+            logger.error(f"  ✗ Failed to save markdown for {result['filename']}: {str(e)}")
+    
+    return saved_files
+
+
+def _save_tables_from_documents(results: List[Dict[str, Any]], output_folder: str, base_path: Path) -> List[Dict[str, str]]:
+    """
+    Extract and save tables from documents as CSV files.
+    
+    Args:
+        results: List of processing results from read_single_pdf()
+        output_folder: Relative path to output folder (e.g., "OUTPUTS/tables")
+        base_path: Base data path (e.g., ".data")
+        
+    Returns:
+        List of dictionaries with saved table information
+    """
+    saved_tables = []
+    
+    # Create full output path - concatenate base_path with output_folder string
+    full_output_path = Path(str(base_path)) / output_folder
+    full_output_path.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"Extracting and saving tables to: {full_output_path}")
+    
+    for result in results:
+        if not result.get("success") or not result.get("document"):
+            continue
+            
+        document = result["document"]
+        pdf_name = Path(result["filename"]).stem
+        table_count = 0
+        
+        try:
+            # Iterate through document items to find tables
+            for item, _ in document.iterate_items():
+                if TableItem and isinstance(item, TableItem):
+                    table_count += 1
+                    table_filename = f"{pdf_name}_table_{table_count}.csv"
+                    table_filepath = full_output_path / table_filename
+                    
+                    try:
+                        # Export table as CSV
+                        csv_content = item.export_to_dataframe().to_csv(index=False)
+                        
+                        with open(table_filepath, 'w', encoding='utf-8') as f:
+                            f.write(csv_content)
+                        
+                        file_size_kb = round(len(csv_content.encode('utf-8')) / 1024, 2)
+                        
+                        saved_tables.append({
+                            'filename': table_filename,
+                            'path': str(table_filepath),
+                            'pdf_source': result["filename"],
+                            'size_kb': file_size_kb
+                        })
+                        
+                    except Exception as e:
+                        logger.warning(f"  ⚠ Could not export table {table_count} from {result['filename']}: {str(e)}")
+            
+            if table_count > 0:
+                logger.info(f"  ✓ Extracted {table_count} table(s) from {result['filename']}")
+                
+        except Exception as e:
+            logger.error(f"  ✗ Failed to extract tables from {result['filename']}: {str(e)}")
+    
+    return saved_tables
+
+
+def _save_images_from_documents(results: List[Dict[str, Any]], output_folder: str, base_path: Path) -> List[Dict[str, str]]:
+    """
+    Extract and save images from documents as PNG files using PyMuPDF (fitz).
+    
+    Note: Docling does not provide direct access to image binary data from PictureItem.
+    This function uses PyMuPDF to extract images directly from PDF files.
+    
+    Args:
+        results: List of processing results from read_single_pdf()
+        output_folder: Relative path to output folder (e.g., "OUTPUTS/images")
+        base_path: Base data path (e.g., ".data")
+        
+    Returns:
+        List of dictionaries with saved image information
+    """
+    saved_images = []
+    
+    # Create full output path - concatenate base_path with output_folder string
+    full_output_path = Path(str(base_path)) / output_folder
+    full_output_path.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"Extracting and saving images to: {full_output_path}")
+    
+    # Try to import PyMuPDF (fitz) for image extraction
+    try:
+        import fitz  # PyMuPDF
+        has_pymupdf = True
+    except ImportError:
+        logger.warning("PyMuPDF (fitz) not installed. Image extraction will be skipped.")
+        logger.warning("To enable image extraction, install with: uv add pymupdf")
+        has_pymupdf = False
+    
+    if not has_pymupdf:
+        return saved_images
+    
+    logger.info(f"Using PyMuPDF for image extraction")
+    
+    for result in results:
+        if not result.get("success"):
+            continue
+            
+        # Get the PDF file path - we need to reopen it with PyMuPDF
+        pdf_path = None
+        for res in results:
+            if res.get("filename") == result.get("filename"):
+                # Try to find the PDF file path
+                # Look in the PATH_DATA / PDF folder
+                path_data = os.getenv('PATH_DATA', '.data')
+                pdf_folder = os.getenv('PDF_POST_SELECTION_FOLDER', 'PDFs')
+                potential_path = Path(path_data) / pdf_folder / result["filename"]
+                
+                if potential_path.exists():
+                    pdf_path = potential_path
+                    break
+                
+                # Try pre-selection folder
+                pdf_pre_folder = os.getenv('PDF_PRE_SELECTION_FOLDER', 'PDFs_PreSelection')
+                potential_path = Path(path_data) / pdf_pre_folder / result["filename"]
+                
+                if potential_path.exists():
+                    pdf_path = potential_path
+                    break
+        
+        if not pdf_path or not pdf_path.exists():
+            logger.warning(f"  ⚠ Could not find PDF file for {result['filename']}")
+            continue
+            
+        pdf_name = Path(result["filename"]).stem
+        image_count = 0
+        images_saved = 0
+        
+        try:
+            # Open PDF with PyMuPDF
+            pdf_document = fitz.open(str(pdf_path))
+            
+            # Iterate through pages
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                
+                # Get images from page
+                image_list = page.get_images(full=True)
+                
+                for img_index, img in enumerate(image_list):
+                    image_count += 1
+                    
+                    try:
+                        # Get image xref
+                        xref = img[0]
+                        
+                        # Extract image
+                        base_image = pdf_document.extract_image(xref)
+                        image_bytes = base_image["image"]
+                        image_ext = base_image["ext"]
+                        
+                        # Create filename
+                        image_filename = f"{pdf_name}_page{page_num + 1}_img{img_index + 1}.{image_ext}"
+                        image_filepath = full_output_path / image_filename
+                        
+                        # Save image
+                        with open(image_filepath, "wb") as img_file:
+                            img_file.write(image_bytes)
+                        
+                        file_size_kb = round(len(image_bytes) / 1024, 2)
+                        
+                        saved_images.append({
+                            'filename': image_filename,
+                            'path': str(image_filepath),
+                            'pdf_source': result["filename"],
+                            'size_kb': file_size_kb,
+                            'page': page_num + 1
+                        })
+                        
+                        images_saved += 1
+                        
+                    except Exception as e:
+                        logger.debug(f"  ℹ️ Could not extract image {image_count} from page {page_num + 1}: {str(e)}")
+            
+            pdf_document.close()
+            
+            if images_saved > 0:
+                logger.info(f"  ✓ Saved {images_saved} image(s) from {result['filename']}")
+            elif image_count > 0:
+                logger.info(f"  ℹ️ Found {image_count} image(s) in {result['filename']} but could not extract them")
+                
+        except Exception as e:
+            logger.error(f"  ✗ Failed to extract images from {result['filename']}: {str(e)}")
+            logger.debug(f"Image extraction error traceback: {traceback.format_exc()}")
+    
+    return saved_images
+
+
 def process_pdfs(mode: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
     """
     Main orchestrator function to process PDFs from configured folders.
@@ -623,7 +995,7 @@ def process_pdfs(mode: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
         
         # Final summary
         logger.info("=" * 60)
-        logger.info("PROCESSING COMPLETE")
+        logger.info("BATCH PROCESSING COMPLETE")
         logger.info("=" * 60)
         total_pre = len(results["pre"])
         total_post = len(results["post"])
@@ -631,12 +1003,145 @@ def process_pdfs(mode: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
             sum(1 for r in results["pre"] if r["success"]) +
             sum(1 for r in results["post"] if r["success"])
         )
+        total_failed = (
+            sum(1 for r in results["pre"] if not r["success"]) +
+            sum(1 for r in results["post"] if not r["success"])
+        )
         total_pdfs = total_pre + total_post
         
-        logger.info(f"Total PDFs processed: {total_pdfs}")
-        logger.info(f"  - Pre-selection: {total_pre}")
-        logger.info(f"  - Post-selection: {total_post}")
-        logger.info(f"  - Successful: {total_successful}/{total_pdfs}")
+        logger.info(f"Processing Statistics:")
+        logger.info(f"  → Total PDFs processed: {total_pdfs}")
+        logger.info(f"  → Pre-selection folder: {total_pre} PDFs")
+        logger.info(f"  → Post-selection folder: {total_post} PDFs")
+        logger.info(f"  ✓ Successful: {total_successful}")
+        logger.info(f"  ✗ Failed: {total_failed}")
+
+        all_results = results["pre"] + results["post"]
+        if all_results:
+            aggregated_content = _aggregate_content_statistics(all_results)
+            markdown_captured = sum(1 for r in all_results if r.get("markdown_saved"))
+            total_chars = sum(r.get("markdown_char_count", 0) for r in all_results)
+
+            logger.info(f"\nContent Extraction Summary:")
+            logger.info(
+                "  → Tables: %d | Pictures: %d | Key-Values: %d | Text Blocks: %d",
+                aggregated_content["tables"],
+                aggregated_content["pictures"],
+                aggregated_content["key_values"],
+                aggregated_content["text_blocks"],
+            )
+            logger.info(
+                f"\nMarkdown Capture Summary:"
+            )
+            logger.info(
+                "  → Captured in memory: %d/%d PDFs",
+                markdown_captured,
+                len(all_results),
+            )
+            logger.info(
+                "  → Total characters: %s",
+                f"{total_chars:,}"
+            )
+        
+        # Export markdown, tables, and images if configured
+        logger.info("=" * 60)
+        logger.info("EXPORTING CONTENT")
+        logger.info("=" * 60)
+        
+        # Check export configuration
+        generate_markdown = os.getenv('GENERATE_MARKDOWN_OUTPUT', 'false').lower() == 'true'
+        generate_tables = os.getenv('GENERATE_TABLES_OUTPUT', 'false').lower() == 'true'
+        generate_images = os.getenv('GENERATE_IMAGES_OUTPUT', 'false').lower() == 'true'
+        
+        markdown_output_folder = os.getenv('MARKDOWN_OUTPUT_FOLDER', 'OUTPUTS/markdowns')
+        tables_output_folder = os.getenv('TABLES_OUTPUT_FOLDER', 'OUTPUTS/tables')
+        images_output_folder = os.getenv('IMAGES_OUTPUT_FOLDER', 'OUTPUTS/images')
+        
+        saved_markdown_files = []
+        saved_table_files = []
+        saved_image_files = []
+        
+        if all_results:
+            # Export Markdown files
+            if generate_markdown:
+                logger.info(f"\n📄 Exporting Markdown files...")
+                saved_markdown_files = _save_markdown_files(
+                    all_results, 
+                    markdown_output_folder, 
+                    base_path
+                )
+                logger.info(f"  ✓ Saved {len(saved_markdown_files)} markdown file(s)")
+            else:
+                logger.info(f"\n📄 Markdown export: DISABLED (GENERATE_MARKDOWN_OUTPUT=false)")
+            
+            # Export Tables
+            if generate_tables:
+                logger.info(f"\n📊 Exporting tables...")
+                saved_table_files = _save_tables_from_documents(
+                    all_results,
+                    tables_output_folder,
+                    base_path
+                )
+                logger.info(f"  ✓ Saved {len(saved_table_files)} table file(s)")
+            else:
+                logger.info(f"\n📊 Tables export: DISABLED (GENERATE_TABLES_OUTPUT=false)")
+            
+            # Export Images
+            if generate_images:
+                logger.info(f"\n🖼️  Exporting images...")
+                saved_image_files = _save_images_from_documents(
+                    all_results,
+                    images_output_folder,
+                    base_path
+                )
+                logger.info(f"  ✓ Saved {len(saved_image_files)} image file(s)")
+            else:
+                logger.info(f"\n🖼️  Images export: DISABLED (GENERATE_IMAGES_OUTPUT=false)")
+        
+        # Final export summary
+        if saved_markdown_files or saved_table_files or saved_image_files:
+            logger.info("\n" + "=" * 60)
+            logger.info("EXPORT SUMMARY")
+            logger.info("=" * 60)
+            
+            if saved_markdown_files:
+                total_md_size = sum(f['size_kb'] for f in saved_markdown_files)
+                logger.info(f"\n📄 Markdown Files ({len(saved_markdown_files)} files, {total_md_size:.2f} KB):")
+                logger.info(f"  → Output folder: {base_path / markdown_output_folder}")
+                for md_file in saved_markdown_files:
+                    logger.info(f"  ✓ {md_file['filename']} ({md_file['size_kb']} KB)")
+            
+            if saved_table_files:
+                total_table_size = sum(f['size_kb'] for f in saved_table_files)
+                logger.info(f"\n📊 Table Files ({len(saved_table_files)} files, {total_table_size:.2f} KB):")
+                logger.info(f"  → Output folder: {base_path / tables_output_folder}")
+                # Group by PDF source
+                tables_by_pdf = {}
+                for table_file in saved_table_files:
+                    pdf_source = table_file['pdf_source']
+                    if pdf_source not in tables_by_pdf:
+                        tables_by_pdf[pdf_source] = []
+                    tables_by_pdf[pdf_source].append(table_file)
+                
+                for pdf_source, tables in tables_by_pdf.items():
+                    logger.info(f"  → From {pdf_source}: {len(tables)} table(s)")
+            
+            if saved_image_files:
+                total_image_size = sum(f['size_kb'] for f in saved_image_files)
+                logger.info(f"\n🖼️  Image Files ({len(saved_image_files)} files, {total_image_size:.2f} KB):")
+                logger.info(f"  → Output folder: {base_path / images_output_folder}")
+                # Group by PDF source
+                images_by_pdf = {}
+                for image_file in saved_image_files:
+                    pdf_source = image_file['pdf_source']
+                    if pdf_source not in images_by_pdf:
+                        images_by_pdf[pdf_source] = []
+                    images_by_pdf[pdf_source].append(image_file)
+                
+                for pdf_source, images in images_by_pdf.items():
+                    logger.info(f"  → From {pdf_source}: {len(images)} image(s)")
+        
+        logger.info("=" * 60)
         
         return results
         
@@ -691,13 +1196,27 @@ def read_pdfs_with_docling(folder_path: str, generate_markdown: bool = False, ma
         pipeline_options.do_ocr = True  # Enable OCR for scanned PDFs
         pipeline_options.do_table_structure = True  # Extract table structure
         
+        # Configure the PDF format option to explicitly set pipeline settings and backend
+        pdf_format_option = PdfFormatOption(
+            pipeline_options=pipeline_options,
+            backend=PyPdfiumDocumentBackend,
+        )
+
         doc_converter = DocumentConverter(
-            format_options={InputFormat.PDF: pipeline_options,}
+            format_options={InputFormat.PDF: pdf_format_option}
         )
         
         # Process each PDF file
         successful_conversions = 0
         failed_conversions = 0
+        aggregated_content = {
+            "tables": 0,
+            "pictures": 0,
+            "key_values": 0,
+            "text_blocks": 0,
+        }
+        markdown_files_generated = 0
+        markdown_files_saved = []  # Track saved markdown files with paths
         
         for pdf_file in pdf_files:
             try:
@@ -710,6 +1229,20 @@ def read_pdfs_with_docling(folder_path: str, generate_markdown: bool = False, ma
                 # Log basic document information
                 logger.info(f"Successfully parsed PDF: {pdf_file.name}")
                 logger.info(f"Document has {len(document.pages)} pages")
+
+                # Summarize extracted structures for richer logs
+                content_summary = _summarize_document_items(document)
+                for key in aggregated_content:
+                    aggregated_content[key] += content_summary.get(key, 0)
+
+                logger.info(
+                    "Content summary for %s -> tables: %d, pictures: %d, key-values: %d, text blocks: %d",
+                    pdf_file.name,
+                    content_summary.get("tables", 0),
+                    content_summary.get("pictures", 0),
+                    content_summary.get("key_values", 0),
+                    content_summary.get("text_blocks", 0),
+                )
                 
                 # Generate Markdown if requested
                 if generate_markdown and markdown_folder:
@@ -723,7 +1256,22 @@ def read_pdfs_with_docling(folder_path: str, generate_markdown: bool = False, ma
                     with open(markdown_filepath, 'w', encoding='utf-8') as f:
                         f.write(markdown_content)
                     
-                    logger.info(f"Generated Markdown: {markdown_filename}")
+                    # Get file size information
+                    markdown_size_kb = round(len(markdown_content.encode('utf-8')) / 1024, 2)
+                    markdown_char_count = len(markdown_content)
+                    
+                    logger.info(f"✓ Markdown generated: {markdown_filename}")
+                    logger.info(f"  → Saved to: {markdown_filepath}")
+                    logger.info(f"  → Size: {markdown_size_kb} KB ({markdown_char_count:,} characters)")
+                    
+                    # Track saved file
+                    markdown_files_saved.append({
+                        'filename': markdown_filename,
+                        'path': str(markdown_filepath),
+                        'size_kb': markdown_size_kb,
+                        'char_count': markdown_char_count
+                    })
+                    markdown_files_generated += 1
                 
                 successful_conversions += 1
                 
@@ -734,13 +1282,40 @@ def read_pdfs_with_docling(folder_path: str, generate_markdown: bool = False, ma
                 continue
         
         # Summary logging
-        logger.info(f"PDF processing completed:")
-        logger.info(f"  - Successful conversions: {successful_conversions}")
-        logger.info(f"  - Failed conversions: {failed_conversions}")
-        logger.info(f"  - Total files processed: {len(pdf_files)}")
+        logger.info("="*60)
+        logger.info("PDF PROCESSING SUMMARY")
+        logger.info("="*60)
+        logger.info(f"Conversion Results:")
+        logger.info(f"  ✓ Successful conversions: {successful_conversions}")
+        logger.info(f"  ✗ Failed conversions: {failed_conversions}")
+        logger.info(f"  → Total files processed: {len(pdf_files)}")
+
+        logger.info(f"\nContent Extracted:")
+        logger.info(
+            "  → Tables: %d | Pictures: %d | Key-Values: %d | Text Blocks: %d",
+            aggregated_content["tables"],
+            aggregated_content["pictures"],
+            aggregated_content["key_values"],
+            aggregated_content["text_blocks"],
+        )
         
-        if generate_markdown and successful_conversions > 0:
-            logger.info(f"  - Markdown files generated: {successful_conversions}")
+        if generate_markdown and markdown_folder:
+            logger.info(f"\nMarkdown Generation:")
+            logger.info(f"  → Files generated: {markdown_files_generated}")
+            logger.info(f"  → Output folder: {markdown_folder}")
+            
+            if markdown_files_saved:
+                total_size_kb = sum(f['size_kb'] for f in markdown_files_saved)
+                total_chars = sum(f['char_count'] for f in markdown_files_saved)
+                
+                logger.info(f"  → Total size: {total_size_kb:.2f} KB ({total_chars:,} characters)")
+                logger.info(f"\nMarkdown Files Saved:")
+                for md_file in markdown_files_saved:
+                    logger.info(f"  ✓ {md_file['filename']}")
+                    logger.info(f"    Path: {md_file['path']}")
+                    logger.info(f"    Size: {md_file['size_kb']} KB ({md_file['char_count']:,} chars)")
+        
+        logger.info("="*60)
         
         # Return True if at least some files were processed successfully
         return successful_conversions > 0 or len(pdf_files) == 0

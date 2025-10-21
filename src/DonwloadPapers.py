@@ -7,6 +7,7 @@ import argparse
 import time  
 import random
 import yaml
+from typing import Optional, Tuple
 from dotenv import load_dotenv
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
@@ -46,31 +47,116 @@ def sanitize_filename(doi):
     doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
     return urllib.parse.quote(doi, safe='')
 
+def validate_pdf_file(file_path: str, expected_size: Optional[int] = None, min_size_bytes: int = 1024) -> Tuple[bool, str]:
+    """Validate if a PDF file has the expected structure and size."""
+    if not os.path.exists(file_path):
+        return False, "Arquivo PDF não encontrado após download."
+
+    file_size = os.path.getsize(file_path)
+    if expected_size is not None and file_size != expected_size:
+        return False, (
+            f"Tamanho inconsistente: esperado {expected_size} bytes, obtido {file_size} bytes"
+        )
+
+    if file_size < min_size_bytes:
+        return False, f"Arquivo muito pequeno para ser um PDF válido ({file_size} bytes)."
+
+    try:
+        with open(file_path, "rb") as pdf_file:
+            header = pdf_file.read(5)
+            if header != b"%PDF-":
+                return False, "Assinatura PDF inválida."
+
+            try:
+                pdf_file.seek(-1024, os.SEEK_END)
+            except OSError:
+                pdf_file.seek(0, os.SEEK_END)
+                pdf_file.seek(0)
+            tail = pdf_file.read()
+            if b"%%EOF" not in tail:
+                return False, "Marcador %%EOF não encontrado no final do PDF."
+    except OSError as exc:
+        return False, f"Erro ao validar PDF: {exc}"
+
+    return True, f"PDF válido ({file_size} bytes)."
+
+
+def _save_response_content(response: requests.Response, file_path: str, binary: bool = True) -> bool:
+    """Persist HTTP response content to disk using a temporary file and integrity checks."""
+    temp_path = f"{file_path}.part"
+    success = False
+    expected_length: Optional[int] = None
+
+    content_length = response.headers.get("Content-Length")
+    if content_length is not None:
+        try:
+            expected_length = int(content_length)
+        except ValueError:
+            expected_length = None
+
+    try:
+        if binary:
+            bytes_written = 0
+            with open(temp_path, "wb") as temp_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        temp_file.write(chunk)
+                        bytes_written += len(chunk)
+
+            if expected_length is not None and bytes_written != expected_length:
+                print(
+                    "Tamanho de arquivo recebido difere do esperado. Tentando próxima estratégia."
+                )
+                return False
+
+            if file_path.lower().endswith(".pdf"):
+                is_valid, message = validate_pdf_file(temp_path, expected_size=expected_length)
+                if not is_valid:
+                    print(f"Falha na validação do PDF: {message}")
+                    return False
+                print(f"Verificação do PDF concluída: {message}")
+
+        else:
+            response.encoding = response.encoding or "utf-8"
+            with open(temp_path, "w", encoding=response.encoding) as temp_file:
+                temp_file.write(response.text)
+
+        os.replace(temp_path, file_path)
+        success = True
+        return True
+    finally:
+        if not success and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
 def download_file(url, file_path, binary=True, timeout=20):
     """
     Tenta fazer download do conteúdo da URL e salvar em file_path.
-    Retorna True se o download foi bem-sucedido, False caso contrário.
-    Adicionado timeout para requests.get
+    Retorna True se o download foi bem-sucedido e o arquivo passou na validação, False caso contrário.
     """
+    response: Optional[requests.Response] = None
     try:
         response = requests.get(url, stream=True, timeout=timeout, headers=HEADERS)
         if response.status_code == 200:
-            mode = 'wb' if binary else 'w'
-            with open(file_path, mode) as f:
-                if binary:
-                    f.write(response.content)
-                else:
-                    f.write(response.text)
-            return True
-        else:
-            print(f"Falha ao baixar {url} - Status code: {response.status_code}")
+            if _save_response_content(response, file_path, binary=binary):
+                return True
+            print(f"Verificação de integridade falhou para {url}")
             return False
+
+        print(f"Falha ao baixar {url} - Status code: {response.status_code}")
+        return False
     except requests.exceptions.Timeout:
         print(f"Timeout ao baixar {url}")
         return False
-    except Exception as e:
-        print(f"Erro ao baixar {url}: {e}")
+    except requests.exceptions.RequestException as exc:
+        print(f"Erro na requisição ao baixar {url}: {exc}")
         return False
+    except Exception as exc:
+        print(f"Erro inesperado ao baixar {url}: {exc}")
+        return False
+    finally:
+        if response is not None:
+            response.close()
 
 # =====================================================================
 # Carregamento de configurações
@@ -525,19 +611,23 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries):
     # 3. Download direto via DOI
     doi_url = "https://doi.org/" + doi
     print(f"Tentando download direto via DOI: {doi_url}")
+    response: Optional[requests.Response] = None
     try:
         response = requests.get(doi_url, stream=True, timeout=20, headers=HEADERS)
-        content_type = response.headers.get("Content-Type", "")
-        if response.status_code == 200 and "pdf" in content_type.lower():
-            with open(pdf_path, "wb") as f:
-                f.write(response.content)
-            print(f"PDF salvo: {pdf_path}\n")
-            logs["downloaded"].append(f"{doi} -> PDF via DOI direto")
-            return True
+        content_type = response.headers.get("Content-Type", "") if response else ""
+        if response is not None and response.status_code == 200 and "pdf" in content_type.lower():
+            if _save_response_content(response, pdf_path, binary=True):
+                print(f"PDF salvo: {pdf_path}\n")
+                logs["downloaded"].append(f"{doi} -> PDF via DOI direto")
+                return True
+            print("Validação do PDF falhou após download via DOI direto. Tentando outras fontes...")
         else:
             print("Download direto não retornou PDF. Tentando encontrar link de PDF em bases acadêmicas...")
     except Exception as e:
         print(f"Erro no download direto via DOI: {e}")
+    finally:
+        if response is not None:
+            response.close()
 
     # 4. Buscar PDF via Crossref API
     print("Tentando busca PDF via Crossref API...")
@@ -734,6 +824,9 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None):
 
     Os parâmetros podem ser passados diretamente ou via linha de comando.
     """
+    print(f"\nArquivo BibTeX usado para download: {bibtex_path}")
+    print(f"\nPasta de destino dos PDFs: {pdf_dir}")
+    
     # Limpar arquivos antigos de execuções anteriores
     print("\nVerificando e removendo arquivos antigos...\n")
     files_to_clean = [

@@ -313,7 +313,7 @@ if __name__ == "__main__":
     run_abstract_llm = False
     run_abstract_llm_one_on_one = False
     run_abstract_llm_one_on_one_async = False
-    run_process_excel = True
+    run_process_excel = False
     run_filter_relevant_papers_var = False
     run_pdf_reader_var = False  
 

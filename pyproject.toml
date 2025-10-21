@@ -45,6 +45,7 @@ dependencies = [
     "matplotlib>=3.10.3",
     "seaborn>=0.13.2",
     "docling>=2.57.0",
+    "pymupdf>=1.26.5",
 ]
 
 [project.optional-dependencies]
