@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 import requests
 import xml.etree.ElementTree as ET
 import urllib.parse
@@ -8,6 +9,8 @@ import re
 import sys
 import yaml
 from dotenv import load_dotenv
+
+from src.SeachDataBases.query_language import translate
 
 load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("config/.env"))
@@ -114,58 +117,24 @@ def parse_xml_entry(entry):
 
 def converter_query(query):
     """
-    Converte a query (no formato livre) para o formato desejado pelo arXiv,
-    em que cada termo deve ser 'all:termo' ou 'all:"termo com espaco"',
-    respeitando operadores AND, OR, NOT -> ANDNOT e parênteses.
-    
-    Exemplo de uso:
+    Converte a query da linguagem padrão (config/search_config.yaml) para a
+    sintaxe oficial da API do arXiv, restringindo cada termo a título e
+    resumo: ``(ti:"termo" OR abs:"termo")``.
+
+    Exemplo:
       Input:
         ("Schema Matching" AND ("Language Model" OR "LLM"))
       Saída:
-        ( all:"Schema Matching" AND ( all:"Language Model" OR all:"LLM" ) )
+        ((ti:"Schema Matching" OR abs:"Schema Matching") AND ((ti:"Language Model" OR abs:"Language Model") OR (ti:"LLM" OR abs:"LLM")))
     """
-
-    # Regex para capturar:
-    # - Parênteses: ( ou )
-    # - Strings entre aspas: "..."
-    # - Operadores lógicos: AND, OR, ANDNOT, NOT
-    # - Qualquer outro 'token' sem espaço nem parênteses
-    pattern = r'(\(|\)|"[^"]*"|ANDNOT|AND|OR|NOT|[^()\s]+)'
-
-    # Quebramos a query em tokens
-    tokens = re.findall(pattern, query, flags=re.IGNORECASE)
-
-    resultado = []
-    for token in tokens:
-        # Normalizamos para checar operadores em maiúsculo
-        upper_token = token.upper()
-
-        if token == '(' or token == ')':
-            # Mantém parênteses como estão
-            resultado.append(token)
-        elif upper_token in ['AND', 'OR', 'ANDNOT']:
-            # Mantém operadores em maiúsculo
-            resultado.append(upper_token)
-        elif upper_token == 'NOT':
-            # Converte NOT em ANDNOT
-            resultado.append('ANDNOT')
-        elif token.startswith('"') and token.endswith('"'):
-            # Token entre aspas -> remove as aspas externas e converte para all:"conteúdo"
-            frase = token[1:-1]  # remove aspas
-            resultado.append(f'all:"{frase}"')
-        else:
-            # Se o token tiver espaço, usa aspas
-            if ' ' in token or '-' in token:
-                resultado.append(f'all:"{token}"')
-            else:
-                resultado.append(f'all:{token}')
-
-    # Junta tudo com espaço como separador
-    return ' '.join(resultado)
+    resultado = translate(query, "arxiv")
+    for aviso in resultado.warnings:
+        print(f"[AVISO arXiv] {aviso}")
+    return resultado.query
 
 
 def obter_doi(record, arxiv_id):
-    """
+    r"""
     Returns the DOI present in the record or, if absent, generates it from the arXiv ID.
     Removes the version suffix (using re.sub(r'v\d+$', '', arxiv_id)) and constructs:
 
@@ -304,6 +273,9 @@ def main(query, path_data):
     print(f"Up to {num_requisicoes} requests will be made (max_results={PAGE_SIZE}).\n")
 
     for i in range(num_requisicoes):
+        if i > 0:
+            # Termos de uso da API do arXiv: no máximo 1 requisição a cada 3s
+            time.sleep(3)
         start = i * PAGE_SIZE
         params = {
             'search_query': query,

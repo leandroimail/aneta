@@ -8,6 +8,8 @@ import yaml
 from dotenv import load_dotenv
 from urllib.parse import quote
 
+from src.SeachDataBases.query_language import translate
+
 load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("config/.env"))
 
@@ -182,7 +184,17 @@ def main(query, path_data):
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
     
     query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
-    
+
+    # Traduz a linguagem padrão para o campo qs da API ScienceDirect V2.
+    # Atenção: na V2 o qs busca todo o conteúdo do artigo (exceto referências);
+    # não há campo título+resumo+palavras-chave, então a precisão depende dos
+    # operadores booleanos da própria query.
+    resultado = translate(query, "science_direct")
+    for aviso in resultado.warnings:
+        print(f"[AVISO ScienceDirect] {aviso}")
+    query = resultado.query
+    print(f"Query traduzida para a API ScienceDirect (qs): {query}\n")
+
     out_dir = os.path.join(path_data, "science_direct")
     if os.path.exists(out_dir):
         shutil.rmtree(out_dir)

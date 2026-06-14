@@ -7,6 +7,8 @@ import re
 import sys
 import yaml
 
+from src.SeachDataBases.query_language import translate
+
 load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("config/.env"))
 
@@ -16,8 +18,11 @@ load_dotenv(os.path.abspath("config/.env"))
 API_KEY = os.getenv("WEB_OF_SCIENCE_KEY", "")
 BASE_URL = 'https://api.clarivate.com/apis/wos-starter/v1/documents'
 
-MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))  
+MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
+if PAGE_SIZE > 50:
+    # A API WoS Starter aceita no máximo limit=50 por página
+    PAGE_SIZE = 50
 records_agregados = []
 
 # ============================================================
@@ -191,8 +196,13 @@ def main(query, path_data):
     num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
     
-    # Utiliza a query passada como parâmetro na composição da consulta
-    query = f"TS=({query})"  # TS = Topic Search
+    # Traduz a linguagem padrão para a sintaxe WoS: TS=(...) busca
+    # título, resumo, author keywords e Keywords Plus
+    resultado = translate(query, "web_of_science")
+    for aviso in resultado.warnings:
+        print(f"[AVISO Web of Science] {aviso}")
+    query = resultado.query
+    print(f"Query traduzida para a API WoS: {query}\n")
     for pagina in range(num_requisicoes):
         start = pagina * PAGE_SIZE
         params = {
