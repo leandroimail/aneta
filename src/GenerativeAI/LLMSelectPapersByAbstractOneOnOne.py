@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import re  # Adicionada importação para expressões regulares
-from typing import Dict, List, Optional, Any, Union, Literal, TypeVar, Generic, Type
+from typing import Dict, List, Optional, Any, Union, Literal, TypeVar, Generic, Type, Tuple
 from dotenv import load_dotenv
 from pathlib import Path
 # Update import statements for the Google Generative AI library
@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, field_validator  # Atualizado para usar f
 # Local imports
 from src.GenerativeAI.LLMUtils import run_prepare_base_prompt
 from src.GenerativeAI.LLMUtils import run_prepare_base_prompt_list
+from src.GenerativeAI.multi_llm_config import LLMClientConfig, load_llm_client_configs
 
 # Load environment variables
 load_dotenv(os.path.abspath(".conf"))
@@ -146,17 +147,21 @@ class LLMClient(Generic[T]):
 class OpenAIClient(LLMClient):
     """Client for OpenAI API with support for large context windows."""
     
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, base_url: Optional[str] = None):
         """
         Initialize OpenAI client.
-        
+
         Args:
             api_key: OpenAI API key
             model: Model name to use
+            base_url: Optional custom endpoint (ex.: endpoint OpenAI-compatível do Gemini)
         """
-        self.client = OpenAI(api_key=api_key)
+        if base_url:
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+        else:
+            self.client = OpenAI(api_key=api_key)
         self.model = model
-    
+
     def invoke(self, messages: List[Dict[str, str]]) -> str:
         """
         Invoke the OpenAI model with the given messages.
@@ -484,8 +489,53 @@ def setup_llm() -> LLMClient:
     if llm_type not in llm_factories:
         supported_types = ", ".join(llm_factories.keys())
         raise ValueError(f"Unsupported LLM type: {llm_type}. Supported types: {supported_types}")
-    
+
     return llm_factories[llm_type]()
+
+
+def _build_client_from_config(cfg: LLMClientConfig) -> LLMClient:
+    """Instancia a classe de cliente local correspondente ao provedor do config.
+
+    - openai   -> OpenAIClient (endpoint OpenAI; base_url opcional)
+    - google   -> OpenAIClient via endpoint OpenAI-compatível do Gemini (usa base_url)
+    - gemini   -> GeminiClient nativo (google.genai)
+    - deepseek -> DeepSeekClient (OpenAI-compatível)
+    """
+    provider = cfg.provider.lower()
+    if provider == "openai":
+        return OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=cfg.base_url)
+    if provider == "google":
+        base_url = cfg.base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        return OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=base_url)
+    if provider == "gemini":
+        return GeminiClient(api_key=cfg.api_key, model=cfg.model_name)
+    if provider == "deepseek":
+        return DeepSeekClient(api_key=cfg.api_key, model=cfg.model_name)
+    raise ValueError(f"Provedor de LLM não suportado: {cfg.provider}")
+
+
+def setup_llms(group: str = "ABSTRACT", selected: Optional[Union[str, List[str]]] = None
+               ) -> List[Tuple[LLMClientConfig, LLMClient]]:
+    """Carrega os LLMs configurados para o grupo (multi-LLM).
+
+    Usa ``LLM_CLIENTS_<GROUP>`` quando definido; caso contrário cai no LLM único legado
+    (``LLM_*_<GROUP>``), preservando o comportamento atual. Retorna pares (config, cliente).
+
+    Args:
+        group: grupo de configuração (ex.: "ABSTRACT").
+        selected: se informado, roda apenas o(s) LLM(s) cujo id/name/model casar
+            (ex.: "gpt-5.4-nano" para rodar só o GPT).
+    """
+    configs = load_llm_client_configs(group, selected)
+    if not configs:
+        msg = (
+            "Nenhum LLM configurado. Defina LLM_CLIENTS_ABSTRACT (multi-LLM) "
+            "ou as variáveis LLM_*_ABSTRACT (single-LLM) em config/.env."
+        )
+        if selected:
+            msg = f"Nenhum LLM corresponde a '{selected}'. " + msg
+        raise ValueError(msg)
+    return [(cfg, _build_client_from_config(cfg)) for cfg in configs]
 
 
 def save_raw_llm_response(raw_content: str, output_path: Optional[str] = None):
@@ -571,19 +621,22 @@ def save_llm_response_to_file(response: LLMResponseModel, output_path: str):
         raise Exception(f"Error saving LLM response: {e}")
 
 
-def save_raw_llm_responses(raw_responses: List[str], output_dir: Optional[str] = None):
+def save_raw_llm_responses(raw_responses: List[str], output_dir: Optional[str] = None,
+                           llm_type: Optional[str] = None, llm_model: Optional[str] = None):
     """
     Save multiple raw LLM responses to text files.
-    
+
     Args:
         raw_responses (List[str]): List of raw string content returned by the LLM
         output_dir (Optional[str]): Directory to save the raw responses, defaults to PATH_DATA/OUTPUTS
+        llm_type (Optional[str]): Identificador do LLM (pasta de saída). Default: env LLM_API_TYPE_ABSTRACT.
+        llm_model (Optional[str]): Modelo do LLM (nome do arquivo). Default: env LLM_MODEL_ABSTRACT.
     """
     try:
         path_data = os.getenv("PATH_DATA", ".data")
-        llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-        llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
-        
+        llm_type = llm_type or os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+        llm_model = llm_model or os.getenv("LLM_MODEL_ABSTRACT", "default")
+
         if not output_dir:
             output_dir = os.path.join(path_data, "OUTPUTS", "raw_responses", llm_type)
         
@@ -610,19 +663,22 @@ def save_raw_llm_responses(raw_responses: List[str], output_dir: Optional[str] =
         print(f"Error saving raw LLM responses: {e}")
 
 
-def save_llm_responses_to_file(responses: List[ArticleAnalysis], output_path: Optional[str] = None):
+def save_llm_responses_to_file(responses: List[ArticleAnalysis], output_path: Optional[str] = None,
+                               llm_type: Optional[str] = None, llm_model: Optional[str] = None):
     """
     Save multiple LLM responses to a JSON file.
-    
+
     Args:
         responses (List[ArticleAnalysis]): List of validated article analyses
         output_path (Optional[str]): Path to save the responses
+        llm_type (Optional[str]): Identificador do LLM. Default: env LLM_API_TYPE_ABSTRACT.
+        llm_model (Optional[str]): Modelo do LLM. Default: env LLM_MODEL_ABSTRACT.
     """
     try:
         path_data = os.getenv("PATH_DATA", ".data")
-        llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-        llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
-        
+        llm_type = llm_type or os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+        llm_model = llm_model or os.getenv("LLM_MODEL_ABSTRACT", "default")
+
         # Create filename with LLM type and model info
         filename = f"select_bibs_filtered_by_abstract_{llm_type}_{llm_model}.json"
         
@@ -788,41 +844,30 @@ def check_raw_response_exists(idx: int, llm_type: str, llm_model: str, output_di
         # If there's any error checking, assume file doesn't exist
         return False
 
-def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None, 
-                                            output_path: Optional[str] = None) -> List[ArticleAnalysis]:
+def _process_articles_for_client_sync(cfg: LLMClientConfig, llm_client: LLMClient,
+                                      prompt_list: List[str],
+                                      output_path: Optional[str] = None) -> List[ArticleAnalysis]:
     """
-    Analyze abstracts from BibTeX files using an LLM one article at a time.
-    
-    Args:
-        input_bibtex_path: Path to the BibTeX file to analyze
-        output_path: Path to save the LLM response JSON
-    
-    Returns:
-        List[ArticleAnalysis]: List of validated article analyses
+    Processa todos os artigos com UM cliente de LLM (sequencialmente, um por vez).
+    Salva respostas brutas/processadas na pasta específica desse LLM.
     """
-    # Get a list of prompts from LLMUtils
-    prompt_list = run_prepare_base_prompt_list(input_bibtex_path)
-    
-    # Setup LLM
-    llm_client = setup_llm()
-    
     # Lists to store raw and parsed responses
     raw_responses = []
     article_analyses = []
-    
-    # Verificar se devemos sobrescrever arquivos existentes
-    overwrite = os.getenv("LLM_OVERWRITE_ABSTRACT", "False").lower() == "true"
-    llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-    llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
+
+    # Identidade/flags vêm do config do cliente (multi-LLM)
+    overwrite = cfg.overwrite
+    llm_type = cfg.name
+    llm_model = cfg.model_name
     path_data = os.getenv("PATH_DATA", ".data")
-    
+
     # Preparar diretório para verificação de arquivos
     output_dir = os.path.join(path_data, "OUTPUTS", "raw_responses", llm_type)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     try:
-        print(f"Processing {len(prompt_list)} articles one by one...")
-        
+        print(f"[{llm_type}/{llm_model}] Processing {len(prompt_list)} articles one by one...")
+
         # Process each prompt individually
         for idx, prompt in enumerate(prompt_list):
             print(f"Processing article {idx+1}/{len(prompt_list)}...")
@@ -942,42 +987,80 @@ def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = Non
                 continue
         
         # Save all raw responses to files
-        save_raw_llm_responses(raw_responses)
-        
+        save_raw_llm_responses(raw_responses, llm_type=llm_type, llm_model=llm_model)
+
         # Save processed responses to file if output_path is specified
         if output_path and article_analyses:
-            save_llm_responses_to_file(article_analyses, output_path)
-        
-        print(f"Processed {len(article_analyses)} articles successfully out of {len(prompt_list)}")
-        
+            save_llm_responses_to_file(article_analyses, output_path, llm_type=llm_type, llm_model=llm_model)
+
+        print(f"[{llm_type}/{llm_model}] {len(article_analyses)}/{len(prompt_list)} artigos processados.")
+
         return article_analyses
-    
+
     except Exception as e:
         print(f"Error during LLM analysis: {e}")
-        
+
         # Save what we have so far
         if raw_responses:
-            save_raw_llm_responses(raw_responses)
-        
+            save_raw_llm_responses(raw_responses, llm_type=llm_type, llm_model=llm_model)
+
         if article_analyses and output_path:
-            save_llm_responses_to_file(article_analyses, output_path)
-        
+            save_llm_responses_to_file(article_analyses, output_path, llm_type=llm_type, llm_model=llm_model)
+
         return article_analyses
 
 
-def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None, output_path: Optional[str] = None):
+def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None,
+                                          output_path: Optional[str] = None,
+                                          group: str = "ABSTRACT",
+                                          selected: Optional[Union[str, List[str]]] = None
+                                          ) -> List[ArticleAnalysis]:
+    """
+    Analisa abstracts com UM OU MAIS LLMs, um artigo por vez (síncrono).
+
+    Cada LLM configurado (via LLM_CLIENTS_<GROUP>, ou o LLM único legado) processa TODOS os
+    artigos de forma independente e salva seus resultados em pasta própria. Os LLMs são
+    executados em sequência (um cliente após o outro).
+
+    Args:
+        input_bibtex_path: Caminho do arquivo BibTeX a analisar
+        output_path: Caminho para salvar o JSON de respostas (opcional)
+        group: Grupo de configuração de LLM (default "ABSTRACT")
+
+    Returns:
+        List[ArticleAnalysis]: análises combinadas de todos os LLMs
+    """
+    # Lista de prompts (compartilhada entre os LLMs)
+    prompt_list = run_prepare_base_prompt_list(input_bibtex_path)
+
+    # Carregar os LLMs configurados (todos, ou apenas o selecionado)
+    clients = setup_llms(group, selected)
+    print(f"Multi-LLM: {len(clients)} cliente(s): {', '.join(cfg.name for cfg, _ in clients)}")
+
+    combined: List[ArticleAnalysis] = []
+    for cfg, llm_client in clients:
+        analyses = _process_articles_for_client_sync(cfg, llm_client, prompt_list, output_path)
+        combined.extend(analyses)
+
+    print(f"Total combinado: {len(combined)} análises de {len(clients)} LLM(s).")
+    return combined
+
+
+def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None, output_path: Optional[str] = None,
+                                         selected: Optional[Union[str, List[str]]] = None):
     """
     Main function to run the LLM analysis pipeline.
-    
+
     Args:
         input_bibtex_path: Path to the BibTeX file to analyze
         output_path: Path to save the output files
+        selected: roda apenas o(s) LLM(s) cujo id/name/model casar (ex.: "gpt-5.4-nano")
     """
-    try:        
+    try:
         print(f"Analyzing abstracts from {'default bibtex' if input_bibtex_path is None else input_bibtex_path}")
-        
+
         # Run analysis using the one-on-one approach
-        responses = analyze_abstracts_with_llm_one_on_one(input_bibtex_path, output_path)
+        responses = analyze_abstracts_with_llm_one_on_one(input_bibtex_path, output_path, selected=selected)
         
         # Create a full LLMResponseModel
         if responses:

@@ -7,6 +7,17 @@ base_prompt: >
   You must focus mainly on the attached article abstracts.
   Generate analysis for all json elements with abstracts. analysis and generate answers for everyone 
 
+  # CRITICAL ANSWER FORMAT RULE (MUST FOLLOW STRICTLY)
+
+  For EVERY `answer` field inside `research_questions`, `accepted_criteria`,
+  `rejection_criteria` and `is_relevant`, the value MUST be EXACTLY one of two
+  lowercase strings: "yes" or "no". Nothing else is allowed.
+  You must NEVER answer with "maybe", "probably", "likely", "possibly", "unsure",
+  "not sure", "n/a", "unknown", "true", "false", numbers, or percentages (e.g. "70%", "0.7").
+  If the abstract does not provide enough information, or you are uncertain, you MUST answer "no".
+  Only `supporting_questions` may use values other than yes/no (classes / "not sure");
+  every other `answer` field is strictly binary: "yes" or "no".
+
   #Query
 
   The search query used in the scientific article databases was:

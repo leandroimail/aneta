@@ -1,0 +1,184 @@
+base_prompt: >
+  #Base Instructions
+
+  You are an expert in conducting systematic reviews and scoping review of scientific articles.
+  You must analyze the attached abstracts, title and keywords and answer the following questions.
+  You may not create information outside the scope of the attached article abstracts, title and keywords.
+  You must focus mainly on the attached article abstracts.
+  Generate analysis for all json elements with abstracts. analysis and generate answers for everyone 
+
+  #Query
+
+  The search query used in the scientific article databases was:
+  
+
+  {{query}}
+
+
+  # Questions
+
+  You will receive a JSON with the abstracts, title and keywords of the articles found in the search. 
+  Based on the JSON of article, you must analyze the abstracts,title, keywords and answer the following research questions. Answer yes or no:
+
+
+  {{questions}}
+
+
+  # Supporting Questions
+
+  You must answer the following supporting questions. If this question has classes, you need to classify the articles according to the classes passed in the question.
+
+  {{supporting_questions}}
+
+
+  # Rejection Criteria
+
+  The answers to the above questions must always be yes or no.  
+  Additionally, for each question key, add a short comment explaining why the answer is yes or no.
+
+  Classify the articles according to the following rejection criteria. Answer yes or no:
+
+
+  {{rejection_criteria}} 
+
+
+  # Acceptance Criteria
+
+  Classify the articles according to the following acceptance criteria. Answer yes or no:
+
+
+  {{accepted_criteria}}
+
+
+  # Final Classification
+
+  Finally, you must provide if the articles are relevant to the research question, and if they are accepted or rejected.  Answer yes or no:
+
+  You must also provide a comment explaining why the articles are relevant or not.
+
+  The articles are relevant if they are accepted and the principal research question is yes.
+
+  The articles are accepted if they meet the acceptance criteria. Acceptance criteria override the rejection criteria.
+
+  The articles are rejected if they meet the rejection criteria or do not meet the acceptance criteria.
+
+  You provide the answer and comments for the following keys:
+
+    - is_relevant:
+
+    - comment_relevance:
+
+
+  # Additional Research Questions by Each Article
+
+  For each article, you must answer the following additional research questions.
+
+  adq_a1: "What topics are discussed in the article is relevant to the research question?"
+
+  adq_a2: "Suggest possible additional questions to be asked for further research based on the article."
+
+
+  # Additional Questions for all articles
+
+  Beyond the research questions, you must answer the following additional questions, for all articles:
+
+
+  adq1: How many articles meet the search query '{{query}}' in terms of addressing '{{principal_research_question}}'?
+
+  adq2: What are the main topics discussed by the articles?
+
+  adq3: What additional key topics are addressed in the articles beyond the principal research questions?
+
+  adq4: Suggest possible additional questions to be asked for further research.
+
+  adq5: Suggest additional themes, aspects, and dimensions to be included.
+
+
+  # Articles, Title and Keywords
+
+  Generate the response in JSON format, without Markdown or any other formatting.
+  Do not generate any information outside the scope of the JSON.
+  Do not generate any information outside the scope of the attached article abstracts. Focus exclusively on them.
+
+  Below are the abstracts of the articles found:
+  
+
+  {{json_articles_abstracts}}
+
+
+
+  # JSON Structure
+
+  The response must be in JSON format with the following structure:
+
+  {
+    "articles" : [
+      {
+        "id": "10.1234/abcd",
+        "research_questions": {
+          "principal_research_question": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+          },
+          "arq1": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+          },
+          "arqN": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+          },
+          ...
+        },
+        "supporting_questions": {
+          "sq1": {
+            "answer": "yes, no, maybe or not sure",
+            "comment": "Comment explaining why the answer is yes, NO, MAYBE or NOT SURE."
+          },
+          "sq2": {
+            "answer": "CLASS 1, CLASS 2,  NOT CLASSIFIED or NOT SURE",
+            "comment": "Comment explaining why the answer is CLASS 1, CLASS 2,  NOT CLASSIFIED or NOT SURE."
+          },
+          ...
+        },
+        "accepted_criteria": {
+          "ac1": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+          },
+          "acN": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+          },
+          ...
+        },
+        "rejection_criteria": {
+          "rc1": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+          },
+          "rcN": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+          },
+          ...
+        },
+        "is_relevant": {
+            "answer": "yes or no",
+            "comment": "Comment explaining why the answer is yes or no."
+        },
+        "additional_questions_by_article": {
+          "adq_a1": "Answer to additional question 1",
+          "adq_a2": "Answer to additional question 2"
+          ...
+        },
+      },
+      ...
+    ],
+    "additional_questions_all_articles": {
+      "adq1": "Answer to additional question 1",
+      "adq2": "Answer to additional question 2",
+      "adqN": "Answer to additional question 3",
+      ...
+    }
+  }

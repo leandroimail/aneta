@@ -90,46 +90,50 @@ def deprecated_abstract():
         get_abstract(path_ACM, "ACM")
     return True
 
-def run_abstract_classifier_llm():
+def run_abstract_classifier_llm(selected=None):
     bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
-    
+
     path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
     path_data = os.path.join(path_data, ".bibs")
-    
+
     path_directory_file_bib = path_data.replace(".bibs", bib_file)
-    
+
     # Chamando a função com um caminho único de arquivo BibTeX
-    run_select_bibs_filtered_by_abstract(path_directory_file_bib)
+    run_select_bibs_filtered_by_abstract(path_directory_file_bib, selected=selected)
     return True
 
-def run_abstract_classifier_llm_one_on_one():
+def run_abstract_classifier_llm_one_on_one(selected=None):
     bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
-    
+
     path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
     path_data = os.path.join(path_data, ".bibs")
-    
+
     path_directory_file_bib = path_data.replace(".bibs", bib_file)
-    
+
     # Chamando a função one-on-one com um caminho único de arquivo BibTeX
-    run_select_bibs_filtered_by_abstract_one_on_one(path_directory_file_bib)
+    run_select_bibs_filtered_by_abstract_one_on_one(path_directory_file_bib, selected=selected)
     return True
 
-def run_abstract_classifier_llm_one_on_one_async():
+def run_abstract_classifier_llm_one_on_one_async(selected=None):
     """
     Executa a classificação de abstracts usando LLM de forma assíncrona (modo One-on-One).
-    
+
+    Args:
+        selected: se informado, roda apenas o(s) LLM(s) cujo id/name/model casar
+            (ex.: "gpt-5.4-nano"). None => roda todos os LLMs configurados.
+
     Returns:
         bool: True se a operação foi concluída com sucesso
     """
     bib_file = os.getenv("BIB_FILE", ".OUTPUTS/select_bibs.bib")
-    
+
     path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
     path_data = os.path.join(path_data, ".bibs")
-    
+
     path_directory_file_bib = path_data.replace(".bibs", bib_file)
-    
+
     # Chamando a função assíncrona com asyncio.run
-    asyncio.run(run_select_bibs_filtered_by_abstract_async(path_directory_file_bib))
+    asyncio.run(run_select_bibs_filtered_by_abstract_async(path_directory_file_bib, selected=selected))
     return True
 
 def run_bibtex_to_json_schema():
@@ -302,6 +306,13 @@ def parse_arguments():
     group.add_argument('--filter_relevant_papers', action='store_true', help='Filtra papers relevantes das respostas LLM usando critérios SQL configuráveis')
     group.add_argument('--read_pdfs', action='store_true', help='Parse PDF documents using Docling and optionally generate Markdown files')
 
+    # Opção (fora do grupo mutuamente exclusivo): seleciona UM LLM específico para a
+    # classificação de abstract, pelo nome do modelo, id ou name do cliente.
+    parser.add_argument('--llm', metavar='MODELO_OU_ID', default=None,
+                        help='Roda a classificação de abstract usando APENAS o LLM informado '
+                             '(nome do modelo, id ou name do cliente; ex.: --llm gpt-5.4-nano). '
+                             'Sem esta opção, roda todos os LLMs de LLM_CLIENTS_ABSTRACT.')
+
     return parser.parse_args(), parser
 
 
@@ -348,11 +359,11 @@ if __name__ == "__main__":
     elif args.deprecated_abstract:
         deprecated_abstract()
     elif args.abstract_classifier_llm:
-        run_abstract_classifier_llm()
+        run_abstract_classifier_llm(selected=args.llm)
     elif args.abstract_classifier_llm_one_on_one:
-        run_abstract_classifier_llm_one_on_one()
+        run_abstract_classifier_llm_one_on_one(selected=args.llm)
     elif args.abstract_classifier_llm_one_on_one_async:  # Add new CLI argument handler
-        run_abstract_classifier_llm_one_on_one_async()
+        run_abstract_classifier_llm_one_on_one_async(selected=args.llm)
     elif args.bibtex_to_json:
         run_bibtex_to_json_schema()
     elif args.process_responses:  # Add new command line argument handler
