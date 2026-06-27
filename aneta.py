@@ -22,7 +22,9 @@ from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_f
 from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOneAsync import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_async
 from src.GenerativeAI.LLMUtils import bibtex_to_json_schema
 from src.GenerativeAI.LLMUtilExcel import process_responses_to_excel
-from src.PDFReader import process_pdfs, read_pdfs_with_docling
+# Obs.: src.PDFReader puxa o docling (stack pesado de ML) e só é usado por --read_pdfs.
+# O import é feito de forma lazy dentro de run_pdf_reader() para não exigir docling nos
+# demais comandos (busca, enriquecimento, classificação, seleção por abstract).
 
 def setup_environment():
     load_dotenv(os.path.abspath(".conf"))
@@ -159,16 +161,43 @@ def run_bibtex_to_json_schema():
     bibtex_to_json_schema(path_directory_file_bib, output_path)
     return True
 
+def _raw_responses_dir():
+    """Caminho dos resultados brutos da classificação por abstract (.data/OUTPUTS/raw_responses)."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, ".data", "OUTPUTS", "raw_responses")
+
+def _has_raw_responses(raw_dir):
+    """True se houver pelo menos um arquivo response_*_raw.txt em qualquer subpasta de LLM."""
+    if not os.path.isdir(raw_dir):
+        return False
+    for _root, _dirs, files in os.walk(raw_dir):
+        if any(f.startswith("response_") and f.endswith("_raw.txt") for f in files):
+            return True
+    return False
+
 def run_process_responses_to_excel():
     """
     Processes LLM responses into Excel files for analysis.
-    
+
+    Etapa "planilha" do pipeline de seleção: lê os resultados brutos da classificação
+    por abstract e gera as planilhas de notas (incluindo a consolidada que alimenta o
+    filtro). Valida que existem respostas antes de prosseguir.
+
     Returns:
-        bool: True if the operation was completed successfully
+        bool: True if the operation was completed successfully, False caso não haja
+              respostas para processar.
     """
+    raw_dir = _raw_responses_dir()
+    if not _has_raw_responses(raw_dir):
+        print("✗ Nenhuma resposta de LLM encontrada em:")
+        print(f"  {raw_dir}")
+        print("  → Rode a classificação por abstract antes, por exemplo:")
+        print("    python aneta.py --abstract_classifier_llm_one_on_one_async")
+        return False
+
     # Call the process_responses_to_excel function
     full_path, simple_path, consolidated_path = process_responses_to_excel()
-    
+
     print(f"Excel files created successfully:")
     print(f"- Full Excel file: {full_path}")
     print(f"- Simple Excel file: {simple_path}")
@@ -178,15 +207,58 @@ def run_process_responses_to_excel():
 def run_filter_relevant_papers():
     """
     Execute filtering of LLM-classified papers using SQL criteria.
-    
-    Filters LLM response JSON using DuckDB with configurable SQL WHERE clause,
-    then matches filtered records to BibTeX entries and generates outputs.
-    
+
+    Etapa "filtro" do pipeline de seleção: lê a planilha consolidada de notas, aplica o
+    filtro SQL (config/filter_accept_results_llm.yaml) e grava a planilha de decisão
+    (selection_decisions.xlsx) com a motivação por artigo, além de relevant/unrelevant
+    JSON, BibTeX e relatório. Valida que a planilha consolidada existe.
+
     Returns:
         bool: True if the operation was completed successfully, False otherwise
     """
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    consolidated_rel = os.getenv(
+        "FILTER_LLM_RESPONSES_ABSTRACT_PATH",
+        "OUTPUTS/processed_responses/combined_responses_consolidated.json",
+    )
+    consolidated_path = os.path.join(path_data, consolidated_rel)
+    if not os.path.exists(consolidated_path):
+        print("✗ Planilha consolidada de notas não encontrada em:")
+        print(f"  {consolidated_path}")
+        print("  → Rode a etapa de planilha antes:")
+        print("    python aneta.py --process_responses")
+        return False
+
     from src.FilterRelevantPapers import filter_relevant_papers
     return filter_relevant_papers()
+
+def run_select_abstracts():
+    """
+    Atalho do pipeline de seleção por abstract: planilha → filtro, em sequência.
+
+    Roda --process_responses (gera as planilhas de notas) e, em seguida,
+    --filter_relevant_papers (gera a planilha de decisão com a motivação por artigo).
+    NÃO inclui a classificação por LLM (etapa cara), que deve ser rodada antes.
+
+    Returns:
+        bool: True se ambas as etapas concluíram com sucesso, False caso contrário.
+    """
+    print("\n" + "=" * 70)
+    print("=== SELEÇÃO POR ABSTRACT: PLANILHA → FILTRO ===")
+    print("=" * 70)
+
+    print("\n[Etapa 1/2] Gerando planilhas de notas (--process_responses)...")
+    if not run_process_responses_to_excel():
+        print("\n✗ Pipeline interrompido: falha ao gerar as planilhas de notas.")
+        return False
+
+    print("\n[Etapa 2/2] Filtrando e gerando a planilha de decisão (--filter_relevant_papers)...")
+    if not run_filter_relevant_papers():
+        print("\n✗ Pipeline interrompido: falha na filtragem.")
+        return False
+
+    print("\n✓ Seleção por abstract concluída (planilhas + decisão geradas).")
+    return True
 
 def run_pdf_reader():
     """
@@ -200,11 +272,14 @@ def run_pdf_reader():
         bool: True if the operation was completed successfully, False otherwise
     """
     try:
+        # Import lazy: só carrega o docling quando o leitor de PDF é realmente usado.
+        from src.PDFReader import process_pdfs
+
         # Log start
         print("=" * 80)
         print("PDF READER - Async Batch Processing")
         print("=" * 80)
-        
+
         # Call the new process_pdfs() orchestrator
         # This will read configuration from .conf automatically
         results = process_pdfs()
@@ -302,8 +377,9 @@ def parse_arguments():
     group.add_argument('--abstract_classifier_llm_one_on_one', action='store_true', help='Realiza a classificação de abstracts usando LLM (modo One-on-One)')
     group.add_argument('--abstract_classifier_llm_one_on_one_async', action='store_true', help='Realiza a classificação de abstracts usando LLM de forma assíncrona (modo One-on-One)')
     group.add_argument('--bibtex_to_json', action='store_true', help='Converte arquivo BibTeX para formato JSON com schema específico')
-    group.add_argument('--process_responses', action='store_true', help='Processa respostas LLM para arquivos Excel')
-    group.add_argument('--filter_relevant_papers', action='store_true', help='Filtra papers relevantes das respostas LLM usando critérios SQL configuráveis')
+    group.add_argument('--process_responses', action='store_true', help='[Seleção 1/2] Processa respostas LLM e gera as planilhas de notas (consolidada)')
+    group.add_argument('--filter_relevant_papers', action='store_true', help='[Seleção 2/2] Aplica o filtro SQL e gera a planilha de decisão (selection_decisions.xlsx) com a motivação por artigo')
+    group.add_argument('--select_abstracts', action='store_true', help='[Seleção] Atalho: roda --process_responses e depois --filter_relevant_papers em sequência (sem a classificação LLM)')
     group.add_argument('--read_pdfs', action='store_true', help='Parse PDF documents using Docling and optionally generate Markdown files')
 
     # Opção (fora do grupo mutuamente exclusivo): seleciona UM LLM específico para a
@@ -370,6 +446,8 @@ if __name__ == "__main__":
         run_process_responses_to_excel()
     elif args.filter_relevant_papers:
         run_filter_relevant_papers()
+    elif args.select_abstracts:
+        run_select_abstracts()
     elif args.read_pdfs:
         run_pdf_reader()
     elif run_search_database:

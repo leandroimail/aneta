@@ -77,28 +77,54 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
     content = content.replace("```json", "").replace("```", "").replace("```", "").strip()
 
     content = content.strip("[").strip("]")
-    
-    # Tentar analisar como JSON
-    try:
-        dict_json = json.loads(content)
-        if len(dict_json) == 1 and "id" not in dict_json:
-            new_dict = {}
-            for key, value in dict_json.items():
-                new_dict["id"] = key
-                new_dict = new_dict | value
-            return new_dict
-        return dict_json
 
+    def _unwrap_single_id(parsed: Any) -> Any:
+        # Se vier {"<id>": {...}} sem chave "id", promove a chave a campo "id".
+        if isinstance(parsed, dict) and len(parsed) == 1 and "id" not in parsed:
+            new_dict: Dict[str, Any] = {}
+            for key, value in parsed.items():
+                new_dict["id"] = key
+                if isinstance(value, dict):
+                    new_dict = new_dict | value
+            return new_dict
+        return parsed
+
+    # 1) Tentativa direta.
+    try:
+        return _unwrap_single_id(json.loads(content))
     except json.JSONDecodeError:
-        try:
-            # Lidar com possíveis vírgulas no final
-            content = re.sub(r',\s*}', '}', content)
-            content = re.sub(r',\s*]', ']', content)
-            return json.loads(content)
-        except json.JSONDecodeError as e:
-            print(f"Falha ao analisar JSON: {e}")
-            # Retornar conteúdo bruto como fallback
-            return {"raw_content": content}
+        pass
+
+    # 2) Lidar com vírgulas finais (",}" / ",]").
+    try:
+        fixed = re.sub(r',\s*]', ']', re.sub(r',\s*}', '}', content))
+        return _unwrap_single_id(json.loads(fixed))
+    except json.JSONDecodeError:
+        pass
+
+    # 3) Lidar com "Extra data" — lixo após um objeto JSON válido (ex.: um '}' extra que
+    #    o gemini às vezes emite). raw_decode lê o primeiro valor JSON válido e ignora o
+    #    restante, salvando a resposta sem precisar de conversão via LLM.
+    try:
+        decoded, _end = json.JSONDecoder().raw_decode(content.lstrip())
+        return _unwrap_single_id(decoded)
+    except json.JSONDecodeError as e:
+        first_error = e
+
+    # 4) Último recurso: reparo robusto de JSON de LLM (aspas/vírgulas/caracteres de
+    #    controle faltando) via json_repair. Determinístico e sem chamar LLM. O import é
+    #    protegido: se a lib não estiver instalada, cai no fallback de conteúdo bruto.
+    try:
+        import json_repair
+        repaired = json_repair.loads(content)
+        if isinstance(repaired, dict) and repaired:
+            return _unwrap_single_id(repaired)
+    except Exception:
+        pass
+
+    print(f"Falha ao analisar JSON: {first_error}")
+    # Retornar conteúdo bruto como fallback
+    return {"raw_content": content}
 
 
 def convert_to_json_llm(raw_text: str) -> Dict[str, Any]:
