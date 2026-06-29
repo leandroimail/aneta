@@ -15,7 +15,8 @@ from src.EnrichBibtexAsync import enrich_bibtex as enrich_bibtex_async
 from src.Selection import get_analyse
 from src.Bibliometry import run_bibliometry as run_bibliometry_func
 from src.BibliometryAsync import run_bibliometry as run_bibliometry_async_func
-from src.DonwloadPapers import download_all_papers
+from src.DonwloadPapers import download_all_papers, download_assisted
+from src.PipelineReport import record_stage_auto, generate_report
 
 from src.GenerativeAI.LLMSelectPapersByAbstract import run_select_bibs_filtered_by_abstract
 from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_one_on_one
@@ -57,22 +58,55 @@ def run_bibliometry_async():
     run_bibliometry_async_func()
     return True
 
-def run_download(skip_validation=False):
+def run_download(skip_validation=False, max_workers=None):
     bib_file = os.getenv("BIB_FILE_DOWNLOAD_PDF", ".OUTPUTS/select_bibs.bib")
     folder_save_pdf = os.getenv("FOLDER_SAVE_PDF", "PDFs")
-    
+
     path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
     path_data = os.path.join(path_data, ".bibs")
-    
+
     path_directory_file_bib = path_data.replace(".bibs", bib_file)
     folder_save_pdf = path_data.replace(".bibs", folder_save_pdf)
-    
+
     if skip_validation:
         print("\n⚠️  MODO DE DOWNLOAD RÁPIDO ATIVADO")
         print("Validações de PDF desabilitadas - arquivos serão salvos sem verificação de integridade\n")
-    
-    download_all_papers(path_directory_file_bib, folder_save_pdf, skip_validation=skip_validation)
+
+    download_all_papers(path_directory_file_bib, folder_save_pdf,
+                        skip_validation=skip_validation, max_workers=max_workers)
     return True
+
+def run_download_assisted():
+    """
+    Download ASSISTIDO dos artigos ainda não baixados: abre um navegador visível e pede
+    ajuda manual para passar pelo Cloudflare (1x por site). Pergunta no terminal antes de
+    iniciar; se você recusar, fica para depois. Interativo — rode no seu terminal.
+    """
+    bib_file = os.getenv("BIB_FILE_DOWNLOAD_PDF", ".OUTPUTS/select_bibs.bib")
+    folder_save_pdf = os.getenv("FOLDER_SAVE_PDF", "PDFs")
+
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+
+    path_directory_file_bib = path_data.replace(".bibs", bib_file)
+    folder_save_pdf = path_data.replace(".bibs", folder_save_pdf)
+
+    return download_assisted(path_directory_file_bib, folder_save_pdf)
+
+def run_download_async(skip_validation=False):
+    """
+    Download dos PDFs de forma CONCORRENTE (I/O-bound -> ThreadPoolExecutor).
+
+    O nível de concorrência vem de DOWNLOAD_MAX_CONCURRENT (default 8). Reaproveita toda
+    a lógica de fontes (url -> DOI direto -> Crossref -> Unpaywall) e pula PDFs já baixados.
+    """
+    try:
+        workers = int(os.getenv("DOWNLOAD_MAX_CONCURRENT", "8"))
+    except (TypeError, ValueError):
+        workers = 8
+    workers = max(2, workers)
+    print(f"\n⚡ DOWNLOAD CONCORRENTE — {workers} downloads simultâneos\n")
+    return run_download(skip_validation=skip_validation, max_workers=workers)
 
 def deprecated_abstract():
     if not os.getenv("RUN_DEPRECATED_JOBS", 0):
@@ -353,6 +387,15 @@ def run_pdf_reader():
         print(traceback.format_exc())
         return False
 
+def run_pipeline_report():
+    """
+    Gera o relatório consolidado do pipeline (funil completo do SLR): lê o estado incremental
+    das etapas e calcula o que faltar a partir dos artefatos. Saídas: pipeline_report.md,
+    pipeline_funnel.csv e pipeline_metrics.json em .data/OUTPUTS/.
+    """
+    generate_report()
+    return True
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Executa diferentes funcionalidades do projeto ASRL',
@@ -370,7 +413,9 @@ def parse_arguments():
     group.add_argument('--selection', action='store_true', help='Executa a seleção dos bibtex')
     group.add_argument('--bibliometry', action='store_true', help='Executa a bibliometria completa do bibtex selecionado')
     group.add_argument('--bibliometry_async', action='store_true', help='Executa de forma assíncrona a bibliometria completa do bibtex selecionado')
-    group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers')
+    group.add_argument('--download_pdf', action='store_true', help='Executa o download dos papers (sequencial)')
+    group.add_argument('--download_pdf_async', action='store_true', help='Executa o download dos papers de forma CONCORRENTE (mais rápido; DOWNLOAD_MAX_CONCURRENT, default 8)')
+    group.add_argument('--download_pdf_assisted', action='store_true', help='Download ASSISTIDO dos faltantes: navegador visível + você resolve o Cloudflare na mão (pergunta antes de iniciar)')
     group.add_argument('--download_pdf_fast', action='store_true', help='Executa o download dos papers SEM validação (mais rápido, menos seguro)')
     group.add_argument('--deprecated_abstract', action='store_true', help='Executa a leitura do abstract para ACM ou Spring via Web Scraping (Depreciado)')
     group.add_argument('--abstract_classifier_llm', action='store_true', help='Realiza a classificação de abstracts usando LLM')
@@ -381,6 +426,7 @@ def parse_arguments():
     group.add_argument('--filter_relevant_papers', action='store_true', help='[Seleção 2/2] Aplica o filtro SQL e gera a planilha de decisão (selection_decisions.xlsx) com a motivação por artigo')
     group.add_argument('--select_abstracts', action='store_true', help='[Seleção] Atalho: roda --process_responses e depois --filter_relevant_papers em sequência (sem a classificação LLM)')
     group.add_argument('--read_pdfs', action='store_true', help='Parse PDF documents using Docling and optionally generate Markdown files')
+    group.add_argument('--pipeline_report', action='store_true', help='Gera o relatório consolidado do pipeline (funil do SLR): pipeline_report.md + pipeline_funnel.csv + pipeline_metrics.json')
 
     # Opção (fora do grupo mutuamente exclusivo): seleciona UM LLM específico para a
     # classificação de abstract, pelo nome do modelo, id ou name do cliente.
@@ -430,6 +476,10 @@ if __name__ == "__main__":
         run_bibliometry_function()
     elif args.download_pdf:
         run_download()
+    elif args.download_pdf_async:
+        run_download_async()
+    elif args.download_pdf_assisted:
+        run_download_assisted()
     elif args.download_pdf_fast:
         run_download(skip_validation=True)
     elif args.deprecated_abstract:
@@ -450,6 +500,8 @@ if __name__ == "__main__":
         run_select_abstracts()
     elif args.read_pdfs:
         run_pdf_reader()
+    elif args.pipeline_report:
+        run_pipeline_report()
     elif run_search_database:
         run_search()
     elif run_enrich_bibtex:
@@ -483,6 +535,27 @@ if __name__ == "__main__":
     else:
         parser.print_help()
         sys.exit(1)
+
+    # Registro incremental de métricas da etapa executada (best-effort; nunca quebra o fluxo).
+    _STAGE_BY_ARG = {
+        "search": "busca",
+        "enrich": "enriquecimento", "enrich_async": "enriquecimento",
+        "selection": "selecao_metadados",
+        "abstract_classifier_llm": "classificacao_llm",
+        "abstract_classifier_llm_one_on_one": "classificacao_llm",
+        "abstract_classifier_llm_one_on_one_async": "classificacao_llm",
+        "process_responses": "consolidacao",
+        "filter_relevant_papers": "filtro",
+        "download_pdf": "download", "download_pdf_async": "download",
+        "download_pdf_assisted": "download", "download_pdf_fast": "download",
+        "read_pdfs": "leitura_pdf",
+    }
+    for _arg, _stage in _STAGE_BY_ARG.items():
+        if getattr(args, _arg, False):
+            record_stage_auto(_stage)
+    if getattr(args, "select_abstracts", False):
+        record_stage_auto("consolidacao")
+        record_stage_auto("filtro")
 
 
 
