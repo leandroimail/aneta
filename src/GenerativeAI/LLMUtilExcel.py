@@ -916,7 +916,10 @@ def create_excel_from_data(responses_data: Dict[str, List[Dict]],
     writer_simple.close()
 
 
-def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str, str]:
+def process_responses_to_excel(base_dir: Optional[str] = None,
+                               raw_subdir: str = "raw_responses",
+                               article_info: str = "select_bibs.json",
+                               out_prefix: str = "combined_responses") -> Tuple[str, str, str]:
     """
     Função principal para processar respostas e criar os arquivos Excel.
     
@@ -930,13 +933,13 @@ def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str
     if base_dir is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     
-    base_path = os.path.join(base_dir, ".data", "OUTPUTS", "raw_responses")
+    base_path = os.path.join(base_dir, ".data", "OUTPUTS", raw_subdir)
     yaml_path = os.path.join(base_dir, "Config", "research_questions.yaml")
-    json_path = os.path.join(base_dir, ".data", "OUTPUTS", "select_bibs.json")
+    json_path = os.path.join(base_dir, ".data", "OUTPUTS", article_info)
     output_dir = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses")
-    output_path = os.path.join(output_dir, "combined_responses_full.xlsx")
-    simple_output_path = os.path.join(output_dir, "combined_responses_simple.xlsx")
-    consolidated_output_path = os.path.join(output_dir, "combined_responses_consolidated.xlsx")
+    output_path = os.path.join(output_dir, f"{out_prefix}_full.xlsx")
+    simple_output_path = os.path.join(output_dir, f"{out_prefix}_simple.xlsx")
+    consolidated_output_path = os.path.join(output_dir, f"{out_prefix}_consolidated.xlsx")
     # Garantir que o diretório de saída exista
     os.makedirs(output_dir, exist_ok=True)
     

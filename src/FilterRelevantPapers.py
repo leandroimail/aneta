@@ -1389,7 +1389,7 @@ def report_statistics(input_count: int, filtered_count: int, unrelevant_count: i
 # MAIN ENTRY POINT
 # ============================================================================
 
-def filter_relevant_papers() -> bool:
+def filter_relevant_papers(config: Optional[FilterConfig] = None) -> bool:
     """
     Main entry point for filtering LLM responses.
     
@@ -1428,7 +1428,8 @@ def filter_relevant_papers() -> bool:
         # Step 1: Load Configuration
         print("[1/6] Loading configuration...")
         try:
-            config = load_configuration()
+            if config is None:
+                config = load_configuration()
             print("  ✓ Configuration loaded successfully")
             print(f"  - Data path: {config.path_data}")
             print(f"  - Filter clause loaded ({len(config.filter_clause)} characters)")
@@ -1588,3 +1589,67 @@ def filter_relevant_papers() -> bool:
         print(f"\n✗ Critical error: {e}")
         print("  → Please review the error above and check your configuration")
         return False
+
+
+# ============================================================================
+# FILTRO FINAL (TRIAGEM POR TEXTO COMPLETO)
+# ============================================================================
+
+def load_configuration_fulltext() -> FilterConfig:
+    """
+    Configuração do filtro FINAL (texto completo): lê o consolidado de full-text e grava
+    final_papers.* + selection_decisions_fulltext.xlsx. Reaproveita toda a lógica de
+    filter_relevant_papers, só trocando caminhos/YAML. Casa os relevantes contra o
+    relevant_abstract_papers.bib (que contém os papers triados por abstract).
+    """
+    conf_path = os.path.abspath(".conf")
+    if os.path.exists(conf_path):
+        load_dotenv(conf_path)
+
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+
+    bib_file = os.getenv("RELEVANT_ABSTRACT_PAPERS_BIBs_OUTPUT", "OUTPUTS/relevant_abstract_papers.bib")
+    json_input = os.getenv("FILTER_LLM_RESPONSES_FULLTEXT_PATH",
+                           "OUTPUTS/processed_responses/combined_responses_fulltext_consolidated.json")
+    json_output = os.getenv("FINAL_PAPERS_OUTPUT", "OUTPUTS/processed_responses/final_papers.json")
+    bib_output = os.getenv("FINAL_PAPERS_BIBs_OUTPUT", "OUTPUTS/final_papers.bib")
+    unrelevant_output = os.getenv("FINAL_EXCLUDED_PAPERS_OUTPUT",
+                                  "OUTPUTS/processed_responses/final_excluded_papers.json")
+    yaml_filter = os.getenv("FILTER_LLM_CONFIG_FULLTEXT_PATH",
+                            "config/filter_accept_results_llm_fulltext.yaml")
+
+    bib_file_path = path_data.replace(".bibs", bib_file)
+    json_input_path = path_data.replace(".bibs", json_input)
+    json_output_path = path_data.replace(".bibs", json_output)
+    bib_output_path = path_data.replace(".bibs", bib_output)
+    unrelevant_output_path = path_data.replace(".bibs", unrelevant_output)
+    yaml_filter_path = os.path.abspath(yaml_filter)
+    markdown_report_path = os.path.splitext(json_output_path)[0] + "_report.md"
+
+    decisions_env = os.getenv("SELECTION_DECISIONS_FULLTEXT_EXCEL_OUTPUT")
+    if decisions_env:
+        selection_decisions_path = path_data.replace(".bibs", decisions_env)
+    else:
+        selection_decisions_path = os.path.join(
+            os.path.dirname(json_output_path), "selection_decisions_fulltext.xlsx")
+
+    filter_clause = load_yaml_filter(yaml_filter_path)
+
+    return FilterConfig(
+        path_data=path_data,
+        bib_file_path=bib_file_path,
+        json_input_path=json_input_path,
+        json_output_path=json_output_path,
+        bib_output_path=bib_output_path,
+        unrelevant_output_path=unrelevant_output_path,
+        yaml_filter_path=yaml_filter_path,
+        filter_clause=filter_clause,
+        markdown_report_path=markdown_report_path,
+        selection_decisions_path=selection_decisions_path,
+    )
+
+
+def filter_final_papers() -> bool:
+    """Filtro FINAL da triagem por texto completo → final_papers + selection_decisions_fulltext."""
+    return filter_relevant_papers(load_configuration_fulltext())

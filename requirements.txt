@@ -37,5 +37,8 @@ undetected_chromedriver # dependência do PyPaperBot (Selenium stealth)
 setuptools<81          # provê o shim de 'distutils' (removido no Python 3.12)
 playwright             # download por navegador headless (acesso institucional por IP)
 
-# --- Leitura de PDF (--read_pdfs); stack pesado de ML, opcional ---
+# --- Leitura de PDF p/ triagem por texto completo (rápido, leve) ---
+pymupdf                # extração de texto via fitz (full-text screening)
+
+# --- Leitura de PDF rica (--read_pdfs); stack pesado de ML, opcional ---
 # docling

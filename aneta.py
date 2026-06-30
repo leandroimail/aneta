@@ -9,6 +9,16 @@ from dotenv import load_dotenv
 # Suppress SyntaxWarning from third-party libraries (scholarly)
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
+# Saída SEM BUFFER (line-buffered): o PYTHONUNBUFFERED em env só vale antes do processo
+# iniciar, então reconfiguramos stdout/stderr aqui para o progresso aparecer em tempo real
+# mesmo quando a saída é redirecionada para arquivo/pipe (ex.: rodando em background).
+os.environ.setdefault("PYTHONUNBUFFERED", "1")  # afeta subprocessos lançados pelo Aneta
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except (AttributeError, ValueError):
+    pass
+
 from src.Search import run_search as search_run
 from src.EnrichBibtex import enrich_bibtex as enrich_bibtex_sync
 from src.EnrichBibtexAsync import enrich_bibtex as enrich_bibtex_async
@@ -23,6 +33,7 @@ from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import run_select_bibs_f
 from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOneAsync import run_select_bibs_filtered_by_abstract as run_select_bibs_filtered_by_abstract_async
 from src.GenerativeAI.LLMUtils import bibtex_to_json_schema
 from src.GenerativeAI.LLMUtilExcel import process_responses_to_excel
+from src.GenerativeAI.LLMSelectPapersByFullTextAsync import run_fulltext_classification
 # Obs.: src.PDFReader puxa o docling (stack pesado de ML) e só é usado por --read_pdfs.
 # O import é feito de forma lazy dentro de run_pdf_reader() para não exigir docling nos
 # demais comandos (busca, enriquecimento, classificação, seleção por abstract).
@@ -387,6 +398,72 @@ def run_pdf_reader():
         print(traceback.format_exc())
         return False
 
+def run_fulltext_classifier_async(selected=None):
+    """
+    Classificação por TEXTO COMPLETO (full-text screening), multi-LLM assíncrona.
+    Lê os aprovados no abstract (relevant_abstract_papers.bib), extrai o texto dos PDFs
+    e classifica com o grupo FULL_TEXT.
+    """
+    bib_file = os.getenv("RELEVANT_ABSTRACT_PAPERS_BIBs_OUTPUT", "OUTPUTS/relevant_abstract_papers.bib")
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+    bib_path = path_data.replace(".bibs", bib_file)
+    if not os.path.exists(bib_path):
+        print("✗ BibTeX dos aprovados no abstract não encontrado:")
+        print(f"  {bib_path}")
+        print("  → rode a triagem por abstract antes: python aneta.py --select_abstracts")
+        return False
+    asyncio.run(run_fulltext_classification(bib_path, selected=selected))
+    return True
+
+def run_process_responses_fulltext():
+    """Consolida as respostas de full-text (raw_responses_fulltext) numa planilha de notas."""
+    raw_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           ".data", "OUTPUTS", "raw_responses_fulltext")
+    if not _has_raw_responses(raw_dir):
+        print("✗ Nenhuma resposta de full-text encontrada em:")
+        print(f"  {raw_dir}")
+        print("  → rode a classificação antes: python aneta.py --fulltext_classifier_llm_async")
+        return False
+    full_path, simple_path, consolidated_path = process_responses_to_excel(
+        raw_subdir="raw_responses_fulltext",
+        article_info="select_bibs_fulltext.json",
+        out_prefix="combined_responses_fulltext",
+    )
+    print("Planilhas full-text criadas:")
+    print(f"- Consolidada: {consolidated_path}")
+    return True
+
+def run_filter_final_papers():
+    """Filtro FINAL (texto completo) → final_papers.* + selection_decisions_fulltext.xlsx."""
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    cons_rel = os.getenv("FILTER_LLM_RESPONSES_FULLTEXT_PATH",
+                         "OUTPUTS/processed_responses/combined_responses_fulltext_consolidated.json")
+    cons_path = os.path.join(path_data, cons_rel)
+    if not os.path.exists(cons_path):
+        print("✗ Consolidado de full-text não encontrado:")
+        print(f"  {cons_path}")
+        print("  → rode a etapa de planilha antes: python aneta.py --process_responses_fulltext")
+        return False
+    from src.FilterRelevantPapers import filter_final_papers
+    return filter_final_papers()
+
+def run_select_fulltext():
+    """Atalho da triagem final: consolida (full-text) → filtra. NÃO inclui a classificação LLM."""
+    print("\n" + "=" * 70)
+    print("=== TRIAGEM FINAL (TEXTO COMPLETO): CONSOLIDA → FILTRA ===")
+    print("=" * 70)
+    print("\n[Etapa 1/2] Consolidando respostas de full-text...")
+    if not run_process_responses_fulltext():
+        print("\n✗ Pipeline interrompido: falha ao consolidar.")
+        return False
+    print("\n[Etapa 2/2] Aplicando filtro final...")
+    if not run_filter_final_papers():
+        print("\n✗ Pipeline interrompido: falha na filtragem final.")
+        return False
+    print("\n✓ Triagem final concluída (final_papers + selection_decisions_fulltext gerados).")
+    return True
+
 def run_pipeline_report():
     """
     Gera o relatório consolidado do pipeline (funil completo do SLR): lê o estado incremental
@@ -425,6 +502,11 @@ def parse_arguments():
     group.add_argument('--process_responses', action='store_true', help='[Seleção 1/2] Processa respostas LLM e gera as planilhas de notas (consolidada)')
     group.add_argument('--filter_relevant_papers', action='store_true', help='[Seleção 2/2] Aplica o filtro SQL e gera a planilha de decisão (selection_decisions.xlsx) com a motivação por artigo')
     group.add_argument('--select_abstracts', action='store_true', help='[Seleção] Atalho: roda --process_responses e depois --filter_relevant_papers em sequência (sem a classificação LLM)')
+    group.add_argument('--fulltext_classifier_llm', action='store_true', help='[Full-text] Classifica os papers pelo TEXTO COMPLETO usando LLM (grupo FULL_TEXT)')
+    group.add_argument('--fulltext_classifier_llm_async', action='store_true', help='[Full-text] Classificação por texto completo, multi-LLM assíncrona (grupo FULL_TEXT)')
+    group.add_argument('--process_responses_fulltext', action='store_true', help='[Full-text] Consolida as respostas de texto completo numa planilha de notas')
+    group.add_argument('--filter_final_papers', action='store_true', help='[Full-text] Filtro FINAL: gera final_papers + selection_decisions_fulltext.xlsx')
+    group.add_argument('--select_fulltext', action='store_true', help='[Full-text] Atalho: --process_responses_fulltext + --filter_final_papers em sequência')
     group.add_argument('--read_pdfs', action='store_true', help='Parse PDF documents using Docling and optionally generate Markdown files')
     group.add_argument('--pipeline_report', action='store_true', help='Gera o relatório consolidado do pipeline (funil do SLR): pipeline_report.md + pipeline_funnel.csv + pipeline_metrics.json')
 
@@ -498,6 +580,16 @@ if __name__ == "__main__":
         run_filter_relevant_papers()
     elif args.select_abstracts:
         run_select_abstracts()
+    elif args.fulltext_classifier_llm:
+        run_fulltext_classifier_async(selected=args.llm)
+    elif args.fulltext_classifier_llm_async:
+        run_fulltext_classifier_async(selected=args.llm)
+    elif args.process_responses_fulltext:
+        run_process_responses_fulltext()
+    elif args.filter_final_papers:
+        run_filter_final_papers()
+    elif args.select_fulltext:
+        run_select_fulltext()
     elif args.read_pdfs:
         run_pdf_reader()
     elif args.pipeline_report:
