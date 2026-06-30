@@ -62,15 +62,27 @@ def _strip_back_matter(text: str) -> str:
 
 
 def _run_with_timeout(fn, timeout: float = 20.0):
-    """Roda fn() numa thread com timeout — protege contra arquivos só-na-nuvem (OneDrive)
-    cuja leitura pode pendurar indefinidamente. Retorna None em timeout/erro."""
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(fn)
+    """Roda fn() numa thread DAEMON com timeout REAL — protege contra arquivos só-na-nuvem
+    (OneDrive) cuja leitura pode pendurar indefinidamente. Retorna None em timeout/erro.
+
+    Usa thread daemon + join(timeout) (não ThreadPoolExecutor com 'with', que faria
+    shutdown(wait=True) e bloquearia esperando a thread travada — anulando o timeout).
+    Em timeout, a thread é abandonada (daemon → morre no fim do processo)."""
+    import threading
+    box = {}
+
+    def _runner():
         try:
-            return fut.result(timeout=timeout)
+            box["value"] = fn()
         except Exception:
-            return None
+            box["value"] = None
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return None  # timeout: não espera a thread (que pode estar travada na leitura)
+    return box.get("value")
 
 
 def _extract_pymupdf(pdf_path: str) -> Optional[str]:

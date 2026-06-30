@@ -71,3 +71,16 @@ def test_extract_text_sem_arquivo(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH_DATA", str(tmp_path))
     assert extract_text("10.9/inexistente") is None
     assert has_text("10.9/inexistente") is False
+
+
+def test_run_with_timeout_retorna_rapido():
+    """O timeout deve desbloquear de fato: não pode esperar a thread lenta terminar."""
+    import time
+    from src.GenerativeAI.PDFTextExtract import _run_with_timeout
+    t0 = time.time()
+    out = _run_with_timeout(lambda: (time.sleep(3), "done")[1], timeout=0.3)
+    elapsed = time.time() - t0
+    assert out is None          # estourou o timeout
+    assert elapsed < 1.5        # retornou logo (NÃO esperou os 3s da thread)
+    # caminho feliz: conclui antes do timeout e devolve o valor
+    assert _run_with_timeout(lambda: "ok", timeout=2.0) == "ok"

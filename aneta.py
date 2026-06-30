@@ -464,6 +464,11 @@ def run_select_fulltext():
     print("\n✓ Triagem final concluída (final_papers + selection_decisions_fulltext gerados).")
     return True
 
+def run_export_final_results():
+    """Exporta os resultados finais (PDFs selecionados + BibTeX + relatórios) para uma pasta."""
+    from src.ExportFinalResults import export_final_results
+    return export_final_results()
+
 def run_pipeline_report():
     """
     Gera o relatório consolidado do pipeline (funil completo do SLR): lê o estado incremental
@@ -507,6 +512,7 @@ def parse_arguments():
     group.add_argument('--process_responses_fulltext', action='store_true', help='[Full-text] Consolida as respostas de texto completo numa planilha de notas')
     group.add_argument('--filter_final_papers', action='store_true', help='[Full-text] Filtro FINAL: gera final_papers + selection_decisions_fulltext.xlsx')
     group.add_argument('--select_fulltext', action='store_true', help='[Full-text] Atalho: --process_responses_fulltext + --filter_final_papers em sequência')
+    group.add_argument('--export_final', action='store_true', help='[Entrega] Copia PDFs selecionados + BibTeX final + relatórios (pipeline + md final) para uma pasta única')
     group.add_argument('--read_pdfs', action='store_true', help='Parse PDF documents using Docling and optionally generate Markdown files')
     group.add_argument('--pipeline_report', action='store_true', help='Gera o relatório consolidado do pipeline (funil do SLR): pipeline_report.md + pipeline_funnel.csv + pipeline_metrics.json')
 
@@ -590,6 +596,8 @@ if __name__ == "__main__":
         run_filter_final_papers()
     elif args.select_fulltext:
         run_select_fulltext()
+    elif args.export_final:
+        run_export_final_results()
     elif args.read_pdfs:
         run_pdf_reader()
     elif args.pipeline_report:
@@ -641,6 +649,10 @@ if __name__ == "__main__":
         "download_pdf": "download", "download_pdf_async": "download",
         "download_pdf_assisted": "download", "download_pdf_fast": "download",
         "read_pdfs": "leitura_pdf",
+        "fulltext_classifier_llm": "classificacao_fulltext",
+        "fulltext_classifier_llm_async": "classificacao_fulltext",
+        "process_responses_fulltext": "consolidacao_fulltext",
+        "filter_final_papers": "filtro_final",
     }
     for _arg, _stage in _STAGE_BY_ARG.items():
         if getattr(args, _arg, False):
@@ -648,6 +660,9 @@ if __name__ == "__main__":
     if getattr(args, "select_abstracts", False):
         record_stage_auto("consolidacao")
         record_stage_auto("filtro")
+    if getattr(args, "select_fulltext", False):
+        record_stage_auto("consolidacao_fulltext")
+        record_stage_auto("filtro_final")
 
 
 

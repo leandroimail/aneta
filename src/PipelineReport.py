@@ -56,6 +56,14 @@ def _paths() -> Dict[str, str]:
         "bib_dedup": j("OUTPUTS/bib_deduplicate.bib"),
         "bib_dup": j("OUTPUTS/bib_duplicate.bib"),
         "markdowns": j(os.getenv("MARKDOWN_OUTPUT_FOLDER", "PDFs/markdowns")),
+        "raw_responses_fulltext": j("OUTPUTS/raw_responses_fulltext"),
+        "consolidated_fulltext": j(os.getenv("FILTER_LLM_RESPONSES_FULLTEXT_PATH",
+                                   "OUTPUTS/processed_responses/combined_responses_fulltext_consolidated.json")),
+        "final_papers": j(os.getenv("FINAL_PAPERS_OUTPUT",
+                                    "OUTPUTS/processed_responses/final_papers.json")),
+        "final_excluded": j(os.getenv("FINAL_EXCLUDED_PAPERS_OUTPUT",
+                                      "OUTPUTS/processed_responses/final_excluded_papers.json")),
+        "final_bib": j(os.getenv("FINAL_PAPERS_BIBs_OUTPUT", "OUTPUTS/final_papers.bib")),
         "log": j("OUTPUTS/pipeline_log.jsonl"),
         "state": j("OUTPUTS/pipeline_metrics.json"),
         "report_md": j("OUTPUTS/pipeline_report.md"),
@@ -231,6 +239,60 @@ def _pull_leitura_pdf(P) -> Dict:
     return {}
 
 
+def _pull_classificacao_fulltext(P) -> Dict:
+    rr = P["raw_responses_fulltext"]
+    if not os.path.isdir(rr):
+        return {}
+    per = {}
+    for d in sorted(glob.glob(os.path.join(rr, "*"))):
+        if os.path.isdir(d):
+            n = len([f for f in os.listdir(d)
+                     if f.startswith("response_") and f.endswith("_raw.txt")])
+            per[os.path.basename(d)] = n
+    return {"llms": len(per), "respostas_por_llm": per} if per else {}
+
+
+def _pull_consolidacao_fulltext(P) -> Dict:
+    n = _count_json_list(P["consolidated_fulltext"])
+    if n is None:
+        return {}
+    m = {"artigos_consolidados": n}
+    try:
+        with open(P["consolidated_fulltext"], encoding="utf-8") as f:
+            data = json.load(f)
+        votes = Counter(r.get("total_responses") for r in data)
+        m["distribuicao_votos"] = {str(k): v for k, v in
+                                   sorted(votes.items(), key=lambda x: (x[0] is None, x[0]))}
+    except Exception:
+        pass
+    return m
+
+
+def _pull_filtro_final(P) -> Dict:
+    rel = _count_json_list(P["final_papers"])
+    unrel = _count_json_list(P["final_excluded"])
+    m = {}
+    if rel is not None:
+        m["selecionados"] = rel
+    if unrel is not None:
+        m["rejeitados"] = unrel
+    if rel is not None and unrel is not None:
+        total = rel + unrel
+        m["entrada"] = total
+        if total:
+            m["taxa_selecao_pct"] = round(rel / total * 100, 1)
+    try:
+        import yaml
+        yp = os.getenv("FILTER_LLM_CONFIG_FULLTEXT_PATH", "config/filter_accept_results_llm_fulltext.yaml")
+        if os.path.exists(yp):
+            with open(yp, encoding="utf-8") as f:
+                clause = (yaml.safe_load(f) or {}).get("filter", "") or ""
+            m["filtro_sql"] = " ".join(clause.split())
+    except Exception:
+        pass
+    return m
+
+
 # (chave_etapa, rótulo, função_pull)
 STAGES = [
     ("busca", "Busca / deduplicação", _pull_busca),
@@ -238,9 +300,12 @@ STAGES = [
     ("selecao_metadados", "Seleção por metadados", _pull_selecao_metadados),
     ("classificacao_llm", "Classificação por abstract (LLM)", _pull_classificacao_llm),
     ("consolidacao", "Consolidação das respostas", _pull_consolidacao),
-    ("filtro", "Filtro de relevância", _pull_filtro),
+    ("filtro", "Filtro de relevância (abstract)", _pull_filtro),
     ("download", "Download de PDFs", _pull_download),
     ("leitura_pdf", "Leitura de PDF", _pull_leitura_pdf),
+    ("classificacao_fulltext", "Classificação por texto completo (LLM)", _pull_classificacao_fulltext),
+    ("consolidacao_fulltext", "Consolidação (texto completo)", _pull_consolidacao_fulltext),
+    ("filtro_final", "Filtro FINAL (texto completo)", _pull_filtro_final),
 ]
 _PULL = {key: fn for key, _label, fn in STAGES}
 _LABEL = {key: label for key, label, _fn in STAGES}
@@ -253,6 +318,8 @@ _FUNNEL_KEY = {
     "filtro": ["selecionados"],
     "download": ["com_pdf"],
     "leitura_pdf": ["markdowns_gerados"],
+    "consolidacao_fulltext": ["artigos_consolidados"],
+    "filtro_final": ["selecionados"],
 }
 
 
