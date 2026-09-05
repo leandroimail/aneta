@@ -10,6 +10,8 @@ import time  # Adicione esta importação no topo do arquivo
 from urllib.parse import quote
 from dotenv import load_dotenv
 
+from src.SeachDataBases.query_language import translate
+
 load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("config/.env"))
 
@@ -185,12 +187,22 @@ def main(query, path_data):
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
     
     query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
-    
+
+    # Traduz a linguagem padrão para o querytext do IEEE, restringindo cada
+    # termo a "Document Title"/"Abstract"/"Author Keywords". Sem isso o
+    # querytext busca em todos os metadados (autores, nome da publicação...),
+    # inflando os resultados.
+    resultado = translate(query, "ieee")
+    for aviso in resultado.warnings:
+        print(f"[AVISO IEEE] {aviso}")
+    query = resultado.query
+    print(f"Query traduzida para a API IEEE: {query}\n")
+
     out_dir = os.path.join(path_data, "ieee")
     if os.path.exists(out_dir):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
-    
+
     print("Iniciando coleta de registros da API IEEE Xplore...\n")
     
     num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)

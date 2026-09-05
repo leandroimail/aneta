@@ -1,0 +1,21 @@
+
+# Filtro SQL da TRIAGEM FINAL por TEXTO COMPLETO.
+# Aplicado ao consolidado .data/OUTPUTS/processed_responses/combined_responses_fulltext_consolidated.json
+# (gerado a partir de raw_responses_fulltext). Mesma semântica do filtro de abstract:
+# a decisão (incluído sim/não) e a MOTIVAÇÃO por artigo são derivadas deste clause.
+#
+# Colunas disponíveis: <campo>_yes_count/_no_count/_other_count/_total_count e
+# <campo>_yes_percent/... para cada pergunta/critério, mais total_responses, providers,
+# models, id, doi, article_title. Ex.: is_relevant, principal_research_question.
+#
+# Padrão: maioria diz "sim" (>=65%) E pelo menos 2 LLMs responderam (igual ao abstract).
+# Como agora é o texto completo, considere endurecer se quiser (ex.: >=100 / unanimidade).
+
+filter: >
+  ((is_relevant_yes_percent >= 65
+  AND total_responses >= 2)
+  AND
+  (
+    principal_research_question_yes_percent >= 65
+    AND principal_research_question_total_count >= 2
+  ))

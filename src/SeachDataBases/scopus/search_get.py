@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 import json
 import re
@@ -6,6 +7,8 @@ import sys
 import yaml
 from dotenv import load_dotenv
 import shutil
+
+from src.SeachDataBases.query_language import translate
 
 load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("config/.env"))
@@ -15,6 +18,26 @@ BASE_URL = 'https://api.elsevier.com/content/search/scopus'
 
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
+
+# View da busca Scopus:
+# - STANDARD (padrão): robusta e com paginação profunda, mas NÃO retorna
+#   abstract nem author keywords. Tudo bem: o estágio de enriquecimento
+#   (--enrich) preenche o abstract por DOI (OpenAlex/Crossref/etc.) antes do
+#   filtro/seleção.
+# - COMPLETE: retorna abstract e author keywords direto da busca, porém é
+#   liberada apenas para as primeiras centenas de resultados (depois retorna
+#   401) e tem quota própria menor. Use SCOPUS_VIEW=COMPLETE só se sua
+#   assinatura permitir; o loop faz downgrade automático para STANDARD quando
+#   a COMPLETE deixa de ser autorizada.
+SCOPUS_VIEW = os.getenv("SCOPUS_VIEW", "STANDARD").strip().upper()
+if SCOPUS_VIEW not in ("STANDARD", "COMPLETE"):
+    SCOPUS_VIEW = "STANDARD"
+# O 'count' máximo por página depende do nível de serviço da chave: count>25
+# retorna HTTP 400 "Exceeds the maximum number allowed for the service level"
+# em chaves comuns (e a view COMPLETE também limita a 25). 25 é o valor
+# universalmente seguro, então limitamos a ele.
+if PAGE_SIZE > 25:
+    PAGE_SIZE = 25
 records_agregados = []
 
 def extrai_ano(data_str):
@@ -147,64 +170,107 @@ def main(query, path_data):
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
     
     print("Iniciando coleta de registros da API Scopus...\n")
-    
+
     headers = {
         'X-ELS-APIKey': API_KEY,
         'Accept': 'application/json'
     }
-    
+
+    # Traduz a linguagem padrão para TITLE-ABS-KEY(...): título, resumo e
+    # palavras-chave. all(...) buscaria também em referências citadas,
+    # afiliações, editora etc., inflando os resultados.
+    resultado = translate(query, "scopus")
+    for aviso in resultado.warnings:
+        print(f"[AVISO Scopus] {aviso}")
+    query_param = resultado.query
+    print(f"Query traduzida para a API Scopus: {query_param}\n")
+
     num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
     print(f"Total de páginas estimado: {num_requisicoes} (tamanho da página: {PAGE_SIZE})\n")
-    
+
+    # Quando SCOPUS_VIEW=COMPLETE, a view (abstract + author keywords) costuma
+    # ser autorizada só nas primeiras centenas de resultados; ao receber 401
+    # na paginação profunda, fazemos downgrade automático para STANDARD e
+    # seguimos coletando, em vez de abortar e perder tudo.
+    current_view = SCOPUS_VIEW
+    view_downgraded = False
+    encerrar = False
+
     for pagina in range(num_requisicoes):
+        if encerrar:
+            break
         start = pagina * PAGE_SIZE
-        
-        # Formata a query no estilo "all(...)" para busca geral
-        query_param = f"all({query})"
-        params = {
-            'query': query_param,
-            'start': start,
-            'count': PAGE_SIZE
-        }
-        
-        print(f"Requisitando página {pagina+1} (start={start})...")
-        
-        try:
-            response = requests.get(BASE_URL, headers=headers, params=params)
-            response.raise_for_status()
-            
-            data = response.json()
-            results = data.get('search-results', {}).get('entry', [])
-            
-            if not results:
-                if response.status_code in [401, 403]:
-                    print("**************************************************")
-                    print("*                ERRO DE ACESSO                  *")
-                    print("**************************************************")
-                    print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
-                    raise Exception("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
-                print("Nenhum resultado encontrado. Encerrando...")
+
+        max_retries = 3
+        sucesso_pagina = False
+        for tentativa in range(max_retries):
+            params = {
+                'query': query_param,
+                'start': start,
+                'count': PAGE_SIZE,
+                'view': current_view,
+            }
+            print(f"Requisitando página {pagina+1} (start={start}, view={current_view})...")
+            try:
+                response = requests.get(BASE_URL, headers=headers, params=params, timeout=60)
+            except requests.exceptions.RequestException as e:
+                print(f"Erro de rede na página {pagina+1}: {e}")
+                time.sleep(3 * (tentativa + 1))
+                continue
+
+            status = response.status_code
+
+            if status == 200:
+                results = response.json().get('search-results', {}).get('entry', [])
+                if not results:
+                    print("Nenhum resultado encontrado. Encerrando...")
+                    encerrar = True
+                    sucesso_pagina = True
+                    break
+                records_agregados.extend(results)
+                print(f"Página {pagina+1}: {len(results)} registros recebidos "
+                      f"(view={current_view}). Total acumulado: {len(records_agregados)}\n")
+                if len(results) < PAGE_SIZE:
+                    print("Última página alcançada. Encerrando coleta...")
+                    encerrar = True
+                sucesso_pagina = True
                 break
-                
-            records_agregados.extend(results)
-            print(f"Página {pagina+1}: {len(results)} registros recebidos. Total acumulado: {len(records_agregados)}\n")
-            
-            if len(results) < PAGE_SIZE:
-                print("Última página alcançada. Encerrando coleta...")
-                break
-                
-        except requests.exceptions.HTTPError as errh:
-            if errh.response is not None and errh.response.status_code in [401, 403]:
+
+            if status == 401 and current_view == "COMPLETE":
+                # Entitlement da COMPLETE esgotou na paginação profunda:
+                # baixa para STANDARD e refaz a MESMA página.
+                if not view_downgraded:
+                    print("[AVISO Scopus] A view COMPLETE (com abstract) não está "
+                          "autorizada além deste ponto; alternando para STANDARD "
+                          "(sem abstract) para coletar o restante.\n")
+                    view_downgraded = True
+                current_view = "STANDARD"
+                continue
+
+            if status in (429, 500, 502, 503):
+                espera = 5 * (tentativa + 1)
+                print(f"Erro temporário {status} na página {pagina+1}. "
+                      f"Aguardando {espera}s e tentando novamente...")
+                time.sleep(espera)
+                continue
+
+            # 401/403 mesmo em STANDARD, ou outro erro não recuperável
+            if status in (401, 403):
                 print("**************************************************")
                 print("*                ERRO DE ACESSO                  *")
                 print("**************************************************")
-                print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de uma instituição conveniada ou esteja na VPN da instituição.")
-            print(f"Erro HTTP: {errh}")
-            print(f"Resposta: {response.text}")
-            raise Exception(f"Erro HTTP: {errh}. Resposta: {response.text}")
-        except Exception as e:
-            raise Exception(f"Erro na requisição: {e}")
-    
+                print("Houve um erro de acesso;\nVerifique se você tem acesso à rede de "
+                      "uma instituição conveniada ou esteja na VPN da instituição.")
+            print(f"Erro HTTP {status} na página {pagina+1}. Resposta: {response.text[:300]}")
+            encerrar = True
+            break
+
+        if not sucesso_pagina and not encerrar:
+            print(f"Página {pagina+1} falhou após {max_retries} tentativas. "
+                  f"Encerrando a coleta e preservando os {len(records_agregados)} "
+                  f"registros já obtidos.")
+            break
+
     # Salvando resultados brutos
     if records_agregados:
         try:

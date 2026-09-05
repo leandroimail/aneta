@@ -5,6 +5,7 @@ import yaml
 import asyncio
 import aiohttp
 import pandas as pd
+from difflib import SequenceMatcher as seq_math
 from dotenv import load_dotenv
 from src.BibTex import read_bibtex, write_bibtex
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
@@ -21,25 +22,87 @@ MAX_CONCURRENT_REQUESTS = 10  # Ajuste conforme necessário
 REQUEST_SEMAPHORE = None  # Será inicializado antes do uso
 
 
-def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn):
-    # Se houver somente 1 candidato, retorna-o
+# Similaridade mínima de título para aceitar um candidato como o MESMO artigo.
+# Títulos do mesmo paper costumam ficar acima de ~0.85; artigos diferentes ficam
+# bem abaixo. 0.80 tolera variações leves (subtítulo, pontuação, "a"/"an").
+TITLE_SIM_THRESHOLD = 0.80
+
+
+def _normalize_title_tokens(title):
+    """Tokeniza o título em minúsculas, removendo pontuação."""
+    return re.sub(r'[^a-z0-9 ]', ' ', (title or '').lower()).split()
+
+
+def _title_similarity(a, b):
+    """Razão de similaridade (0..1) entre dois títulos, por tokens."""
+    ta, tb = _normalize_title_tokens(a), _normalize_title_tokens(b)
+    if not ta or not tb:
+        return 0.0
+    return seq_math(None, ta, tb).ratio()
+
+
+def filter_candidates(candidates, dict_val, get_year_fn, get_authors_fn, get_title_fn=None):
+    """
+    Escolhe, entre os candidatos retornados pela busca por título, aquele que é
+    de fato o MESMO artigo — ou None se nenhum for confiável.
+
+    Defesas (em ordem):
+      1) Gate de título: descarta candidatos cujo título não bate o suficiente
+         com o título procurado (evita casar um paper com outro completamente
+         diferente, como um capítulo de 2008 para um artigo de 2025).
+      2) Gate de ano: rejeita divergência > 1 ano (corrige a comparação int/str
+         do código antigo, que nunca casava).
+      3) Desempate por autores; sem match de autor, usa o de maior similaridade
+         de título (seguro, pois já passou pelo gate de título).
+
+    get_title_fn extrai o título de um candidato; se None, o gate de título é
+    pulado (compatibilidade), mas isso NÃO é recomendado.
+    """
+    candidates = [c for c in candidates if c]
+    if not candidates:
+        return None
+
+    want_title = (dict_val.get('title') or '').strip()
+    want_year = str(dict_val.get('year') or '').strip()[:4]
+
+    # 1) Gate de título
+    if get_title_fn is not None and want_title:
+        scored = [(_title_similarity(want_title, get_title_fn(c)), c) for c in candidates]
+        scored = [(s, c) for s, c in scored if s >= TITLE_SIM_THRESHOLD]
+        if not scored:
+            return None  # nenhum candidato é o mesmo artigo
+        scored.sort(key=lambda x: x[0], reverse=True)
+        candidates = [c for _, c in scored]  # ordenados por similaridade desc
+
+    # 2) Gate de ano (rejeita divergência > 1)
+    if want_year.isdigit():
+        def _year_ok(c):
+            cy = str(get_year_fn(c) or '').strip()[:4]
+            if not cy.isdigit():
+                return True  # ano do candidato desconhecido: não penaliza
+            return abs(int(cy) - int(want_year)) <= 1
+        year_filtered = [c for c in candidates if _year_ok(c)]
+        if not year_filtered:
+            return None
+        candidates = year_filtered
+
     if len(candidates) == 1:
         return candidates[0]
-    # Tenta filtrar por ano
-    candidates_year = [c for c in candidates if get_year_fn(c) == dict_val['year']]
-    if len(candidates_year) == 1:
-        return candidates_year[0]
-    # Se nenhum ou mais de um candidato for encontrado por ano, filtra por autores
-    candidates_to_filter = candidates_year if candidates_year else candidates
-    desired_authors = [a.strip() for a in dict_val['authors'].split("and")]
-    best_candidate = None
-    best_match_count = -1
-    for c in candidates_to_filter:
-        candidate_authors = get_authors_fn(c)
+
+    # 3) Desempate por autores
+    desired_authors = [a.strip().lower() for a in (dict_val.get('authors') or '').split("and") if a.strip()]
+    best_candidate, best_match_count = None, 0
+    for c in candidates:
+        candidate_authors = (get_authors_fn(c) or '').lower()
         match_count = sum(1 for auth in desired_authors if auth in candidate_authors)
         if match_count > best_match_count:
             best_match_count = match_count
             best_candidate = c
+
+    # Se ninguém casou por autor, mas passaram pelo gate de título, usa o de
+    # maior similaridade (primeiro da lista já ordenada).
+    if best_candidate is None:
+        return candidates[0] if get_title_fn is not None else None
     return best_candidate
 
 
@@ -75,8 +138,14 @@ async def get_doi_by_title_from_scopus(session, dict_val) -> str:
                 entries = data.get("search-results", {}).get("entry", [])
                 if not entries:
                     return ""
-                # Seleciona o primeiro resultado e extrai o DOI
-                doi = entries[0].get("prism:doi", "")
+                # Verifica a similaridade de título antes de aceitar: o TITLE() do
+                # Scopus pode devolver artigos diferentes. Escolhe o de maior
+                # similaridade e só aceita acima do limiar (evita DOI de outro paper).
+                best = max(entries, key=lambda e: _title_similarity(dict_val.get('title', ''),
+                                                                    e.get('dc:title', '')))
+                if _title_similarity(dict_val.get('title', ''), best.get('dc:title', '')) < TITLE_SIM_THRESHOLD:
+                    return ""
+                doi = best.get("prism:doi", "")
                 if doi:
                     doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
                     doi = doi.replace("https://doi.org", "").replace("http://doi.org", "").strip()
@@ -113,7 +182,8 @@ async def get_doi_by_title_from_openalex(session, dict_val):
                             # Extrai os nomes dos autores do campo "authorships"
                             get_authors_fn=lambda item: " and ".join(
                                 [a.get("author", {}).get("display_name", "") for a in item.get("authorships", [])]
-                            )
+                            ),
+                            get_title_fn=lambda item: item.get("title") or item.get("display_name") or ""
                         )
                         doi = candidate.get("doi") if candidate else None
                         if doi:
@@ -150,7 +220,8 @@ async def get_doi_by_title_from_unpaywall(session, dict_val, email):
                             results,
                             dict_val,
                             get_year_fn=lambda item: item.get("response", {}).get("year"),
-                            get_authors_fn=lambda item: item.get("response", {}).get("author", "")
+                            get_authors_fn=lambda item: item.get("response", {}).get("author", ""),
+                            get_title_fn=lambda item: item.get("response", {}).get("title", "")
                         )
                         doi = None
                         if candidate and "response" in candidate:
@@ -190,7 +261,8 @@ async def get_doi_by_title_from_crossref(session, dict_val):
                             get_year_fn=lambda item: item.get("issued", {}).get("date-parts", [[None]])[0][0],
                             get_authors_fn=lambda item: " and ".join(
                                 [f"{a.get('family','')}, {a.get('given','')}" for a in item.get("author", [])]
-                            ) if item.get("author") else ""
+                            ) if item.get("author") else "",
+                            get_title_fn=lambda item: (item.get("title") or [""])[0]
                         )
                         doi = candidate.get("DOI") if candidate else None
                         if doi:
@@ -229,21 +301,22 @@ async def get_doi_by_title_from_datacite(session, dict_val) -> str:
                 items = data.get("data", [])
                 if not items:
                     return ""
-                
-                if len(items) == 1:
-                    doi = items[0].get("attributes", {}).get("doi", "")
-                    return doi.strip()
-                
-                # Filtra os candidatos usando a função existente
+
+                # Filtra os candidatos usando a função existente (com gate de
+                # título — mesmo 1 resultado é verificado, não aceito cego)
                 def get_year(item):
                     return item.get("attributes", {}).get("publicationYear")
                     
                 def get_authors(item):
                     creators = item.get("attributes", {}).get("creators", [])
-                    return [f"{c.get('givenName', '')} {c.get('familyName', '')}".strip() 
-                            for c in creators]
-                
-                best_match = filter_candidates(items, dict_val, get_year, get_authors)
+                    return " and ".join(f"{c.get('givenName', '')} {c.get('familyName', '')}".strip()
+                                        for c in creators)
+
+                def get_title(item):
+                    titles = item.get("attributes", {}).get("titles") or [{}]
+                    return titles[0].get("title", "")
+
+                best_match = filter_candidates(items, dict_val, get_year, get_authors, get_title_fn=get_title)
                 
                 if best_match:
                     doi = best_match.get("attributes", {}).get("doi", "")
@@ -351,7 +424,13 @@ async def get_abstract_by_doi_from_openalex(session, doi: str) -> str:
         abstract_inverted_index = data.get("abstract_inverted_index", {})
         if not abstract_inverted_index:
             return ""
-        abstract = " ".join(abstract_inverted_index.keys()).strip()
+        # Reconstrói o abstract na ordem correta usando os índices de posição
+        max_pos = max(pos for positions in abstract_inverted_index.values() for pos in positions)
+        words = [''] * (max_pos + 1)
+        for word, positions in abstract_inverted_index.items():
+            for pos in positions:
+                words[pos] = word
+        abstract = ' '.join(words).strip()
         return abstract
     except Exception as e:
         print(f"Erro ao obter abstract do OpenAlex: {e}")
@@ -370,7 +449,7 @@ async def get_abstract_by_doi_from_semanticscholar(session, doi: str) -> str:
         data = await fetch_db_data(type_source, doi)
         
         if not data:
-            url = f"https://api.semanticscholar.org/v1/paper/{doi}"
+            url = f"https://api.semanticscholar.org/graph/v1/paper/{doi}?fields=abstract"
             async with REQUEST_SEMAPHORE:
                 async with session.get(url) as response:
                     if response.status == 404:
@@ -429,8 +508,10 @@ async def get_abstract_by_doi_from_scopus(session, doi: str) -> str:
         print("SCOPUS_API_KEY não definida.")
         return ""
     
-    url = f"https://api.elsevier.com/content/abstract/doi/{doi}?apiKey={scopus_api_key}"
-    headers = {"Accept": "application/json"}
+    # Autentica via header (X-ELS-APIKey) em vez de ?apiKey= na URL: assim a
+    # chave nunca aparece em tracebacks/logs (raise_for_status inclui a URL).
+    url = f"https://api.elsevier.com/content/abstract/doi/{doi}"
+    headers = {"Accept": "application/json", "X-ELS-APIKey": scopus_api_key}
     headers = {**headers, **HEADERS}
     
     try:
@@ -594,8 +675,10 @@ async def get_keywords_by_doi_from_scopus(session, doi: str) -> dict:
         print("SCOPUS_API_KEY não definida.")
         return {"author_keywords": "", "keywords": ""}
     
-    url = f"https://api.elsevier.com/content/abstract/doi/{doi}?apiKey={scopus_api_key}"
-    headers = {"Accept": "application/json"}
+    # Autentica via header (X-ELS-APIKey) em vez de ?apiKey= na URL: assim a
+    # chave nunca aparece em tracebacks/logs (raise_for_status inclui a URL).
+    url = f"https://api.elsevier.com/content/abstract/doi/{doi}"
+    headers = {"Accept": "application/json", "X-ELS-APIKey": scopus_api_key}
     headers = {**headers, **HEADERS}
     
     try:
@@ -738,6 +821,8 @@ async def enrich_bibtex_dois(email="leandroimail@gmail.com"):
     
     async with aiohttp.ClientSession() as session:
         for base, enabled in search_config.items():
+            if not isinstance(enabled, bool):
+                continue
             if "arxiv" in base.lower() and os.environ.get("ENRICH_ARXIV", "False").lower() != "true":
                 print(f"\n\nBase '{base}' não suportada para busca de DOIs.")
                 continue
@@ -785,6 +870,8 @@ async def enrich_bibtex_abstract():
 
     async with aiohttp.ClientSession() as session:
         for base, enabled in search_config.items():
+            if not isinstance(enabled, bool):
+                continue
             if "arxiv" in base.lower() and os.environ.get("ENRICH_ARXIV", "False").lower() != "true":
                 print(f"\n\nBase '{base}' não suportada para busca de DOIs.")
                 continue
@@ -831,6 +918,8 @@ async def enrich_bibtex_keywords(email="leandroimail@gmail.com"):
     
     async with aiohttp.ClientSession() as session:
         for base, enabled in search_config.items():
+            if not isinstance(enabled, bool):
+                continue
             if "arxiv" in base.lower() and os.environ.get("ENRICH_ARXIV", "False").lower() != "true":
                 print(f"\n\nBase '{base}' não suportada para busca de DOIs.")
                 continue
@@ -1003,6 +1092,8 @@ def enrich_bibtex_jcr_scimago():
     
     # Itera sobre as bases configuradas
     for base, enabled in search_config.items():
+        if not isinstance(enabled, bool):
+            continue
         if not enabled:
             print(f"Base '{base}' desabilitada. Pulando.")
             continue

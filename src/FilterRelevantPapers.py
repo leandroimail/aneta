@@ -76,6 +76,7 @@ class FilterConfig:
     yaml_filter_path: str
     filter_clause: str = ""
     markdown_report_path: str = ""
+    selection_decisions_path: str = ""
 
 
 @dataclass
@@ -155,10 +156,20 @@ def load_configuration() -> FilterConfig:
     unrelevant_output_path = path_data.replace(".bibs", required_vars["UNRELEVANT_ABSTRACT_PAPERS_OUTPUT"])
     yaml_filter_path = os.path.abspath(required_vars["FILTER_LLM_CONFIG_PATH"])
     markdown_report_path = os.path.splitext(json_output_path)[0] + "_report.md"
-    
+
+    # Selection decisions Excel path: optional env override, otherwise defaults to the
+    # same directory as the relevant-papers JSON. Keeps the .conf change non-mandatory.
+    decisions_env = os.getenv("SELECTION_DECISIONS_EXCEL_OUTPUT")
+    if decisions_env:
+        selection_decisions_path = path_data.replace(".bibs", decisions_env)
+    else:
+        selection_decisions_path = os.path.join(
+            os.path.dirname(json_output_path), "selection_decisions.xlsx"
+        )
+
     # Load SQL filter from YAML
     filter_clause = load_yaml_filter(yaml_filter_path)
-    
+
     # Create and return configuration object
     config = FilterConfig(
         path_data=path_data,
@@ -169,7 +180,8 @@ def load_configuration() -> FilterConfig:
         unrelevant_output_path=unrelevant_output_path,
         yaml_filter_path=yaml_filter_path,
         filter_clause=filter_clause,
-        markdown_report_path=markdown_report_path
+        markdown_report_path=markdown_report_path,
+        selection_decisions_path=selection_decisions_path
     )
     
     return config
@@ -466,6 +478,145 @@ def apply_duckdb_filter(data: List[Dict], filter_clause: str) -> Tuple[List[Dict
     except Exception as e:
         # Other errors (DataFrame conversion, etc.)
         raise Exception(f"Error applying DuckDB filter: {e}")
+
+
+# ============================================================================
+# PER-ARTICLE DECISION + EVIDENCE (derived from the SQL filter clause)
+# ============================================================================
+
+# Atomic comparison inside a SQL clause: "column OP number" (e.g. is_relevant_yes_percent >= 65).
+# Used ONLY to LOCATE predicates for display — evaluation is always done by DuckDB.
+_PREDICATE_RE = re.compile(r'([A-Za-z_]\w*)\s*(>=|<=|!=|<>|=|>|<)\s*(\d+(?:\.\d+)?)')
+
+
+def _fmt_value(value: object) -> str:
+    """Format a score value for the human-readable reason (10.0 -> '10', 66.67 -> '66.67')."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def extract_predicates(filter_clause: str, known_columns) -> List[Tuple[str, str, str]]:
+    """
+    Locate the atomic ``column OP number`` comparisons inside the SQL filter clause.
+
+    The match is validated against the real consolidated columns so arbitrary tokens
+    (function names, literals) are never mistaken for columns. Order and duplicates of
+    the clause are preserved (first occurrence wins) so the reason reads like the filter.
+
+    Args:
+        filter_clause: SQL WHERE clause from the YAML configuration.
+        known_columns: Iterable with the column names available in the consolidated data.
+
+    Returns:
+        List of (column, operator, number) tuples, in clause order, de-duplicated.
+    """
+    known = set(known_columns)
+    predicates: List[Tuple[str, str, str]] = []
+    seen = set()
+    for column, operator, number in _PREDICATE_RE.findall(filter_clause):
+        if column not in known:
+            continue
+        key = (column, operator, number)
+        if key in seen:
+            continue
+        seen.add(key)
+        predicates.append((column, operator, number))
+    return predicates
+
+
+def build_selection_reason(record: Dict, predicates: List[Tuple[str, str, str]],
+                           predicate_results: List[bool], selected: bool,
+                           filter_clause: str = "") -> str:
+    """
+    Build the human-readable motivation for a single article's decision.
+
+    The reason is derived from the filter clause itself: each atomic threshold is shown
+    with the article's actual value and a PASS/FAIL mark, so it always mirrors the
+    current YAML configuration. When the clause has no atomic ``column OP number``
+    predicates (e.g. only function calls), it falls back to the literal clause.
+
+    Args:
+        record: Consolidated record (carries the score columns).
+        predicates: Atomic predicates located by :func:`extract_predicates`.
+        predicate_results: Booleans for each predicate, evaluated by DuckDB.
+        selected: Final decision for the article (the full clause result).
+        filter_clause: Original clause, used only for the no-predicate fallback.
+
+    Returns:
+        A string such as ``"SELECIONADO — is_relevant_yes_percent=80 (>=65 ✓) · ..."``.
+    """
+    prefix = "SELECIONADO" if selected else "REJEITADO"
+    parts: List[str] = []
+    for (column, operator, number), passed in zip(predicates, predicate_results):
+        value = record.get(column, "N/A")
+        mark = "✓" if passed else "✗"
+        parts.append(f"{column}={_fmt_value(value)} ({operator}{number} {mark})")
+    if parts:
+        return f"{prefix} — " + " · ".join(parts)
+    return f"{prefix} — (filtro: {filter_clause.strip()})"
+
+
+def annotate_with_decision(data: List[Dict], filter_clause: str) -> List[Dict]:
+    """
+    Annotate every consolidated record with its decision and motivation.
+
+    DuckDB evaluates the full clause (``_selected``) and each atomic predicate in a
+    single query; this function only formats those results into a reason string. The
+    original record dicts are preserved (no DataFrame round-trip) and gain two keys:
+    ``_selected`` (bool) and ``_selection_reason`` (str).
+
+    Args:
+        data: List of consolidated records (LLM scores by article).
+        filter_clause: SQL WHERE clause from the YAML configuration.
+
+    Returns:
+        The same records (new list, same dict objects) with ``_selected`` and
+        ``_selection_reason`` added.
+
+    Raises:
+        duckdb.Error: If the clause references unknown columns or is invalid SQL.
+    """
+    if not data:
+        return []
+
+    # Build a DataFrame with a stable index so we can map results back to the originals.
+    df = pd.DataFrame(data)
+    df.insert(0, "_orig_idx", range(len(df)))
+    known_columns = [c for c in df.columns if c != "_orig_idx"]
+    predicates = extract_predicates(filter_clause, known_columns)
+
+    try:
+        conn = duckdb.connect(":memory:")
+        conn.register("filter_table", df)
+
+        # One query: decision + each atomic predicate, all evaluated natively by DuckDB.
+        predicate_select = "".join(
+            f", ({column} {operator} {number}) AS _pred_{i}"
+            for i, (column, operator, number) in enumerate(predicates)
+        )
+        query = (
+            f"SELECT _orig_idx, ({filter_clause}) AS _selected{predicate_select} "
+            f"FROM filter_table"
+        )
+        result_df = conn.execute(query).fetchdf()
+        conn.close()
+    except duckdb.Error as e:
+        raise duckdb.Error(f"DuckDB SQL error: {e}\nFilter clause: {filter_clause}")
+
+    annotated: List[Dict] = []
+    for _, row in result_df.iterrows():
+        idx = int(row["_orig_idx"])
+        record = data[idx]
+        selected = bool(row["_selected"]) if row["_selected"] is not None else False
+        predicate_results = [bool(row[f"_pred_{i}"]) for i in range(len(predicates))]
+        record["_selected"] = selected
+        record["_selection_reason"] = build_selection_reason(
+            record, predicates, predicate_results, selected, filter_clause
+        )
+        annotated.append(record)
+
+    return annotated
 
 
 # ============================================================================
@@ -847,13 +998,133 @@ def write_filtered_outputs(filtered_json: List[Dict], matched_bibtex: List[Dict]
             raise OSError(f"Unrelevant JSON output file is empty despite having data: {unrelevant_path}")
 
 
+def _load_questions_legend(yaml_filter_path: str) -> Optional[Dict[str, str]]:
+    """
+    Best-effort load of the research-questions legend for the decision spreadsheet.
+
+    Looks for ``config/research_questions.yaml`` (relative to the project root inferred
+    from the filter YAML path). Any failure returns ``None`` so the Excel is still
+    generated without the legend sheet.
+    """
+    try:
+        from src.GenerativeAI.LLMUtilExcel import read_research_questions
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(yaml_filter_path)))
+        candidates = [
+            os.path.join(project_root, "config", "research_questions.yaml"),
+            os.path.join(project_root, "Config", "research_questions.yaml"),
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                return read_research_questions(path)
+    except Exception:
+        return None
+    return None
+
+
+def write_decision_excel(annotated: List[Dict], output_path: str,
+                         filter_clause: str, predicates: List[Tuple[str, str, str]],
+                         questions: Optional[Dict[str, str]] = None) -> None:
+    """
+    Write the selection-decision spreadsheet with full evidence per article.
+
+    Sheets:
+        - ``Decisão``: every article (scores + ``selecionado`` + ``motivo``), sortable.
+        - ``Selecionados`` / ``Rejeitados``: the two groups split for quick reading.
+        - ``Critério``: the SQL clause applied and generation timestamp (audit trail).
+        - ``Research Questions``: legend (when available).
+
+    Columns are ordered as: id, doi, article_title, selecionado, motivo, then the
+    columns referenced by the filter (the ones that justify the decision), then the
+    remaining score columns. The long ``article_abstract``/``article_keywords`` fields
+    are omitted here (they remain in the consolidated scores spreadsheet).
+
+    Args:
+        annotated: Records carrying ``_selected`` and ``_selection_reason``.
+        output_path: Destination ``.xlsx`` path.
+        filter_clause: SQL clause applied (for the ``Critério`` sheet).
+        predicates: Atomic predicates located in the clause (drive column ordering).
+        questions: Optional research-questions legend.
+    """
+    if not annotated:
+        print("  ⚠ Nenhum dado para gerar a planilha de decisão")
+        return
+
+    from openpyxl.utils import get_column_letter
+
+    drop_cols = {"_selected", "_selection_reason", "article_abstract", "article_keywords"}
+    referenced = []
+    for column, _, _ in predicates:
+        if column not in referenced:
+            referenced.append(column)
+
+    # Build display rows: map internal flags to friendly columns, drop noisy fields.
+    rows: List[Dict] = []
+    for record in annotated:
+        row = {k: v for k, v in record.items() if k not in drop_cols}
+        row["selecionado"] = "sim" if record.get("_selected") else "não"
+        row["motivo"] = record.get("_selection_reason", "")
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    # Column ordering: identity, decision, referenced (justifying) columns, then the rest.
+    front = [c for c in ["id", "doi", "article_title", "selecionado", "motivo",
+                         "total_responses", "providers", "models"] if c in df.columns]
+    ref_present = [c for c in referenced if c in df.columns and c not in front]
+    rest = sorted(c for c in df.columns if c not in front and c not in ref_present)
+    ordered = front + ref_present + rest
+    df = df[ordered]
+
+    # Ensure parent directory exists.
+    out_dir = os.path.dirname(output_path)
+    if out_dir and not os.path.exists(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+
+    selected_df = df[df["selecionado"] == "sim"] if "selecionado" in df.columns else df
+    rejected_df = df[df["selecionado"] == "não"] if "selecionado" in df.columns else df
+
+    criterio_df = pd.DataFrame({
+        "campo": ["filtro_sql", "gerado_em", "total_artigos", "selecionados", "rejeitados"],
+        "valor": [
+            filter_clause.strip(),
+            datetime.now().isoformat(timespec="seconds"),
+            len(df),
+            int((df["selecionado"] == "sim").sum()) if "selecionado" in df.columns else 0,
+            int((df["selecionado"] == "não").sum()) if "selecionado" in df.columns else 0,
+        ],
+    })
+
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Decisão", index=False)
+        selected_df.to_excel(writer, sheet_name="Selecionados", index=False)
+        rejected_df.to_excel(writer, sheet_name="Rejeitados", index=False)
+        criterio_df.to_excel(writer, sheet_name="Critério", index=False)
+
+        if questions:
+            questions_df = pd.DataFrame({
+                "question_id": list(questions.keys()),
+                "question_text": list(questions.values()),
+            })
+            questions_df.to_excel(writer, sheet_name="Research Questions", index=False)
+
+        # Auto-fit column widths (capped) for readability on the main sheet.
+        worksheet = writer.sheets["Decisão"]
+        for idx, col in enumerate(df.columns, 1):
+            max_length = max(df[col].astype(str).apply(len).max(), len(str(col)))
+            max_length = min(int(max_length), 60)
+            worksheet.column_dimensions[get_column_letter(idx)].width = max_length + 2
+
+    print(f"  ✓ Planilha de decisão criada: {output_path}")
+
+
 # ============================================================================
 # STATISTICS AND REPORTING
 # ============================================================================
 
 def build_markdown_report(input_count: int, filtered_count: int, unrelevant_count: int,
                           stats: MatchingStats, execution_time: float,
-                          config: FilterConfig) -> str:
+                          config: FilterConfig,
+                          annotated: Optional[List[Dict]] = None) -> str:
     """Build the markdown execution report string.
 
     The markdown structure mirrors the console output to keep both
@@ -940,6 +1211,7 @@ def build_markdown_report(input_count: int, filtered_count: int, unrelevant_coun
     lines.append(f"- Relevant JSON: `{config.json_output_path}` (records: {filtered_count:,})")
     lines.append(f"- Unrelevant JSON: `{config.unrelevant_output_path}` (records: {unrelevant_count:,})")
     lines.append(f"- BibTeX output: `{config.bib_output_path}` (entries: {matched_total:,})")
+    lines.append(f"- Selection decisions Excel: `{config.selection_decisions_path}` (rows: {input_count:,})")
     lines.append(f"- Markdown report: `{config.markdown_report_path}`")
     lines.append("")
 
@@ -948,6 +1220,24 @@ def build_markdown_report(input_count: int, filtered_count: int, unrelevant_coun
     lines.append(f"- Execution time: {execution_time:.3f} seconds")
     lines.append(f"- Processing speed: {records_per_sec:.0f} records/second")
     lines.append("")
+
+    # Per-article evidence table (decision + derived motivation).
+    if annotated:
+        lines.append("## Per-Article Decision")
+        lines.append("")
+        lines.append("| ID | Title | Selected | Reason |")
+        lines.append("|---|---|---|---|")
+        for record in annotated:
+            rec_id = str(record.get("id", "")) or str(record.get("_response_id", ""))
+            title = str(record.get("article_title", "") or "")
+            if len(title) > 80:
+                title = title[:80].rstrip() + "…"
+            selected = "yes" if record.get("_selected") else "no"
+            # Escape pipes so the markdown table stays valid.
+            reason = str(record.get("_selection_reason", "")).replace("|", "\\|")
+            title = title.replace("|", "\\|")
+            lines.append(f"| {rec_id} | {title} | {selected} | {reason} |")
+        lines.append("")
 
     # Completion note.
     lines.append("✅ Filtering completed successfully.")
@@ -958,7 +1248,8 @@ def build_markdown_report(input_count: int, filtered_count: int, unrelevant_coun
 
 def report_statistics(input_count: int, filtered_count: int, unrelevant_count: int,
                      stats: MatchingStats, execution_time: float,
-                     config: FilterConfig) -> None:
+                     config: FilterConfig,
+                     annotated: Optional[List[Dict]] = None) -> None:
     """
     Display comprehensive statistics to console.
     
@@ -1053,7 +1344,9 @@ def report_statistics(input_count: int, filtered_count: int, unrelevant_count: i
     print(f"    Records: {unrelevant_count:,}")
     print(f"  ✓ BibTeX output: {config.bib_output_path}")
     print(f"    Entries: {matched_count:,}")
-    
+    print(f"  ✓ Selection decisions Excel: {config.selection_decisions_path}")
+    print(f"    Rows: {input_count:,} (selected: {filtered_count:,} / rejected: {unrelevant_count:,})")
+
     # Performance Section
     print("\n[PERFORMANCE]")
     print(f"  - Execution time: {execution_time:.3f} seconds")
@@ -1079,7 +1372,8 @@ def report_statistics(input_count: int, filtered_count: int, unrelevant_count: i
             unrelevant_count=unrelevant_count,
             stats=stats,
             execution_time=execution_time,
-            config=config
+            config=config,
+            annotated=annotated
         )
 
         with open(config.markdown_report_path, "w", encoding="utf-8") as report_file:
@@ -1095,7 +1389,7 @@ def report_statistics(input_count: int, filtered_count: int, unrelevant_count: i
 # MAIN ENTRY POINT
 # ============================================================================
 
-def filter_relevant_papers() -> bool:
+def filter_relevant_papers(config: Optional[FilterConfig] = None) -> bool:
     """
     Main entry point for filtering LLM responses.
     
@@ -1134,7 +1428,8 @@ def filter_relevant_papers() -> bool:
         # Step 1: Load Configuration
         print("[1/6] Loading configuration...")
         try:
-            config = load_configuration()
+            if config is None:
+                config = load_configuration()
             print("  ✓ Configuration loaded successfully")
             print(f"  - Data path: {config.path_data}")
             print(f"  - Filter clause loaded ({len(config.filter_clause)} characters)")
@@ -1175,10 +1470,19 @@ def filter_relevant_papers() -> bool:
             print(f"  ✗ Unexpected error loading data: {e}")
             return False
         
-        # Step 3: Apply DuckDB Filter
+        # Step 3: Apply DuckDB Filter (with per-article decision + evidence)
         print("\n[3/6] Applying SQL filter...")
         try:
-            filtered_data, unrelevant_data = apply_duckdb_filter(json_data, config.filter_clause)
+            # Locate the atomic predicates of the clause (for evidence + Excel ordering).
+            known_cols = set()
+            for record in json_data:
+                known_cols.update(record.keys())
+            predicates = extract_predicates(config.filter_clause, known_cols)
+
+            # Annotate each article with `_selected` + `_selection_reason`, then split.
+            annotated = annotate_with_decision(json_data, config.filter_clause)
+            filtered_data = [r for r in annotated if r.get("_selected")]
+            unrelevant_data = [r for r in annotated if not r.get("_selected")]
             filtered_count = len(filtered_data)
             unrelevant_count = len(unrelevant_data)
             
@@ -1235,6 +1539,15 @@ def filter_relevant_papers() -> bool:
                 unrelevant_json=unrelevant_data,
                 unrelevant_path=config.unrelevant_output_path
             )
+
+            # Selection-decision spreadsheet (all articles + decision + derived motivation).
+            write_decision_excel(
+                annotated=annotated,
+                output_path=config.selection_decisions_path,
+                filter_clause=config.filter_clause,
+                predicates=predicates,
+                questions=_load_questions_legend(config.yaml_filter_path),
+            )
             print(f"  ✓ Output files created successfully")
             
         except PermissionError as e:
@@ -1260,7 +1573,8 @@ def filter_relevant_papers() -> bool:
                 unrelevant_count=unrelevant_count,
                 stats=matching_stats,
                 execution_time=execution_time,
-                config=config
+                config=config,
+                annotated=annotated
             )
         except Exception as e:
             print(f"  ⚠ Warning: Error displaying statistics: {e}")
@@ -1275,3 +1589,67 @@ def filter_relevant_papers() -> bool:
         print(f"\n✗ Critical error: {e}")
         print("  → Please review the error above and check your configuration")
         return False
+
+
+# ============================================================================
+# FILTRO FINAL (TRIAGEM POR TEXTO COMPLETO)
+# ============================================================================
+
+def load_configuration_fulltext() -> FilterConfig:
+    """
+    Configuração do filtro FINAL (texto completo): lê o consolidado de full-text e grava
+    final_papers.* + selection_decisions_fulltext.xlsx. Reaproveita toda a lógica de
+    filter_relevant_papers, só trocando caminhos/YAML. Casa os relevantes contra o
+    relevant_abstract_papers.bib (que contém os papers triados por abstract).
+    """
+    conf_path = os.path.abspath(".conf")
+    if os.path.exists(conf_path):
+        load_dotenv(conf_path)
+
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    path_data = os.path.join(path_data, ".bibs")
+
+    bib_file = os.getenv("RELEVANT_ABSTRACT_PAPERS_BIBs_OUTPUT", "OUTPUTS/relevant_abstract_papers.bib")
+    json_input = os.getenv("FILTER_LLM_RESPONSES_FULLTEXT_PATH",
+                           "OUTPUTS/processed_responses/combined_responses_fulltext_consolidated.json")
+    json_output = os.getenv("FINAL_PAPERS_OUTPUT", "OUTPUTS/processed_responses/final_papers.json")
+    bib_output = os.getenv("FINAL_PAPERS_BIBs_OUTPUT", "OUTPUTS/final_papers.bib")
+    unrelevant_output = os.getenv("FINAL_EXCLUDED_PAPERS_OUTPUT",
+                                  "OUTPUTS/processed_responses/final_excluded_papers.json")
+    yaml_filter = os.getenv("FILTER_LLM_CONFIG_FULLTEXT_PATH",
+                            "config/filter_accept_results_llm_fulltext.yaml")
+
+    bib_file_path = path_data.replace(".bibs", bib_file)
+    json_input_path = path_data.replace(".bibs", json_input)
+    json_output_path = path_data.replace(".bibs", json_output)
+    bib_output_path = path_data.replace(".bibs", bib_output)
+    unrelevant_output_path = path_data.replace(".bibs", unrelevant_output)
+    yaml_filter_path = os.path.abspath(yaml_filter)
+    markdown_report_path = os.path.splitext(json_output_path)[0] + "_report.md"
+
+    decisions_env = os.getenv("SELECTION_DECISIONS_FULLTEXT_EXCEL_OUTPUT")
+    if decisions_env:
+        selection_decisions_path = path_data.replace(".bibs", decisions_env)
+    else:
+        selection_decisions_path = os.path.join(
+            os.path.dirname(json_output_path), "selection_decisions_fulltext.xlsx")
+
+    filter_clause = load_yaml_filter(yaml_filter_path)
+
+    return FilterConfig(
+        path_data=path_data,
+        bib_file_path=bib_file_path,
+        json_input_path=json_input_path,
+        json_output_path=json_output_path,
+        bib_output_path=bib_output_path,
+        unrelevant_output_path=unrelevant_output_path,
+        yaml_filter_path=yaml_filter_path,
+        filter_clause=filter_clause,
+        markdown_report_path=markdown_report_path,
+        selection_decisions_path=selection_decisions_path,
+    )
+
+
+def filter_final_papers() -> bool:
+    """Filtro FINAL da triagem por texto completo → final_papers + selection_decisions_fulltext."""
+    return filter_relevant_papers(load_configuration_fulltext())

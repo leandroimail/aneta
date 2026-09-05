@@ -104,7 +104,8 @@ list_issn = ["issn", "ISSN", "Issn"]
 list_doi = ["doi", "Doi", "DOI", "Item DOI"]
 list_abstract = ["abstract", "ABSTRACT", "Abstract"]
 list_title = ["title", "Title", "TITLE",  "Item Title", "item title"]
-list_keywords = ["keyword", "Keyword", "KEYWORD", "Keywords", "keywords", "KEYWORDS", "Keywords-Plus"]
+list_keywords = ["keyword", "Keyword", "KEYWORD", "Keywords", "keywords", "KEYWORDS", "Keywords-Plus",
+                 "author_keywords", "Author Keywords", "author keywords", "AUTHOR KEYWORDS", "Author_Keywords"]
 list_author = ["author", "Author", "AUTHOR", "authors", "Authors", "AUTHORS"]
 list_year = ["year", "Year", "YEAR", "Publication Year", "publication year", "PUBLICATION YEAR", "Date", "DATE", "date"]
 list_publication = ["journal", "Journal", "JOURNAL", "booktitle", "Booktitle", "BOOKTITLE", "Publication Title",

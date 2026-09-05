@@ -77,28 +77,54 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
     content = content.replace("```json", "").replace("```", "").replace("```", "").strip()
 
     content = content.strip("[").strip("]")
-    
-    # Tentar analisar como JSON
-    try:
-        dict_json = json.loads(content)
-        if len(dict_json) == 1 and "id" not in dict_json:
-            new_dict = {}
-            for key, value in dict_json.items():
-                new_dict["id"] = key
-                new_dict = new_dict | value
-            return new_dict
-        return dict_json
 
+    def _unwrap_single_id(parsed: Any) -> Any:
+        # Se vier {"<id>": {...}} sem chave "id", promove a chave a campo "id".
+        if isinstance(parsed, dict) and len(parsed) == 1 and "id" not in parsed:
+            new_dict: Dict[str, Any] = {}
+            for key, value in parsed.items():
+                new_dict["id"] = key
+                if isinstance(value, dict):
+                    new_dict = new_dict | value
+            return new_dict
+        return parsed
+
+    # 1) Tentativa direta.
+    try:
+        return _unwrap_single_id(json.loads(content))
     except json.JSONDecodeError:
-        try:
-            # Lidar com possíveis vírgulas no final
-            content = re.sub(r',\s*}', '}', content)
-            content = re.sub(r',\s*]', ']', content)
-            return json.loads(content)
-        except json.JSONDecodeError as e:
-            print(f"Falha ao analisar JSON: {e}")
-            # Retornar conteúdo bruto como fallback
-            return {"raw_content": content}
+        pass
+
+    # 2) Lidar com vírgulas finais (",}" / ",]").
+    try:
+        fixed = re.sub(r',\s*]', ']', re.sub(r',\s*}', '}', content))
+        return _unwrap_single_id(json.loads(fixed))
+    except json.JSONDecodeError:
+        pass
+
+    # 3) Lidar com "Extra data" — lixo após um objeto JSON válido (ex.: um '}' extra que
+    #    o gemini às vezes emite). raw_decode lê o primeiro valor JSON válido e ignora o
+    #    restante, salvando a resposta sem precisar de conversão via LLM.
+    try:
+        decoded, _end = json.JSONDecoder().raw_decode(content.lstrip())
+        return _unwrap_single_id(decoded)
+    except json.JSONDecodeError as e:
+        first_error = e
+
+    # 4) Último recurso: reparo robusto de JSON de LLM (aspas/vírgulas/caracteres de
+    #    controle faltando) via json_repair. Determinístico e sem chamar LLM. O import é
+    #    protegido: se a lib não estiver instalada, cai no fallback de conteúdo bruto.
+    try:
+        import json_repair
+        repaired = json_repair.loads(content)
+        if isinstance(repaired, dict) and repaired:
+            return _unwrap_single_id(repaired)
+    except Exception:
+        pass
+
+    print(f"Falha ao analisar JSON: {first_error}")
+    # Retornar conteúdo bruto como fallback
+    return {"raw_content": content}
 
 
 def convert_to_json_llm(raw_text: str) -> Dict[str, Any]:
@@ -890,7 +916,10 @@ def create_excel_from_data(responses_data: Dict[str, List[Dict]],
     writer_simple.close()
 
 
-def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str, str]:
+def process_responses_to_excel(base_dir: Optional[str] = None,
+                               raw_subdir: str = "raw_responses",
+                               article_info: str = "select_bibs.json",
+                               out_prefix: str = "combined_responses") -> Tuple[str, str, str]:
     """
     Função principal para processar respostas e criar os arquivos Excel.
     
@@ -904,13 +933,13 @@ def process_responses_to_excel(base_dir: Optional[str] = None) -> Tuple[str, str
     if base_dir is None:
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     
-    base_path = os.path.join(base_dir, ".data", "OUTPUTS", "raw_responses")
+    base_path = os.path.join(base_dir, ".data", "OUTPUTS", raw_subdir)
     yaml_path = os.path.join(base_dir, "Config", "research_questions.yaml")
-    json_path = os.path.join(base_dir, ".data", "OUTPUTS", "select_bibs.json")
+    json_path = os.path.join(base_dir, ".data", "OUTPUTS", article_info)
     output_dir = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses")
-    output_path = os.path.join(output_dir, "combined_responses_full.xlsx")
-    simple_output_path = os.path.join(output_dir, "combined_responses_simple.xlsx")
-    consolidated_output_path = os.path.join(output_dir, "combined_responses_consolidated.xlsx")
+    output_path = os.path.join(output_dir, f"{out_prefix}_full.xlsx")
+    simple_output_path = os.path.join(output_dir, f"{out_prefix}_simple.xlsx")
+    consolidated_output_path = os.path.join(output_dir, f"{out_prefix}_consolidated.xlsx")
     # Garantir que o diretório de saída exista
     os.makedirs(output_dir, exist_ok=True)
     

@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from typing import Dict, List, Optional, Any, Union, Literal, TypeVar, Generic, Type
+from typing import Dict, List, Optional, Any, Union, Literal, TypeVar, Generic, Type, Tuple
 from dotenv import load_dotenv
 from pathlib import Path
 import google.generativeai as genai
@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator  # Atualizado para usar f
 
 # Local imports
 from src.GenerativeAI.LLMUtils import run_prepare_base_prompt
+from src.GenerativeAI.multi_llm_config import LLMClientConfig, load_llm_client_configs
 
 # Load environment variables
 load_dotenv(os.path.abspath(".conf"))
@@ -147,17 +148,21 @@ class LLMClient(Generic[T]):
 class OpenAIClient(LLMClient):
     """Client for OpenAI API with support for large context windows."""
     
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, base_url: Optional[str] = None):
         """
         Initialize OpenAI client.
-        
+
         Args:
             api_key: OpenAI API key
             model: Model name to use
+            base_url: Optional custom endpoint (ex.: endpoint OpenAI-compatível do Gemini)
         """
-        self.client = OpenAI(api_key=api_key)
+        if base_url:
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+        else:
+            self.client = OpenAI(api_key=api_key)
         self.model = model
-    
+
     def invoke(self, messages: List[Dict[str, str]]) -> str:
         """
         Invoke the OpenAI model with the given messages.
@@ -203,8 +208,10 @@ class OpenAIClient(LLMClient):
             completion = self.client.chat.completions.create(**request_params)
             response_content = completion.choices[0].message.content
             
-            # Save raw response content
-            save_raw_llm_response(response_content)
+            # Save raw response content (rota para a pasta específica do LLM, se definida)
+            save_raw_llm_response(response_content,
+                                  llm_type=getattr(self, "_out_type", None),
+                                  llm_model=getattr(self, "_out_model", None))
             
             # Parse JSON response
             parsed_response = json.loads(response_content)
@@ -275,8 +282,10 @@ class DeepSeekClient(LLMClient):
             )
             response_content = completion.choices[0].message.content
             
-            # Save raw response content
-            save_raw_llm_response(response_content)
+            # Save raw response content (rota para a pasta específica do LLM, se definida)
+            save_raw_llm_response(response_content,
+                                  llm_type=getattr(self, "_out_type", None),
+                                  llm_model=getattr(self, "_out_model", None))
             
             # Parse JSON response
             parsed_response = json.loads(response_content)
@@ -358,8 +367,10 @@ class GeminiClient(LLMClient):
             # Get response as plain text
             response_content = self.invoke(enhanced_messages)
             
-            # Save raw response content
-            save_raw_llm_response(response_content)
+            # Save raw response content (rota para a pasta específica do LLM, se definida)
+            save_raw_llm_response(response_content,
+                                  llm_type=getattr(self, "_out_type", None),
+                                  llm_model=getattr(self, "_out_model", None))
             
             # Clean response to extract JSON content
             # Sometimes model returns markdown code block or other formatting
@@ -468,23 +479,70 @@ def setup_llm() -> LLMClient:
     if llm_type not in llm_factories:
         supported_types = ", ".join(llm_factories.keys())
         raise ValueError(f"Unsupported LLM type: {llm_type}. Supported types: {supported_types}")
-    
+
     return llm_factories[llm_type]()
 
 
-def save_raw_llm_response(raw_content: str, output_path: Optional[str] = None):
+def _build_client_from_config(cfg: LLMClientConfig) -> LLMClient:
+    """Instancia a classe de cliente local e anexa a identidade do LLM (pasta/arquivo de saída)."""
+    provider = cfg.provider.lower()
+    if provider == "openai":
+        client = OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=cfg.base_url)
+    elif provider == "google":
+        base_url = cfg.base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        client = OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=base_url)
+    elif provider == "gemini":
+        client = GeminiClient(api_key=cfg.api_key, model=cfg.model_name)
+    elif provider == "deepseek":
+        client = DeepSeekClient(api_key=cfg.api_key, model=cfg.model_name)
+    else:
+        raise ValueError(f"Provedor de LLM não suportado: {cfg.provider}")
+    # Identidade usada pelas funções de save (cada LLM grava em pasta/arquivo próprios)
+    client._out_type = cfg.name
+    client._out_model = cfg.model_name
+    return client
+
+
+def setup_llms(group: str = "ABSTRACT", selected: Optional[Union[str, List[str]]] = None
+               ) -> List[Tuple[LLMClientConfig, LLMClient]]:
+    """Carrega os LLMs configurados para o grupo (multi-LLM).
+
+    Usa ``LLM_CLIENTS_<GROUP>`` quando definido; caso contrário cai no LLM único legado
+    (``LLM_*_<GROUP>``), preservando o comportamento atual. Retorna pares (config, cliente).
+
+    Args:
+        group: grupo de configuração (ex.: "ABSTRACT").
+        selected: se informado, roda apenas o(s) LLM(s) cujo id/name/model casar
+            (ex.: "gpt-5.4-nano" para rodar só o GPT).
+    """
+    configs = load_llm_client_configs(group, selected)
+    if not configs:
+        msg = (
+            "Nenhum LLM configurado. Defina LLM_CLIENTS_ABSTRACT (multi-LLM) "
+            "ou as variáveis LLM_*_ABSTRACT (single-LLM) em config/.env."
+        )
+        if selected:
+            msg = f"Nenhum LLM corresponde a '{selected}'. " + msg
+        raise ValueError(msg)
+    return [(cfg, _build_client_from_config(cfg)) for cfg in configs]
+
+
+def save_raw_llm_response(raw_content: str, output_path: Optional[str] = None,
+                          llm_type: Optional[str] = None, llm_model: Optional[str] = None):
     """
     Save raw LLM response content to a text file.
     
     Args:
         raw_content (str): The raw string content returned by the LLM
         output_path (Optional[str]): Path to save the raw response, defaults to a standard location
+        llm_type (Optional[str]): Identificador do LLM. Default: env LLM_API_TYPE_ABSTRACT.
+        llm_model (Optional[str]): Modelo do LLM. Default: env LLM_MODEL_ABSTRACT.
     """
     try:
         path_data = os.getenv("PATH_DATA", ".data")
-        llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-        llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
-        
+        llm_type = llm_type or os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+        llm_model = llm_model or os.getenv("LLM_MODEL_ABSTRACT", "default")
+
         # Create filename with LLM type and model info
         filename = f"select_bibs_filtered_by_abstract_{llm_type}_{llm_model}_raw.txt"
         
@@ -510,19 +568,22 @@ def save_raw_llm_response(raw_content: str, output_path: Optional[str] = None):
         raise Exception(f"Error saving raw LLM response: {e}")
 
 
-def save_llm_response_to_file(response: LLMResponseModel, output_path: str):
+def save_llm_response_to_file(response: LLMResponseModel, output_path: str,
+                              llm_type: Optional[str] = None, llm_model: Optional[str] = None):
     """
     Save LLM response to a file.
-    
+
     Args:
         response: Validated LLM response
         output_path: Path to save the response
+        llm_type (Optional[str]): Identificador do LLM. Default: env LLM_API_TYPE_ABSTRACT.
+        llm_model (Optional[str]): Modelo do LLM. Default: env LLM_MODEL_ABSTRACT.
     """
     try:
         path_data = os.getenv("PATH_DATA", ".data")
-        llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-        llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
-        
+        llm_type = llm_type or os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+        llm_model = llm_model or os.getenv("LLM_MODEL_ABSTRACT", "default")
+
         # Create filename with LLM type and model info
         filename = f"select_bibs_filtered_by_abstract_{llm_type}_{llm_model}.json"
         
@@ -555,58 +616,71 @@ def save_llm_response_to_file(response: LLMResponseModel, output_path: str):
         raise Exception(f"Error saving LLM response: {e}")
 
 
-def analyze_abstracts_with_llm(input_bibtex_path: Optional[str] = None, 
-                                output_path: Optional[str] = None) -> LLMResponseModel:
+def analyze_abstracts_with_llm(input_bibtex_path: Optional[str] = None,
+                                output_path: Optional[str] = None,
+                                group: str = "ABSTRACT",
+                                selected: Optional[Union[str, List[str]]] = None
+                                ) -> Optional[LLMResponseModel]:
     """
-    Analyze abstracts from BibTeX files using an LLM with a prepared prompt.
-    
+    Analisa abstracts (modo batch) com UM OU MAIS LLMs.
+
+    O mesmo prompt (todos os abstracts) é enviado a cada LLM configurado (via
+    LLM_CLIENTS_<GROUP>, ou o LLM único legado). Cada LLM grava raw/JSON em arquivos próprios
+    (distinguidos por nome+modelo). Resultados independentes por LLM (sem voto/consenso).
+
     Args:
-        input_bibtex_path: Path to the BibTeX file to analyze
-        output_path: Path to save the LLM response JSON
-    
+        input_bibtex_path: Caminho do arquivo BibTeX a analisar
+        output_path: Caminho para salvar o JSON de respostas (opcional)
+        group: Grupo de configuração de LLM (default "ABSTRACT")
+
     Returns:
-        LLMResponseModel: Validated LLM response
+        LLMResponseModel do último LLM processado (ou None se nenhum teve sucesso).
     """
-    # Get the base prompt from LLMUtils
+    # Get the base prompt from LLMUtils (compartilhado entre os LLMs)
     prompt = run_prepare_base_prompt(input_bibtex_path)
-    
-    # Setup LLM
-    llm_client = setup_llm()
-    
-    try:
-        print("Sending request to LLM... (This may take a few minutes)")
-        # Send message to LLM with direct parsing
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
-        
-        # Use the parse method to get strongly typed response
-        response_json = llm_client.parse(messages, LLMResponseModel)
-        
-        # Save response to file if output_path is specified
-        if output_path:
-            save_llm_response_to_file(response_json, output_path)
-        
-        return response_json
-    
-    except Exception as e:
-        print(f"Error during LLM analysis: {e}")
-        raise Exception(f"Error during LLM analysis: {e}")
+
+    # Carregar os LLMs configurados (todos, ou apenas o selecionado)
+    clients = setup_llms(group, selected)
+    print(f"Multi-LLM (batch): {len(clients)} cliente(s): {', '.join(cfg.name for cfg, _ in clients)}")
+
+    messages = [{"role": "user", "content": prompt}]
+    last_response: Optional[LLMResponseModel] = None
+
+    for cfg, llm_client in clients:
+        try:
+            print(f"[{cfg.name}/{cfg.model_name}] Enviando requisição ao LLM... (pode demorar)")
+            # parse() grava o raw na pasta específica do LLM (via _out_type/_out_model)
+            response_json = llm_client.parse(messages, LLMResponseModel)
+
+            if output_path:
+                save_llm_response_to_file(response_json, output_path,
+                                          llm_type=cfg.name, llm_model=cfg.model_name)
+
+            last_response = response_json
+            print(f"[{cfg.name}/{cfg.model_name}] OK.")
+
+        except Exception as e:
+            print(f"[{cfg.name}/{cfg.model_name}] Erro durante a análise: {e}")
+            continue
+
+    return last_response
 
 
-def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None, output_path: Optional[str] = None):
+def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None, output_path: Optional[str] = None,
+                                         selected: Optional[Union[str, List[str]]] = None):
     """
     Main function to run the LLM analysis pipeline.
-    
+
     Args:
         input_bibtex_path: Path to the BibTeX file to analyze
         output_path: Path to save the output files
+        selected: roda apenas o(s) LLM(s) cujo id/name/model casar (ex.: "gpt-5.4-nano")
     """
-    try:        
+    try:
         print(f"Analyzing abstracts from {'default bibtex' if input_bibtex_path is None else input_bibtex_path}")
-        
+
         # Run analysis
-        response = analyze_abstracts_with_llm(input_bibtex_path, output_path)
+        response = analyze_abstracts_with_llm(input_bibtex_path, output_path, selected=selected)
         
         return response
         

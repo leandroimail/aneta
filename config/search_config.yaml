@@ -3,15 +3,26 @@
 # ACM Digital Library not supported yet. Engine not has Rest API (only to enrich file)
 
 arxiv: false
-science_direct: false
-spring_nature: false
-acm: false     
-web_of_science: false
+science_direct: true
+spring_nature: true
+acm: false
+web_of_science: true
 ieee: true
-scopus: false
+scopus: true
 
 
 # Generic Search String for all search engines (arxiv, ieee, science_direct, scopus, spring_nature, web_of_science)
+#
+# Linguagem padrão (traduzida automaticamente para a sintaxe oficial de cada API,
+# restrita a título/resumo/palavras-chave sempre que a base permitir):
+#   - Operadores: AND, OR, NOT (case-insensitive); precedência: NOT > AND > OR
+#   - Parênteses definem a precedência: ("a" OR "b") AND "c"
+#   - IN: "agentes" IN ("LLM", "GPT") equivale a "agentes" AND ("LLM" OR "GPT")
+#   - Termos compostos entre aspas simples ou duplas: "large language model"
+#   - Termos simples podem ficar sem aspas: agents
+#   - Curinga parcial estilo LIKE com %: organi% casa organization, organizational...
+#     (Scopus/WoS/IEEE usam *, com mínimo de 3 caracteres antes do %;
+#      arXiv, ScienceDirect e Springer não suportam curinga — o % é removido com aviso)
 
 search_string: >
   ("agents" AND "multi") AND ("LLM" OR "large language model" OR "generative AI") 

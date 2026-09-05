@@ -6,6 +6,8 @@ import os
 import yaml
 from dotenv import load_dotenv
 
+from src.SeachDataBases.query_language import translate
+
 load_dotenv(os.path.abspath(".conf"))
 load_dotenv(os.path.abspath("config/.env"))
 
@@ -189,7 +191,15 @@ def main(query, path_data):
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
     
     query = query.strip().replace('\n', ' ').replace('\t', ' ').replace('   ', ' ').replace('  ', ' ').replace('  ', ' ')
-    
+
+    # Traduz a linguagem padrão para a sintaxe da API Springer Nature,
+    # com Exclude:Bibliography para não casar termos das referências
+    resultado = translate(query, "spring_nature")
+    for aviso in resultado.warnings:
+        print(f"[AVISO Springer Nature] {aviso}")
+    query = resultado.query
+    print(f"Query traduzida para a API Springer Nature: {query}\n")
+
     out_dir = os.path.join(path_data, "spring_nature")
     if os.path.exists(out_dir):
         import shutil

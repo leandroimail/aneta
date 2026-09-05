@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator  # Atualizado para usar f
 # Local imports
 from src.GenerativeAI.LLMUtils import run_prepare_base_prompt
 from src.GenerativeAI.LLMUtils import run_prepare_base_prompt_list
+from src.GenerativeAI.multi_llm_config import LLMClientConfig, load_llm_client_configs
 
 # Load environment variables
 load_dotenv(os.path.abspath(".conf"))
@@ -175,16 +176,21 @@ class LLMClient(Generic[T]):
 class OpenAIClient(LLMClient):
     """Client for OpenAI API with support for large context windows."""
     
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, base_url: Optional[str] = None):
         """
         Initialize OpenAI client.
-        
+
         Args:
             api_key: OpenAI API key
             model: Model name to use
+            base_url: Optional custom endpoint (ex.: endpoint OpenAI-compatível do Gemini)
         """
-        self.client = OpenAI(api_key=api_key)
-        self.async_client = AsyncOpenAI(api_key=api_key)
+        if base_url:
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+            self.async_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        else:
+            self.client = OpenAI(api_key=api_key)
+            self.async_client = AsyncOpenAI(api_key=api_key)
         self.model = model
     
     def invoke(self, messages: List[Dict[str, str]]) -> str:
@@ -637,8 +643,53 @@ def setup_llm() -> LLMClient:
     if llm_type not in llm_factories:
         supported_types = ", ".join(llm_factories.keys())
         raise ValueError(f"Unsupported LLM type: {llm_type}. Supported types: {supported_types}")
-    
+
     return llm_factories[llm_type]()
+
+
+def _build_client_from_config(cfg: LLMClientConfig) -> LLMClient:
+    """Instancia a classe de cliente local correspondente ao provedor do config.
+
+    - openai   -> OpenAIClient (endpoint OpenAI; base_url opcional)
+    - google   -> OpenAIClient via endpoint OpenAI-compatível do Gemini (usa base_url)
+    - gemini   -> GeminiClient nativo (google.genai)
+    - deepseek -> DeepSeekClient (OpenAI-compatível)
+    """
+    provider = cfg.provider.lower()
+    if provider == "openai":
+        return OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=cfg.base_url)
+    if provider == "google":
+        base_url = cfg.base_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        return OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=base_url)
+    if provider == "gemini":
+        return GeminiClient(api_key=cfg.api_key, model=cfg.model_name)
+    if provider == "deepseek":
+        return DeepSeekClient(api_key=cfg.api_key, model=cfg.model_name)
+    raise ValueError(f"Provedor de LLM não suportado: {cfg.provider}")
+
+
+def setup_llms(group: str = "ABSTRACT", selected: Optional[Union[str, List[str]]] = None
+               ) -> List[Tuple[LLMClientConfig, LLMClient]]:
+    """Carrega os LLMs configurados para o grupo (multi-LLM).
+
+    Usa ``LLM_CLIENTS_<GROUP>`` quando definido; caso contrário cai no LLM único legado
+    (``LLM_*_<GROUP>``), preservando o comportamento atual. Retorna pares (config, cliente).
+
+    Args:
+        group: grupo de configuração (ex.: "ABSTRACT").
+        selected: se informado, roda apenas o(s) LLM(s) cujo id/name/model casar
+            (ex.: "gpt-5.4-nano" para rodar só o GPT).
+    """
+    configs = load_llm_client_configs(group, selected)
+    if not configs:
+        msg = (
+            "Nenhum LLM configurado. Defina LLM_CLIENTS_ABSTRACT (multi-LLM) "
+            "ou as variáveis LLM_*_ABSTRACT (single-LLM) em config/.env."
+        )
+        if selected:
+            msg = f"Nenhum LLM corresponde a '{selected}'. " + msg
+        raise ValueError(msg)
+    return [(cfg, _build_client_from_config(cfg)) for cfg in configs]
 
 
 def save_raw_llm_response(raw_content: str, output_path: Optional[str] = None):
@@ -724,19 +775,22 @@ def save_llm_response_to_file(response: LLMResponseModel, output_path: str):
         raise Exception(f"Error saving LLM response: {e}")
 
 
-def save_raw_llm_responses(raw_responses: List[str], output_dir: Optional[str] = None):
+def save_raw_llm_responses(raw_responses: List[str], output_dir: Optional[str] = None,
+                           llm_type: Optional[str] = None, llm_model: Optional[str] = None):
     """
     Save multiple raw LLM responses to text files.
-    
+
     Args:
         raw_responses (List[str]): List of raw string content returned by the LLM
         output_dir (Optional[str]): Directory to save the raw responses, defaults to PATH_DATA/OUTPUTS
+        llm_type (Optional[str]): Identificador do LLM (pasta de saída). Default: env LLM_API_TYPE_ABSTRACT.
+        llm_model (Optional[str]): Modelo do LLM (nome do arquivo). Default: env LLM_MODEL_ABSTRACT.
     """
     try:
         path_data = os.getenv("PATH_DATA", ".data")
-        llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-        llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
-        
+        llm_type = llm_type or os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+        llm_model = llm_model or os.getenv("LLM_MODEL_ABSTRACT", "default")
+
         if not output_dir:
             output_dir = os.path.join(path_data, "OUTPUTS", "raw_responses", llm_type)
         
@@ -763,19 +817,22 @@ def save_raw_llm_responses(raw_responses: List[str], output_dir: Optional[str] =
         print(f"Error saving raw LLM responses: {e}")
 
 
-def save_llm_responses_to_file(responses: List[ArticleAnalysis], output_path: Optional[str] = None):
+def save_llm_responses_to_file(responses: List[ArticleAnalysis], output_path: Optional[str] = None,
+                               llm_type: Optional[str] = None, llm_model: Optional[str] = None):
     """
     Save multiple LLM responses to a JSON file.
-    
+
     Args:
         responses (List[ArticleAnalysis]): List of validated article analyses
         output_path (Optional[str]): Path to save the responses
+        llm_type (Optional[str]): Identificador do LLM. Default: env LLM_API_TYPE_ABSTRACT.
+        llm_model (Optional[str]): Modelo do LLM. Default: env LLM_MODEL_ABSTRACT.
     """
     try:
         path_data = os.getenv("PATH_DATA", ".data")
-        llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-        llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
-        
+        llm_type = llm_type or os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+        llm_model = llm_model or os.getenv("LLM_MODEL_ABSTRACT", "default")
+
         # Create filename with LLM type and model info
         filename = f"select_bibs_filtered_by_abstract_{llm_type}_{llm_model}.json"
         
@@ -1058,24 +1115,31 @@ def get_rate_limit() -> float:
         return default_rate_limit
 
 # Modified version of process_article_async with rate limiting
-async def process_article_async_with_rate_limit(article: SequencedArticle, 
-                                                llm_client: LLMClient, 
+async def process_article_async_with_rate_limit(article: SequencedArticle,
+                                                llm_client: LLMClient,
                                                 semaphore: asyncio.Semaphore,
-                                                min_delay: float) -> None:
+                                                min_delay: float,
+                                                llm_type: Optional[str] = None,
+                                                llm_model: Optional[str] = None,
+                                                overwrite: Optional[bool] = None) -> None:
     """
     Process single article prompt asynchronously with rate limiting.
     Checks if raw response file already exists before calling LLM.
-    
+
     Args:
         article: SequencedArticle object containing prompt and sequence
         llm_client: LLM client instance
         semaphore: Semaphore to control concurrent requests
         min_delay: Minimum delay between requests in seconds
+        llm_type: Identificador do LLM (pasta de saída). Default: env LLM_API_TYPE_ABSTRACT.
+        llm_model: Modelo do LLM (nome do arquivo). Default: env LLM_MODEL_ABSTRACT.
+        overwrite: Sobrescreve arquivos existentes. Default: env LLM_OVERWRITE_ABSTRACT.
     """
     # Verificar se devemos sobrescrever arquivos existentes
-    overwrite = os.getenv("LLM_OVERWRITE_ABSTRACT", "False").lower() == "true"
-    llm_type = os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
-    llm_model = os.getenv("LLM_MODEL_ABSTRACT", "default")
+    if overwrite is None:
+        overwrite = os.getenv("LLM_OVERWRITE_ABSTRACT", "False").lower() == "true"
+    llm_type = llm_type or os.getenv("LLM_API_TYPE_ABSTRACT", "OpenAI")
+    llm_model = llm_model or os.getenv("LLM_MODEL_ABSTRACT", "default")
     path_data = os.getenv("PATH_DATA", ".data")
     
     # Preparar diretório para verificação de arquivos
@@ -1163,87 +1227,108 @@ async def process_article_async_with_rate_limit(article: SequencedArticle,
             await asyncio.sleep(delay_time)
 
 
-# Refactored asynchronous function to process all articles with rate limiting
-async def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None, 
-                                                output_path: Optional[str] = None) -> List[ArticleAnalysis]:
+# Refactored asynchronous function to process all articles with rate limiting (multi-LLM)
+async def _process_articles_for_client(cfg: LLMClientConfig, llm_client: LLMClient,
+                                       prompt_list: List[str],
+                                       output_path: Optional[str] = None) -> List[ArticleAnalysis]:
     """
-    Analyze abstracts from BibTeX files using an LLM one article at a time, with rate limiting.
-    
-    Args:
-        input_bibtex_path: Path to the BibTeX file to analyze
-        output_path: Path to save the LLM response JSON
-    
-    Returns:
-        List[ArticleAnalysis]: List of validated article analyses
+    Processa todos os artigos com UM cliente de LLM (rate-limit próprio do cliente).
+    Salva respostas brutas/processadas na pasta específica desse LLM.
     """
-    # Get a list of prompts from LLMUtils
-    prompt_list = run_prepare_base_prompt_list(input_bibtex_path)
-    
-    # Setup LLM
-    llm_client = setup_llm()
-    
-    # Get rate limit configuration
-    rate_limit = get_rate_limit()  # Requests per second
-    min_delay = 1.0 / rate_limit   # Minimum seconds between requests
-    
-    # Maximum number of concurrent requests (limiting concurrency)
-    max_concurrent = max(1, min(10, int(rate_limit * 1.5)))  # Balancing concurrency with rate limit
+    # Rate limit: por-cliente (cfg.rate_limit) com fallback para o do grupo (get_rate_limit)
+    rate_limit = cfg.rate_limit or get_rate_limit()
+    if rate_limit <= 0:
+        rate_limit = get_rate_limit()
+    min_delay = 1.0 / rate_limit
+    max_concurrent = max(1, min(10, int(rate_limit * 1.5)))
     semaphore = asyncio.Semaphore(max_concurrent)
-    
-    print(f"Rate limiting: {rate_limit} requests/second, {max_concurrent} concurrent requests, {min_delay:.4f}s minimum delay")
-    
+
+    print(f"[{cfg.name}/{cfg.model_name}] rate={rate_limit} req/s, "
+          f"concorrência={max_concurrent}, delay_min={min_delay:.4f}s")
+
+    # Lista de artigos sequenciados (fresca para este cliente)
+    sequenced_articles = [SequencedArticle(idx, prompt) for idx, prompt in enumerate(prompt_list)]
+
+    tasks = [
+        process_article_async_with_rate_limit(
+            article, llm_client, semaphore, min_delay,
+            llm_type=cfg.name, llm_model=cfg.model_name, overwrite=cfg.overwrite,
+        )
+        for article in sequenced_articles
+    ]
+    await asyncio.gather(*tasks)
+
+    raw_responses = [a.raw_response for a in sequenced_articles if a.raw_response]
+    article_analyses = [a.article_analysis for a in sequenced_articles if a.article_analysis is not None]
+
+    if raw_responses:
+        save_raw_llm_responses(raw_responses, llm_type=cfg.name, llm_model=cfg.model_name)
+    if output_path and article_analyses:
+        save_llm_responses_to_file(article_analyses, output_path, llm_type=cfg.name, llm_model=cfg.model_name)
+
+    print(f"[{cfg.name}/{cfg.model_name}] {len(article_analyses)}/{len(prompt_list)} artigos processados.")
+    return article_analyses
+
+
+async def analyze_abstracts_with_llm_one_on_one(input_bibtex_path: Optional[str] = None,
+                                                output_path: Optional[str] = None,
+                                                group: str = "ABSTRACT",
+                                                selected: Optional[Union[str, List[str]]] = None
+                                                ) -> List[ArticleAnalysis]:
+    """
+    Analisa abstracts com UM OU MAIS LLMs, um artigo por vez, com rate limiting.
+
+    Cada LLM configurado (via LLM_CLIENTS_<GROUP>, ou o LLM único legado) processa TODOS os
+    artigos de forma independente e salva seus resultados em pasta própria. Os LLMs rodam
+    concorrentemente entre si (cada um com seu próprio semáforo/rate-limit).
+
+    Args:
+        input_bibtex_path: Caminho do arquivo BibTeX a analisar
+        output_path: Caminho para salvar o JSON de respostas (opcional)
+        group: Grupo de configuração de LLM (default "ABSTRACT")
+
+    Returns:
+        List[ArticleAnalysis]: análises combinadas de todos os LLMs
+    """
+    # Lista de prompts (compartilhada entre os LLMs)
+    prompt_list = run_prepare_base_prompt_list(input_bibtex_path)
+
+    # Carregar os LLMs configurados (todos, ou apenas o selecionado)
+    clients = setup_llms(group, selected)
+    print(f"Multi-LLM: {len(clients)} cliente(s): {', '.join(cfg.name for cfg, _ in clients)}")
+
     try:
-        print(f"Processing {len(prompt_list)} articles asynchronously with rate limiting...")
-        
-        # Etapa 1: Criar lista de artigos sequenciados para manter ordem
-        sequenced_articles = [SequencedArticle(idx, prompt) for idx, prompt in enumerate(prompt_list)]
-        
-        # Etapa 2: Criar tarefas assíncronas para cada artigo com rate limiting
-        tasks = [
-            process_article_async_with_rate_limit(article, llm_client, semaphore, min_delay) 
-            for article in sequenced_articles
-        ]
-        
-        # Etapa 3: Executar todas as tarefas em paralelo (com rate limiting)
-        await asyncio.gather(*tasks)
-        
-        # Etapa 4: Processar resultados na ordem original
-        # Coletar respostas brutas para salvar
-        raw_responses = [article.raw_response for article in sequenced_articles if article.raw_response]
-        
-        # Coletar análises de artigos bem-sucedidas
-        article_analyses = [article.article_analysis for article in sequenced_articles 
-                           if article.article_analysis is not None]
-        
-        # Etapa 5: Salvar resultados de forma síncrona
-        # Salvar todas as respostas brutas em arquivos
-        if raw_responses:
-            save_raw_llm_responses(raw_responses)
-        
-        # Salvar respostas processadas no arquivo se output_path for especificado
-        if output_path and article_analyses:
-            save_llm_responses_to_file(article_analyses, output_path)
-        
-        print(f"Processed {len(article_analyses)} articles successfully out of {len(prompt_list)}")
-        return article_analyses
-    
+        print(f"Processing {len(prompt_list)} articles for {len(clients)} LLM(s) asynchronously...")
+
+        results = await asyncio.gather(
+            *[_process_articles_for_client(cfg, client, prompt_list, output_path)
+              for cfg, client in clients]
+        )
+
+        # Combina as análises de todos os LLMs (resultados independentes por cliente)
+        combined = [analysis for sublist in results for analysis in sublist]
+        print(f"Total combinado: {len(combined)} análises de {len(clients)} LLM(s).")
+        return combined
+
     except Exception as e:
         print(f"Error during LLM analysis: {e}")
         return []
 
 # Função principal refatorada para usar assincronidade
-async def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None, 
-                                                output_path: Optional[str] = None):
+async def run_select_bibs_filtered_by_abstract(input_bibtex_path: Optional[str] = None,
+                                                output_path: Optional[str] = None,
+                                                selected: Optional[Union[str, List[str]]] = None):
     """
     Main function to run the LLM analysis pipeline.
-    
+
     Args:
         input_bibtex_path: Path to the BibTeX file to analyze
         output_path: Path to save the output files
+        selected: roda apenas o(s) LLM(s) cujo id/name/model casar (ex.: "gpt-5.4-nano")
     """
     try:
         print(f"Analyzing abstracts from {'default bibtex' if input_bibtex_path is None else input_bibtex_path}")
-        responses = await analyze_abstracts_with_llm_one_on_one(input_bibtex_path, output_path)
+        responses = await analyze_abstracts_with_llm_one_on_one(input_bibtex_path, output_path, selected=selected)
         if responses:
             response_model = LLMResponseModel(articles=responses)
             return response_model

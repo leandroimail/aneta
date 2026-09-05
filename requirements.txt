@@ -1,0 +1,44 @@
+# Dependências do Aneta (aneta.py)
+#
+# Instalação:
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#   playwright install chromium      # baixa o navegador usado no download por browser
+#
+# Observação: o download por navegador (Playwright) e o PyPaperBot estão ligados por
+# padrão em config/general_config.yaml; ambos exigem as deps abaixo instaladas.
+
+# --- Núcleo: bibtex, dados, config ---
+bibtexparser
+pandas
+duckdb
+pyyaml
+python-dotenv
+chardet
+openpyxl
+
+# --- LLM (classificação por abstract) ---
+openai
+google-genai
+google-generativeai
+pydantic
+aiohttp
+
+# --- Parsing robusto de JSON de respostas de LLM ---
+json-repair
+
+# --- Busca / enriquecimento / download de PDFs ---
+requests
+markdownify
+scholarly
+wrapt>=1.16            # scholarly em Python 3.12 (evita o erro 'formatargspec')
+PyPaperBot             # fallback sci-hub (último recurso do download)
+undetected_chromedriver # dependência do PyPaperBot (Selenium stealth)
+setuptools<81          # provê o shim de 'distutils' (removido no Python 3.12)
+playwright             # download por navegador headless (acesso institucional por IP)
+
+# --- Leitura de PDF p/ triagem por texto completo (rápido, leve) ---
+pymupdf                # extração de texto via fitz (full-text screening)
+
+# --- Leitura de PDF rica (--read_pdfs); stack pesado de ML, opcional ---
+# docling

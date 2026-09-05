@@ -963,6 +963,47 @@ def fetch_article_by_title(title, timeout=20):
         return None
 
 
+def download_elsevier_api(doi, pdf_path, skip_validation=False, timeout=40):
+    """
+    Baixa o full-text de um artigo Elsevier via a Article Retrieval API
+    (https://api.elsevier.com/content/article/doi/<doi>).
+
+    O entitlement do full-text é por IP institucional (ex.: VPN da USP); a API key vem de
+    ELSEVIER_API_KEY (config/.env) e, opcionalmente, ELSEVIER_INSTTOKEN. É a via confiável
+    para a Elsevier/ScienceDirect, que bloqueia download direto via requests e navegador.
+
+    Returns:
+        bool: True se um PDF válido foi salvo.
+    """
+    api_key = os.getenv("ELSEVIER_API_KEY", "").strip()
+    if not api_key:
+        return False
+
+    url = f"https://api.elsevier.com/content/article/doi/{doi}"
+    headers = {"X-ELS-APIKey": api_key, "Accept": "application/pdf"}
+    insttoken = os.getenv("ELSEVIER_INSTTOKEN", "").strip()
+    if insttoken:
+        headers["X-ELS-Insttoken"] = insttoken
+
+    try:
+        print("Tentando baixar via Elsevier API...")
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        if resp.status_code == 200 and resp.content[:5] == b"%PDF-":
+            with open(pdf_path, "wb") as f:
+                f.write(resp.content)
+            if not skip_validation:
+                ok, msg = validate_pdf_file(pdf_path)
+                if not ok:
+                    print(f"Elsevier API: PDF inválido ({msg}).")
+                    os.remove(pdf_path)
+                    return False
+            return True
+        print(f"Elsevier API não retornou PDF (HTTP {resp.status_code}).")
+    except Exception as e:
+        print(f"Erro na Elsevier API: {e}")
+    return False
+
+
 def download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=False):
     """
     Faz o download de um artigo identificado por DOI.
@@ -998,7 +1039,15 @@ def download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=Fal
         print(f"PDF já baixado: {pdf_path}")
         logs["downloaded"].append(f"{doi} -> PDF já baixado")
         return True
-    
+
+    # 1b. Elsevier/ScienceDirect: a Article Retrieval API (entitlement por IP) é a única via
+    #     confiável — o download direto e o navegador são bloqueados pelo publisher.
+    if doi.startswith("10.1016") and os.getenv("ELSEVIER_API_KEY", "").strip():
+        if download_elsevier_api(doi, pdf_path, skip_validation=skip_validation):
+            print(f"PDF salvo: {pdf_path}\n")
+            logs["downloaded"].append(f"{doi} -> PDF via Elsevier API")
+            return True
+
     # 2. Tentando baixar via campo url_pdf
     url_pdf = entry.get("url_pdf", "")
     print(f"Tentando download via campo url_pdf: {url_pdf}")
@@ -1129,6 +1178,170 @@ def batch_download_google_scholar(failed_entries, pdf_dir, logs, skip_validation
     
     return still_failed
 
+# Prefixos de DOI de publishers protegidos por Cloudflare: o navegador automatizado
+# (headless OU headful) fica preso no desafio JS, então pulamos direto para o PyPaperBot.
+CLOUDFLARE_DOI_PREFIXES = ("10.1145", "10.3390", "10.1080", "10.1002", "10.1111")
+
+# User-Agent realista para o contexto do navegador.
+BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+
+async def _playwright_fetch_one(context, doi, pdf_dir, skip_validation):
+    """Resolve e baixa o PDF de UM artigo usando a sessão do navegador (acesso por IP)."""
+    pdf_path = os.path.join(pdf_dir, sanitize_filename(doi) + ".pdf")
+    if os.path.exists(pdf_path):
+        return True
+
+    page = await context.new_page()
+    try:
+        try:
+            await page.goto("https://doi.org/" + doi, wait_until="domcontentloaded", timeout=45000)
+        except Exception:
+            pass  # mesmo com erro de navegação, ainda tentamos achar o PDF pela URL final
+
+        url = page.url
+        candidates: List[str] = []
+
+        # IEEE: o PDF fica num iframe da página stamp.jsp (getPDF.jsp?arnumber=...)
+        m = re.search(r"/document/(\d+)", url)
+        if "ieee" in url.lower() and m:
+            num = m.group(1)
+            try:
+                await page.goto(f"https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber={num}",
+                                wait_until="domcontentloaded", timeout=45000)
+                srcs = await page.eval_on_selector_all("iframe", "els => els.map(e => e.src)")
+                candidates += [s for s in srcs if s and ("getpdf" in s.lower() or ".pdf" in s.lower() or "ielx" in s.lower())]
+            except Exception:
+                pass
+            candidates.append(f"https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber={num}&ref=")
+
+        # Genérico: meta citation_pdf_url, links e iframes que apontem para PDF.
+        try:
+            meta = await page.eval_on_selector_all('meta[name="citation_pdf_url"]', "els => els.map(e => e.content)")
+            candidates += [x for x in meta if x]
+            hrefs = await page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")
+            candidates += [h for h in hrefs if h and "pdf" in h.lower()][:5]
+            ifr = await page.eval_on_selector_all("iframe", "els => els.map(e => e.src)")
+            candidates += [s for s in ifr if s and "pdf" in s.lower()]
+        except Exception:
+            pass
+
+        # Tenta cada candidato baixando via a sessão autenticada do navegador.
+        seen = set()
+        for cand in candidates:
+            if not cand or cand in seen:
+                continue
+            seen.add(cand)
+            try:
+                resp = await context.request.get(cand, timeout=60000)
+                if resp.status != 200:
+                    continue
+                body = await resp.body()
+                if body[:5] != b"%PDF-":
+                    continue
+                with open(pdf_path, "wb") as f:
+                    f.write(body)
+                if not skip_validation:
+                    ok, msg = validate_pdf_file(pdf_path)
+                    if not ok:
+                        os.remove(pdf_path)
+                        continue
+                print(f"✓ Playwright baixou: {doi} ({len(body)} bytes)")
+                return True
+            except Exception:
+                continue
+        return False
+    finally:
+        await page.close()
+
+
+async def _playwright_download_batch(entries, pdf_dir, concurrency, skip_validation, logs):
+    """Roda os downloads de navegador concorrentemente (1 browser, N páginas)."""
+    from playwright.async_api import async_playwright
+    import asyncio
+
+    downloaded: Set[str] = set()
+    sem = asyncio.Semaphore(concurrency)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(user_agent=BROWSER_UA, viewport={"width": 1280, "height": 900})
+
+        async def worker(entry):
+            doi = entry.get("doi", "").strip()
+            if not doi:
+                return
+            async with sem:
+                ok = await _playwright_fetch_one(context, doi, pdf_dir, skip_validation)
+            if ok:
+                downloaded.add(doi)
+                logs["downloaded"].append(f"{doi} -> PDF via Playwright (navegador headless)")
+
+        await asyncio.gather(*[worker(e) for e in entries], return_exceptions=True)
+        await context.close()
+        await browser.close()
+
+    return downloaded
+
+
+def batch_download_playwright(failed_entries, pdf_dir, logs, skip_validation=False):
+    """
+    Fallback preferencial: baixa os artigos que falharam usando um navegador REAL headless
+    (Playwright), aproveitando o acesso institucional por IP (ex.: VPN da USP). Resolve
+    publishers que bloqueiam o `requests` cru mas liberam para navegador (ex.: IEEE).
+
+    Pula prefixos de DOI sabidamente protegidos por Cloudflare (vão para o PyPaperBot, pois
+    o desafio JS bloqueia qualquer navegador automatizado). Retorna as entradas que ainda
+    falharam.
+
+    Args:
+        failed_entries: entradas BibTeX que falharam nos métodos anteriores
+        pdf_dir: diretório de saída dos PDFs
+        logs: dicionário de logs
+        skip_validation: se True, não valida os PDFs baixados
+    """
+    config = load_config()
+    if not config.get('enable_playwright_download', False):
+        print("Download via Playwright desabilitado nas configurações.")
+        return failed_entries
+
+    try:
+        import asyncio  # noqa: F401
+        from playwright.async_api import async_playwright  # noqa: F401
+    except ImportError:
+        print("⚠ Playwright não instalado. Rode: pip install playwright && playwright install chromium. Pulando etapa.")
+        return failed_entries
+
+    try:
+        concurrency = int(os.getenv("DOWNLOAD_BROWSER_CONCURRENT", "8"))
+    except (TypeError, ValueError):
+        concurrency = 8
+    concurrency = max(1, concurrency)
+
+    cloudflare = [e for e in failed_entries if e.get("doi", "").strip().startswith(CLOUDFLARE_DOI_PREFIXES)]
+    cf_ids = {id(e) for e in cloudflare}
+    todo = [e for e in failed_entries if id(e) not in cf_ids]
+
+    print("\n\n=================================================")
+    print("TENTATIVA EM LOTE VIA PLAYWRIGHT (navegador headless)")
+    print(f"  candidatos: {len(todo)}  |  Cloudflare pulados (-> PyPaperBot): {len(cloudflare)}")
+    print(f"  concorrência: {concurrency} (env DOWNLOAD_BROWSER_CONCURRENT)")
+    print("  ⚠ alto paralelismo no IP institucional pode disparar anti-abuso do publisher")
+    print("=================================================\n")
+
+    if not todo:
+        return failed_entries
+
+    import asyncio
+    downloaded = asyncio.run(_playwright_download_batch(todo, pdf_dir, concurrency, skip_validation, logs))
+
+    still_failed = list(cloudflare) + [e for e in todo if e.get("doi", "").strip() not in downloaded]
+    print(f"\nPlaywright: {len(downloaded)} baixados / {len(todo) - len(downloaded)} falharam "
+          f"(+{len(cloudflare)} Cloudflare encaminhados ao PyPaperBot).\n")
+    return still_failed
+
+
 def batch_download_pypaperbot(failed_entries, pdf_dir, logs, skip_validation=False):
     """
     Tenta baixar em lote todos os artigos falhos usando o PyPaperBot.
@@ -1247,7 +1460,512 @@ def batch_download_pypaperbot(failed_entries, pdf_dir, logs, skip_validation=Fal
 # Função principal para download de todos os artigos
 # =====================================================================
 
-def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip_validation=False):
+# =====================================================================
+# Modo ASSISTIDO (human-in-the-loop) para Cloudflare e demais faltantes
+# =====================================================================
+
+def _looks_blocked(page) -> bool:
+    """Heurística: a página atual é um desafio (Cloudflare etc.) e não o conteúdo?"""
+    try:
+        title = (page.title() or "").lower()
+    except Exception:
+        title = ""
+    markers = ("just a moment", "um momento", "attention required",
+               "verifying you are human", "verificando", "checking your browser")
+    if any(m in title for m in markers):
+        return True
+    if "__cf_chl" in (page.url or ""):
+        return True
+    return False
+
+
+def _pdf_candidates(page, doi) -> List[str]:
+    """Monta URLs candidatas de PDF: padrões por publisher + meta citation_pdf_url + links."""
+    url = page.url or ""
+    c: List[str] = []
+    if doi.startswith("10.1145"):
+        c.append(f"https://dl.acm.org/doi/pdf/{doi}")
+    if doi.startswith("10.1080"):
+        c += [f"https://www.tandfonline.com/doi/pdf/{doi}",
+              f"https://www.tandfonline.com/doi/epdf/{doi}"]
+    if doi.startswith(("10.1002", "10.1111")):
+        c.append(f"https://onlinelibrary.wiley.com/doi/pdfdirect/{doi}")
+    if doi.startswith("10.1177"):
+        c += [f"https://journals.sagepub.com/doi/pdf/{doi}",
+              f"https://journals.sagepub.com/doi/epub/{doi}"]
+    if "mdpi.com" in url:
+        c.append(url.split("?")[0].rstrip("/") + "/pdf")
+    m = re.search(r"/document/(\d+)", url)
+    if m:
+        c.append(f"https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber={m.group(1)}&ref=")
+    try:
+        c += [x for x in page.eval_on_selector_all(
+            'meta[name="citation_pdf_url"]', "els => els.map(e => e.content)") if x]
+        c += [h for h in page.eval_on_selector_all(
+            "a[href]", "els => els.map(e => e.href)")
+            if h and ("pdf" in h.lower() or "/download" in h.lower())][:8]
+        c += [s for s in page.eval_on_selector_all(
+            "iframe", "els => els.map(e => e.src)") if s and "pdf" in s.lower()]
+    except Exception:
+        pass
+    seen, out = set(), []
+    for x in c:
+        if x and x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def _validate_saved_pdf(pdf_path, skip_validation) -> bool:
+    """Valida o PDF salvo; remove se inválido. Retorna True se ok."""
+    if skip_validation:
+        return os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
+    ok, _msg = validate_pdf_file(pdf_path)
+    if not ok and os.path.exists(pdf_path):
+        try:
+            os.remove(pdf_path)
+        except Exception:
+            pass
+    return ok
+
+
+def _navigate_capture(page, cand, pdf_path, skip_validation, timeout=12000) -> bool:
+    """
+    Navega até `cand` e captura o PDF de duas maneiras numa única navegação:
+      - download por attachment (ex.: MDPI), via expect_download;
+      - PDF que ABRE NA TELA (visualizador inline, ex.: OnePetro/eReader), interceptando a
+        resposta de rede com content-type application/pdf e salvando os bytes.
+    """
+    holder = {}
+
+    def on_resp(r):
+        try:
+            ct = (r.headers.get("content-type") or "").lower()
+            if "application/pdf" in ct:
+                holder["resp"] = r
+        except Exception:
+            pass
+
+    page.on("response", on_resp)
+    try:
+        # Tenta download por attachment.
+        try:
+            with page.expect_download(timeout=timeout) as dl_info:
+                try:
+                    page.goto(cand, timeout=timeout)
+                except Exception:
+                    pass  # navegação vira download (attachment) ou carrega o viewer
+            dl_info.value.save_as(pdf_path)
+            if _validate_saved_pdf(pdf_path, skip_validation):
+                return True
+        except Exception:
+            pass
+        # Sem attachment: usa a resposta-PDF interceptada (PDF aberto na tela).
+        resp = holder.get("resp")
+        if resp is not None:
+            try:
+                body = resp.body()
+                if body[:5] == b"%PDF-":
+                    with open(pdf_path, "wb") as f:
+                        f.write(body)
+                    if _validate_saved_pdf(pdf_path, skip_validation):
+                        return True
+            except Exception:
+                pass
+    finally:
+        try:
+            page.remove_listener("response", on_resp)
+        except Exception:
+            pass
+    return False
+
+
+def _assisted_fetch_pdf(context, page, doi, pdf_path, skip_validation) -> bool:
+    """
+    Tenta baixar o PDF (página já liberada) em duas estratégias:
+      1) GET via a sessão do navegador (rápido; serve quando o PDF vem direto);
+      2) navegar até a URL e CAPTURAR o download (publishers que servem por attachment,
+         ex.: MDPI, cujo /pdf retorna 200 mas não é PDF num GET cru).
+    """
+    candidates = _pdf_candidates(page, doi)
+
+    # Estratégia 1: GET direto (usa cookies/sessão).
+    for cand in candidates:
+        try:
+            resp = context.request.get(cand, timeout=60000)
+            if resp.status == 200 and resp.body()[:5] == b"%PDF-":
+                with open(pdf_path, "wb") as f:
+                    f.write(resp.body())
+                if _validate_saved_pdf(pdf_path, skip_validation):
+                    return True
+        except Exception:
+            continue
+
+    # Estratégia 2: navegar e capturar (download por attachment OU PDF aberto na tela,
+    # interceptando a resposta de rede application/pdf). Só os candidatos mais promissores.
+    for cand in candidates[:4]:
+        if _navigate_capture(page, cand, pdf_path, skip_validation):
+            return True
+
+    return False
+
+
+def batch_download_playwright_assisted(entries, pdf_dir, logs, skip_validation=False):
+    """
+    Abre um navegador VISÍVEL (headful, perfil persistente) e percorre os artigos faltantes.
+    Quando detecta um desafio (Cloudflare), pausa e pede ao usuário resolver na janela e
+    teclar ENTER — uma vez por domínio (a liberação cf_clearance é reaproveitada). Depois,
+    baixa o PDF via a sessão já liberada. Retorna a lista de DOIs baixados.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("⚠ Playwright não instalado. Rode: pip install playwright && playwright install chromium.")
+        return []
+    from urllib.parse import urlparse
+
+    profile_dir = os.path.join(os.path.dirname(os.path.abspath(pdf_dir)), ".browser_profile")
+    os.makedirs(profile_dir, exist_ok=True)
+
+    # Agrupa por domínio conhecido para resolver o Cloudflare uma vez por site.
+    def domain_key(entry):
+        doi = entry.get("doi", "").strip()
+        for pfx, dom in (("10.1145", "dl.acm.org"), ("10.3390", "mdpi.com"),
+                         ("10.1080", "tandfonline.com"), ("10.1002", "wiley.com"),
+                         ("10.1111", "wiley.com")):
+            if doi.startswith(pfx):
+                return dom
+        return "zzz_" + doi[:7]
+    entries = sorted(entries, key=domain_key)
+
+    downloaded: List[str] = []
+    solved_domains: Set[str] = set()
+
+    with sync_playwright() as p:
+        launch_kw = dict(headless=False, accept_downloads=True,
+                         user_agent=BROWSER_UA, viewport={"width": 1280, "height": 900})
+        try:
+            context = p.chromium.launch_persistent_context(profile_dir, channel="chrome", **launch_kw)
+        except Exception:
+            context = p.chromium.launch_persistent_context(profile_dir, **launch_kw)
+        page = context.pages[0] if context.pages else context.new_page()
+
+        for entry in entries:
+            doi = entry.get("doi", "").strip()
+            if not doi:
+                continue
+            pdf_path = os.path.join(pdf_dir, sanitize_filename(doi) + ".pdf")
+            if os.path.exists(pdf_path):
+                downloaded.append(doi)
+                continue
+
+            try:
+                page.goto("https://doi.org/" + doi, wait_until="domcontentloaded", timeout=60000)
+            except Exception:
+                pass
+
+            domain = urlparse(page.url).netloc
+
+            if _looks_blocked(page) and domain not in solved_domains:
+                print(f"\n🔒 Desafio (Cloudflare) em {domain}  —  artigo {doi}")
+                print("   → Resolva o desafio NA JANELA do navegador e tecle ENTER aqui para continuar...")
+                try:
+                    input()
+                except EOFError:
+                    pass
+                solved_domains.add(domain)
+                try:
+                    page.goto("https://doi.org/" + doi, wait_until="domcontentloaded", timeout=60000)
+                except Exception:
+                    pass
+
+            if _assisted_fetch_pdf(context, page, doi, pdf_path, skip_validation):
+                downloaded.append(doi)
+                logs["downloaded"].append(f"{doi} -> PDF via Playwright assistido")
+                print(f"  ✓ baixado: {doi}")
+            else:
+                logs["failed"].append(f"{doi} -> falhou no modo assistido")
+                print(f"  ✗ não consegui: {doi}")
+
+        context.close()
+
+    return downloaded
+
+
+def download_assisted(bibtex_path=None, pdf_dir=None, skip_validation=False):
+    """
+    Modo ASSISTIDO: para TODOS os artigos do bib ainda NÃO baixados, abre um navegador
+    visível e pede ajuda manual para passar pelo Cloudflare. Pergunta no terminal se deseja
+    iniciar agora; caso contrário, deixa para depois (não faz nada).
+
+    Returns:
+        bool: True se rodou (ou nada a fazer); False se o usuário adiou.
+    """
+    if not bibtex_path or not pdf_dir:
+        print("Caminhos de BibTeX/PDF não informados para o modo assistido.")
+        return False
+    if not os.path.exists(bibtex_path):
+        print(f"BibTeX não encontrado: {bibtex_path}")
+        return False
+
+    parser = bibtexparser.bparser.BibTexParser(common_strings=True)
+    with open(bibtex_path, encoding="utf-8") as f:
+        database = bibtexparser.load(f, parser=parser)
+
+    missing = []
+    for entry in database.entries:
+        doi = (entry.get("doi") or "").strip()
+        if not doi:
+            continue
+        if not os.path.exists(os.path.join(pdf_dir, sanitize_filename(doi) + ".pdf")):
+            missing.append(entry)
+
+    if not missing:
+        print("✓ Todos os artigos com DOI já estão baixados. Nada a fazer no modo assistido.")
+        return True
+
+    print("\n" + "=" * 64)
+    print(f"DOWNLOAD ASSISTIDO  —  {len(missing)} artigos ainda NÃO baixados")
+    print("=" * 64)
+    print("Vai abrir um navegador VISÍVEL. Em sites com Cloudflare, resolva o desafio")
+    print("('I'm human') na janela e tecle ENTER no terminal — apenas 1x por site.")
+    print("Os PDFs vão para:", pdf_dir)
+
+    try:
+        resp = input("\nIniciar o processo assistido agora? [s/N]: ").strip().lower()
+    except EOFError:
+        resp = ""
+
+    if resp not in ("s", "sim", "y", "yes"):
+        print("\nOk — deixado para depois. Quando quiser, rode: python aneta.py --download_pdf_assisted\n")
+        return False
+
+    logs = {"downloaded": [], "failed": [], "markdown_saved": []}
+    # Usa o Chrome real via CDP (passa o Cloudflare sozinho) + HITL: quando o automático
+    # falha, pausa e captura o download que você fizer manualmente na janela.
+    got = batch_download_cdp(missing, pdf_dir, logs, skip_validation=skip_validation, assisted=True)
+    print("\n" + "=" * 64)
+    print(f"✓ Modo assistido concluído: {len(got)} baixados / {len(missing) - len(got)} ainda faltando.")
+    print("=" * 64 + "\n")
+    return True
+
+
+def _find_chrome():
+    """Localiza o binário do Google Chrome instalado (macOS/Linux)."""
+    import shutil
+    candidates = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
+
+
+def _hitl_manual_download(context, page, doi, pdf_path, skip_validation, wait_seconds=180) -> bool:
+    """
+    Human-in-the-loop: o Chrome real já está aberto no artigo. Você pode NAVEGAR livremente
+    (mudar de página, abrir outras abas, ir ao site do editor) e clicar em 'Download PDF' /
+    'View PDF'. Capturo o PDF de QUALQUER aba, por download (attachment) OU por resposta
+    inline (application/pdf). Tecle ENTER no terminal para pular este artigo.
+    """
+    import select
+    print(f"  🙋 Ajuda manual: {doi}")
+    print(f"     Janela do Chrome: {(page.url or '')[:72]}")
+    print(f"     → navegue/clique para baixar o PDF (qualquer aba serve). Capturo sozinho.")
+    print(f"     (ENTER no terminal = pular este | aguardo até {wait_seconds}s)")
+
+    captured = {}
+
+    def on_download(dl):
+        if captured.get("ok"):
+            return
+        try:
+            dl.save_as(pdf_path)
+            if _validate_saved_pdf(pdf_path, skip_validation):
+                captured["ok"] = True
+        except Exception:
+            pass
+
+    def on_response(resp):
+        if captured.get("ok"):
+            return
+        try:
+            if "application/pdf" in (resp.headers.get("content-type") or "").lower():
+                body = resp.body()
+                if body[:5] == b"%PDF-":
+                    with open(pdf_path, "wb") as f:
+                        f.write(body)
+                    if _validate_saved_pdf(pdf_path, skip_validation):
+                        captured["ok"] = True
+        except Exception:
+            pass
+
+    def attach(pg):
+        try:
+            pg.on("download", on_download)
+            pg.on("response", on_response)
+        except Exception:
+            pass
+
+    # Escuta TODAS as abas atuais e as que você abrir durante a navegação.
+    for pg in context.pages:
+        attach(pg)
+    context.on("page", attach)
+
+    skipped = False
+    try:
+        for _ in range(wait_seconds * 2):
+            if captured.get("ok"):
+                break
+            try:
+                if select.select([sys.stdin], [], [], 0)[0]:
+                    sys.stdin.readline()
+                    skipped = True
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
+    finally:
+        try:
+            context.remove_listener("page", attach)
+        except Exception:
+            pass
+        for pg in context.pages:
+            try:
+                pg.remove_listener("download", on_download)
+                pg.remove_listener("response", on_response)
+            except Exception:
+                pass
+
+    if captured.get("ok"):
+        print("     ✓ PDF capturado.")
+        return True
+    print("     (pulado.)" if skipped else "     (nada capturado — pulando.)")
+    return False
+
+
+def batch_download_cdp(entries, pdf_dir, logs, skip_validation=False, port=0, assisted=False):
+    """
+    Baixa via CDP conectado a um Chrome REAL **headful**.
+
+    Um Chrome genuíno (lançado normalmente, não pelo Playwright) passa o desafio do
+    Cloudflare AUTOMATICAMENTE, sem interação humana — então resolve os publishers
+    Cloudflare (ACM/MDPI/T&F/Wiley) e também IEEE/genéricos. O Playwright apenas se
+    *conecta* (connect_over_cdp), sem injetar flags de automação.
+
+    Headless NÃO funciona aqui (o Cloudflare detecta), por isso é headful: abre uma janela
+    do Chrome que fecha sozinha ao final. Requer Google Chrome instalado.
+
+    Returns: lista de DOIs baixados.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("⚠ Playwright não instalado. Pulando etapa CDP.")
+        return []
+    chrome = _find_chrome()
+    if not chrome:
+        print("⚠ Google Chrome não encontrado — modo CDP indisponível. Pulando etapa.")
+        return []
+
+    import subprocess
+    import urllib.request
+    import socket
+    import tempfile
+    import shutil
+    # Perfil LOCAL e único por execução: evita locks/lentidão de perfil em pasta sincronizada
+    # (OneDrive) e conflito com um Chrome já aberto. O cf_clearance re-resolve em ~6s mesmo.
+    profile = tempfile.mkdtemp(prefix="aneta_chrome_cdp_")
+    # Porta de debug LIVRE e dinâmica (evita conflito com instância anterior na 9222).
+    if not port:
+        _s = socket.socket()
+        _s.bind(("127.0.0.1", 0))
+        port = _s.getsockname()[1]
+        _s.close()
+
+    print("\n\n=================================================")
+    print("TENTATIVA EM LOTE VIA CDP (Chrome real headful — passa Cloudflare)")
+    print(f"  entradas: {len(entries)} | porta: {port}")
+    print("  (uma janela do Chrome vai abrir e fechar automaticamente)")
+    print("=================================================\n")
+
+    proc = subprocess.Popen(
+        [chrome, f"--remote-debugging-port={port}", f"--user-data-dir={profile}",
+         "--no-first-run", "--no-default-browser-check", "about:blank"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    downloaded: List[str] = []
+    try:
+        ready = False
+        for _ in range(45):
+            if proc.poll() is not None:
+                print("⚠ O Chrome encerrou logo após abrir (provável conflito com um Chrome já aberto).")
+                print("   Feche TODAS as janelas do Google Chrome e rode novamente.")
+                return []
+            try:
+                urllib.request.urlopen(f"http://localhost:{port}/json/version", timeout=2)
+                ready = True
+                break
+            except Exception:
+                time.sleep(1)
+        if not ready:
+            print("⚠ CDP não respondeu a tempo (45s). Feche o Chrome aberto e tente novamente.")
+            return []
+
+        with sync_playwright() as p:
+            browser = p.chromium.connect_over_cdp(f"http://localhost:{port}")
+            ctx = browser.contexts[0] if browser.contexts else browser.new_context()
+            for entry in entries:
+                doi = entry.get("doi", "").strip()
+                if not doi:
+                    continue
+                pdf_path = os.path.join(pdf_dir, sanitize_filename(doi) + ".pdf")
+                if os.path.exists(pdf_path):
+                    downloaded.append(doi)
+                    continue
+                page = ctx.new_page()
+                try:
+                    try:
+                        page.goto("https://doi.org/" + doi, wait_until="domcontentloaded", timeout=60000)
+                    except Exception:
+                        pass
+                    # aguarda o Cloudflare liberar sozinho (navegador genuíno)
+                    for _ in range(9):
+                        if not _looks_blocked(page):
+                            break
+                        time.sleep(2)
+                    ok = _assisted_fetch_pdf(ctx, page, doi, pdf_path, skip_validation)
+                    if not ok and assisted:
+                        ok = _hitl_manual_download(ctx, page, doi, pdf_path, skip_validation)
+                    if ok:
+                        downloaded.append(doi)
+                        logs["downloaded"].append(f"{doi} -> PDF via CDP (Chrome real)")
+                        print(f"  ✓ {doi}")
+                    else:
+                        logs["failed"].append(f"{doi} -> falhou no CDP")
+                        print(f"  ✗ {doi}")
+                finally:
+                    page.close()
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)
+
+    print(f"\nCDP: {len(downloaded)} baixados de {len(entries)} processados.\n")
+    return downloaded
+
+
+def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip_validation=False,
+                        max_workers=None):
     """
     Função principal que realiza:
       - Leitura do BibTeX e do arquivo de DOIs.
@@ -1260,10 +1978,15 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
         pdf_dir: Directory to save PDFs
         doi_file_path: Path to DOI list file
         skip_validation: If True, skips PDF validation checks (faster but less safe)
+        max_workers: nº de downloads concorrentes (I/O-bound). None/1 => sequencial
+            (comportamento original); >1 => paralelo via ThreadPoolExecutor. Cada entrada
+            é independente (PDF em path único; só faz append em logs/failed_entries, que é
+            thread-safe sob o GIL) e pula PDFs já baixados, então a concorrência é segura.
     """
     config = load_config()
     gs_enabled = config.get('enable_search_link_file_by_google_scholars', False)
     pypaperbot_enabled = config.get('enable_PyPaperBot_download', False)
+    playwright_enabled = config.get('enable_playwright_download', False)
 
     print(f"\nArquivo BibTeX usado para download: {bibtex_path}")
     print(f"\nPasta de destino dos PDFs: {pdf_dir}")
@@ -1308,19 +2031,65 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
     else:
         doi_entries = doi_bibtex_entries
 
-    print("\nProcessando entradas do arXiv...\n")
+    # Resolver o nível de concorrência (env DOWNLOAD_MAX_CONCURRENT como fallback).
+    if max_workers is None:
+        try:
+            max_workers = int(os.getenv("DOWNLOAD_MAX_CONCURRENT", "1"))
+        except (TypeError, ValueError):
+            max_workers = 1
+    max_workers = max(1, int(max_workers))
+
     if skip_validation:
         print("⚠️  AVISO: Validação de PDF DESABILITADA - arquivos serão salvos sem verificação de integridade\n")
-    for entry in arxiv_entries:
-        print("--------------------------------------------------")
-        download_arxiv_entry(entry, pdf_dir, logs, skip_validation=skip_validation)
-        print("--------------------------------------------------\n")
 
-    print("\nProcessando entradas com DOI...\n")
-    for entry in doi_entries:
-        print("--------------------------------------------------")
-        download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=skip_validation)
-        print("--------------------------------------------------\n")
+    if max_workers > 1:
+        # Modo concorrente: downloads são I/O-bound, então threads dão ganho ~linear.
+        from concurrent.futures import ThreadPoolExecutor
+        total = len(arxiv_entries) + len(doi_entries)
+        print(f"\nDownload CONCORRENTE: {max_workers} workers para {total} entradas "
+              f"({len(arxiv_entries)} arXiv + {len(doi_entries)} DOI)...\n")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(download_arxiv_entry, entry, pdf_dir, logs, skip_validation)
+                       for entry in arxiv_entries]
+            futures += [executor.submit(download_doi_entry, entry, pdf_dir, logs, failed_entries, skip_validation)
+                        for entry in doi_entries]
+            for future in futures:
+                try:
+                    future.result()
+                except Exception as exc:
+                    # Uma entrada com erro inesperado não derruba o lote inteiro.
+                    print(f"⚠ Erro inesperado em download concorrente: {exc}")
+    else:
+        # Modo sequencial (comportamento original).
+        print("\nProcessando entradas do arXiv...\n")
+        for entry in arxiv_entries:
+            print("--------------------------------------------------")
+            download_arxiv_entry(entry, pdf_dir, logs, skip_validation=skip_validation)
+            print("--------------------------------------------------\n")
+
+        print("\nProcessando entradas com DOI...\n")
+        for entry in doi_entries:
+            print("--------------------------------------------------")
+            download_doi_entry(entry, pdf_dir, logs, failed_entries, skip_validation=skip_validation)
+            print("--------------------------------------------------\n")
+
+    # Fallback 1 (PREFERENCIAL): navegador. Prefere o Chrome REAL via CDP (headful) — passa
+    # o Cloudflare sozinho e cobre IEEE/genéricos; se o Chrome não estiver instalado, cai no
+    # Playwright headless (resolve IEEE/não-Cloudflare, mas não os Cloudflare).
+    if failed_entries:
+        if playwright_enabled:
+            if _find_chrome():
+                print(f"\nTentando baixar {len(failed_entries)} artigos via CDP (Chrome real, passa Cloudflare)...\n")
+                failed_entries = batch_download_cdp(
+                    failed_entries, pdf_dir, logs, skip_validation=skip_validation,
+                )
+            else:
+                print(f"\nChrome não encontrado; usando Playwright headless para {len(failed_entries)} artigos...\n")
+                failed_entries = batch_download_playwright(
+                    failed_entries, pdf_dir, logs, skip_validation=skip_validation,
+                )
+        else:
+            print("\nDownload via navegador desabilitado nas configurações. Pulando etapa.\n")
 
     # Processamento em lote dos artigos que falharam
     if failed_entries:
