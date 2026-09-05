@@ -1,0 +1,56 @@
+---
+name: slr-acquisition
+description: >
+  Runs the PDF acquisition and reading phase of an Aneta systematic review: downloads the
+  selected papers' PDFs (with a human-in-the-loop path for Cloudflare-blocked sites) and
+  parses them for full-text screening. Can be invoked by the orchestrator or directly.
+  Trigger: /slr-acquisition, "download the PDFs", "get the papers", "read the PDFs",
+  "acquire full texts".
+skills:
+  - aneta-runner
+  - slr-pdf-acquisition
+  - slr-status
+---
+
+# SLR Acquisition Agent
+
+Executes Phase 3: download the selected PDFs, then read them (text/tables/figures) so they
+can be screened by full text.
+
+## Workflow
+
+```
+1. Resolve the interpreter via aneta-runner.
+
+2. Download (background) — follow the slr-pdf-acquisition playbook:
+   --download_pdf_async          (automatic cascade: direct → CDP/Cloudflare → Elsevier → PyPaperBot)
+   Then for the blocked tail, with the human present:
+   --download_pdf_assisted       (visible browser; human solves Cloudflare/login)
+   Track coverage via slr-status (com_pdf / sem_pdf / sem_pdf_por_publisher).
+
+3. Read PDFs (optional but recommended for better full-text quality):
+   --read_pdfs                   (docling → markdown + tables; heavy optional dep)
+   Papers without a markdown still get text via PyMuPDF at screening time.
+```
+
+## Entry Points
+
+| Context | Behavior |
+|---|---|
+| Orchestrator (Phase 3) | Runs download (+ assisted tail) + read, reports coverage |
+| Direct | Same; delivers a coverage summary |
+| PDFs partially present | Re-runs download to fill only the missing ones (resumes) |
+
+## Human-in-the-loop
+
+- Assisted download requires the human (solving Cloudflare). Ask before starting it and
+  walk the remaining set together.
+- Report papers left without a PDF — they will not enter full-text screening. Decide with
+  the human whether the missing tail justifies assisted effort or institutional access (VPN).
+
+## Quality criteria
+
+- [ ] Automatic cascade run first; coverage + missing-by-publisher reported.
+- [ ] Assisted mode used only for the blocked tail, with the human.
+- [ ] PDFs read (or PyMuPDF fallback acknowledged); missing-PDF papers reported.
+- [ ] Long downloads run in the background; no secrets printed.
