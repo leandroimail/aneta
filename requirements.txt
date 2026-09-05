@@ -10,8 +10,10 @@
 
 # --- Núcleo: bibtex, dados, config ---
 bibtexparser
-pandas
+pandas>=2.2.3,<3.0.0    # pandas 3 tem breaking changes; alinhado ao testado no pyproject
+numpy>=1.20.1,<2.0.0    # alinhado ao pyproject (stack pandas 2.x)
 duckdb
+lancedb>=0.19.0,<0.21.0 # cache do enriquecimento (src/Database.py); sem ele `import aneta` falha
 pyyaml
 python-dotenv
 chardet
