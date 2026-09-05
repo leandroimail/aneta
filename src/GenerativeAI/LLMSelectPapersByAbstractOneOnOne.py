@@ -333,13 +333,21 @@ class GeminiClient(LLMClient):
                     prompt_parts.append(msg["content"])
             prompt = "\n\n".join(prompt_parts)
 
-            # Check if the model is from the gemini-2.5-flash family to add thinking_config
+            # Check if the model is from the gemini-2.5/3.8 flash families to add thinking_config
             model_lower = self.model_name.lower()
             if model_lower.startswith("gemini-2.5-flash") and not is_reasonear:
                 # For non-reasoning mode, create ThinkingConfig without thinking_budget parameter
                 config = genai_types.GenerateContentConfig(
                     thinking_config=genai_types.ThinkingConfig()
                 )
+            elif model_lower.startswith("gemini-3.8-flash") and not is_reasonear:
+                # 3.8 Flash reasons by default; pin the LOW thinking level (low effort)
+                config = genai_types.GenerateContentConfig(
+                    thinking_config=genai_types.ThinkingConfig(thinking_level="low")
+                )
+            else:
+                config = None
+            if config is not None:
                 response = self.client.models.generate_content(
                     model=self.model_name,
                     contents=prompt,
@@ -502,6 +510,10 @@ def _build_client_from_config(cfg: LLMClientConfig) -> LLMClient:
     - deepseek -> DeepSeekClient (OpenAI-compatível)
     """
     provider = cfg.provider.lower()
+    if provider == "pi":
+        raise ValueError(
+            "client pi não roda neste fluxo legado — use " + '--abstract_classifier_llm_one_on_one_async'
+        )
     if provider == "openai":
         return OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=cfg.base_url)
     if provider == "google":
@@ -527,6 +539,11 @@ def setup_llms(group: str = "ABSTRACT", selected: Optional[Union[str, List[str]]
             (ex.: "gpt-5.4-nano" para rodar só o GPT).
     """
     configs = load_llm_client_configs(group, selected)
+    pi_left = [c for c in configs if c.provider.lower() == "pi"]
+    if pi_left:
+        print(f"[pi_fast] aviso: {len(pi_left)} client(s) pi ({', '.join(c.id for c in pi_left)}) "
+              f"não rodam neste fluxo legado — use {hint}")
+        configs = [c for c in configs if c.provider.lower() != "pi"]
     if not configs:
         msg = (
             "Nenhum LLM configurado. Defina LLM_CLIENTS_ABSTRACT (multi-LLM) "

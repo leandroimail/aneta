@@ -16,6 +16,7 @@ process_responses (parametrizado) e FilterRelevantPapers.filter_final_papers.
 """
 import os
 import json
+import re
 import asyncio
 from typing import List, Optional, Union, Tuple, Dict, Any
 
@@ -187,6 +188,12 @@ def build_fulltext_prompts(input_bib: Optional[str] = None) -> Tuple[List[Dict[s
     return papers, pending
 
 
+
+def _normalize_doi(value: str) -> str:
+    """Lowercase + remove prefixo de resolver (https://doi.org/...); base do skip/resume."""
+    return re.sub(r'^(https?://(dx\.)?doi\.org/)', '', str(value or "").strip().lower())
+
+
 # --------------------------------------------------------------------------- execução
 async def _process_papers_for_client(cfg, client, papers: List[Dict[str, Any]], raw_dir: str) -> int:
     rate_limit = cfg.rate_limit or get_rate_limit()
@@ -194,7 +201,11 @@ async def _process_papers_for_client(cfg, client, papers: List[Dict[str, Any]], 
         rate_limit = get_rate_limit()
     min_delay = 1.0 / rate_limit
     # Full-text é pesado (prompts grandes): concorrência menor que o abstract.
-    max_concurrent = max(1, min(6, int(rate_limit)))
+    # Clients pi limitam subprocessos simultâneos (max_concurrent do YAML).
+    if getattr(cfg, "max_concurrent", None):
+        max_concurrent = max(1, min(int(cfg.max_concurrent), 16))
+    else:
+        max_concurrent = max(1, min(6, int(rate_limit)))
     sem = asyncio.Semaphore(max_concurrent)
     out_dir = os.path.join(raw_dir, cfg.name)
     os.makedirs(out_dir, exist_ok=True)
@@ -204,7 +215,7 @@ async def _process_papers_for_client(cfg, client, papers: List[Dict[str, Any]], 
 
     # sequence = idx ESTÁVEL (posição no bib completo). response_N alinhado entre LLMs.
     sequenced = [SequencedArticle(p["idx"], p["prompt"]) for p in papers]
-    doi_by_idx = {p["idx"]: str(p.get("doi", "")).strip().lower() for p in papers}
+    doi_by_idx = {p["idx"]: _normalize_doi(p.get("doi", "")) for p in papers}
 
     async def worker(article: SequencedArticle):
         idx = article.sequence
@@ -217,7 +228,8 @@ async def _process_papers_for_client(cfg, client, papers: List[Dict[str, Any]], 
             try:
                 with open(fpath, encoding="utf-8") as f:
                     parsed = clean_and_parse_json(f.read())
-                if str(parsed.get("id", "")).strip().lower() == expected_doi:
+                saved_id = _normalize_doi(parsed.get("id", ""))
+                if saved_id == expected_doi:
                     return
             except Exception:
                 pass

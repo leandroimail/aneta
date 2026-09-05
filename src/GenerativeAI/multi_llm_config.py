@@ -38,13 +38,18 @@ class LLMClientConfig:
 
     id: str
     name: str
-    provider: str  # openai | gemini | deepseek
+    provider: str  # openai | gemini | deepseek | pi
     model_name: str
     api_key: str
     base_url: Optional[str] = None
     rate_limit: Optional[float] = None
     overwrite: bool = False
     is_reasoner: bool = False
+    # --- campos exclusivos de clients pi (provider == "pi"); default None nos demais ---
+    harness_provider: Optional[str] = None   # provider do pi (openai-codex, opencode-go, zai...)
+    thinking: Optional[str] = None           # nível de thinking do pi (off|minimal|low|...)
+    max_concurrent: Optional[int] = None     # subprocessos simultâneos (clamp 1..16)
+    timeout_seconds: Optional[int] = None    # timeout por chamada do subprocesso pi
 
 
 # Variáveis legadas de rate-limit por grupo (mantém compatibilidade com nomes atuais).
@@ -220,19 +225,76 @@ def load_llm_client_configs(
     raw_list = os.getenv(f"LLM_CLIENTS_{g}") or os.getenv("LLM_CLIENTS", "")
     client_ids = [item.strip() for item in raw_list.split(",") if item.strip()]
 
-    if not client_ids:
-        configs = _legacy_single_config(g)
-    else:
-        configs = []
+    # Clients pi-fast (harness PI via CLI local) vêm de config/pi_fast.yaml.
+    # O roster env pode citar o id/name de um client pi (ex.: LLM_CLIENTS_ABSTRACT=pi-glm)
+    # misturado com clients de API — a composição é livre.
+    try:
+        from src.GenerativeAI.pi_config import load_pi_client_specs
+        pi_specs = load_pi_client_specs(group=g)
+    except ValueError as error:
+        print(f"[pi_fast] ✗ YAML de clients pi inválido — clients pi ignorados: {error}")
+        pi_specs = []
+
+    pi_by_token = {}
+    for spec in pi_specs:
+        pi_by_token[spec.id.lower()] = spec
+        if spec.name.lower() != spec.id.lower():
+            pi_by_token[spec.name.lower()] = spec
+
+    def _pi_config(spec):
+        return LLMClientConfig(
+            id=spec.id,
+            name=spec.name,
+            provider="pi",
+            model_name=spec.model,
+            api_key="pi-local",  # sem segredo: a auth é a do provider no CLI local
+            base_url=None,
+            rate_limit=spec.rate_limit,
+            overwrite=spec.overwrite,
+            is_reasoner=False,
+            harness_provider=spec.provider,
+            thinking=spec.thinking,
+            max_concurrent=spec.max_concurrent,
+            timeout_seconds=spec.timeout_seconds,
+        )
+
+    configs = []
+    seen_ids = set()
+    if client_ids:
         for client_id in client_ids:
+            spec = pi_by_token.get(client_id.lower())
+            if spec is not None:
+                if spec.id in seen_ids:
+                    continue
+                seen_ids.add(spec.id)
+                configs.append(_pi_config(spec))
+                continue
             config = _load_client_config_from_env(client_id, g)
             if config:
+                seen_ids.add(config.id)
                 configs.append(config)
+    elif pi_specs:
+        print(f"[pi_fast] grupo {g}: roster env vazio — usando apenas os clients pi do YAML")
+        for spec in pi_specs:
+            seen_ids.add(spec.id)
+            configs.append(_pi_config(spec))
+    else:
+        configs = _legacy_single_config(g)
 
-    # Filtra por id, name OU model_name (permite selecionar 1 LLM pelo modelo)
+    # Filtra por id, name OU model_name (permite selecionar 1 LLM pelo modelo);
+    # avisa quando um token casa mais de um client (ex.: mesmo model em API e pi).
     if selected_ids:
-        configs = [
-            c for c in configs
-            if selected_ids & {c.id.lower(), c.name.lower(), c.model_name.lower()}
-        ]
+        filtered = []
+        match_count = {}
+        for config in configs:
+            hits = selected_ids & {config.id.lower(), config.name.lower(), config.model_name.lower()}
+            for token in hits:
+                match_count[token] = match_count.get(token, 0) + 1
+            if hits:
+                filtered.append(config)
+        for token, count in match_count.items():
+            if count > 1:
+                print(f"[multi_llm] aviso: seleção '{token}' casou {count} clients — "
+                      "use o id para selecionar apenas um")
+        configs = filtered
     return configs

@@ -1,0 +1,37 @@
+# ============================================================================
+# Clients pi-fast — triagem via harness PI (CLI `pi` local) em vez de API.
+#
+# Cada client abaixo é um "voto" nos grupos informados, igual a um client de
+# API: entre no grupo desejado via LLM_CLIENTS_<GRUPO> (config/.env) listando
+# o id (ex.: LLM_CLIENTS_ABSTRACT=google-flash,pi-glm), ou deixe o grupo só
+# com clients pi.
+#
+# Provedores/modelos válidos: `pi --list-models` (openai-codex, opencode-go,
+# zai, minimax, ...). O pi usa a auth local de cada provider — NADA de chaves
+# neste arquivo (campos desconhecidos são rejeitados ao carregar).
+#
+# Regras de nomenclatura: id e model SEM underscore e name com até 31 chars
+# de [A-Za-z0-9-] — eles viram nome de arquivo/pasta na consolidação.
+# ============================================================================
+
+defaults:
+  thinking: off          # off|minimal|low|medium|high|xhigh|max
+  timeout_seconds: 200   # por chamada (máx. 230; o full-text corta em 240)
+  max_concurrent: 4      # subprocessos simultâneos por client (1..16)
+  rate_limit: 30         # req/s — espaçamento mínimo entre chamadas
+
+clients:
+  - id: pi-luna
+    groups: [ABSTRACT, FULL_TEXT]
+    provider: openai-codex
+    model: gpt-5.6-luna
+
+  - id: pi-deepseek
+    groups: [ABSTRACT, FULL_TEXT]
+    provider: opencode-go
+    model: deepseek-v4-flash
+
+  - id: pi-glm
+    groups: [ABSTRACT, FULL_TEXT]
+    provider: zai
+    model: glm-5.2

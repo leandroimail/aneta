@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator  # Atualizado para usar f
 # Local imports
 from src.GenerativeAI.LLMUtils import run_prepare_base_prompt
 from src.GenerativeAI.LLMUtils import run_prepare_base_prompt_list
+from src.GenerativeAI.pi_client import PiClient
 from src.GenerativeAI.multi_llm_config import LLMClientConfig, load_llm_client_configs
 
 # Load environment variables
@@ -474,13 +475,21 @@ class GeminiClient(LLMClient):
                     prompt_parts.append(msg["content"])
             prompt = "\n\n".join(prompt_parts)
 
-            # Check if the model is from the gemini-2.5-flash family to add thinking_config
+            # Check if the model is from the gemini-2.5/3.8 flash families to add thinking_config
             model_lower = self.model_name.lower()
             if model_lower.startswith("gemini-2.5-flash") and not is_reasonear:
                 # For non-reasoning mode, create ThinkingConfig without thinking_budget parameter
                 config = genai_types.GenerateContentConfig(
                     thinking_config=genai_types.ThinkingConfig()
                 )
+            elif model_lower.startswith("gemini-3.8-flash") and not is_reasonear:
+                # 3.8 Flash reasons by default; pin the LOW thinking level (low effort)
+                config = genai_types.GenerateContentConfig(
+                    thinking_config=genai_types.ThinkingConfig(thinking_level="low")
+                )
+            else:
+                config = None
+            if config is not None:
                 response = self.client.models.generate_content(
                     model=self.model_name,
                     contents=prompt,
@@ -665,6 +674,14 @@ def _build_client_from_config(cfg: LLMClientConfig) -> LLMClient:
         return GeminiClient(api_key=cfg.api_key, model=cfg.model_name)
     if provider == "deepseek":
         return DeepSeekClient(api_key=cfg.api_key, model=cfg.model_name)
+    if provider == "pi":
+        return PiClient(
+            provider=cfg.harness_provider or "zai",
+            model=cfg.model_name,
+            thinking=cfg.thinking or "off",
+            timeout_seconds=cfg.timeout_seconds or 200,
+            name=cfg.name,
+        )
     raise ValueError(f"Provedor de LLM não suportado: {cfg.provider}")
 
 
@@ -1214,13 +1231,26 @@ async def process_article_async_with_rate_limit(article: SequencedArticle,
     async with semaphore:
         # Record start time for rate limiting
         start_time = asyncio.get_event_loop().time()
-        
+
         # Process the article
         await process_article_async(article, llm_client)
-        
+
+        # Salva o raw IMEDIATAMENTE, indexado por sequence+1 (fix B1): com falhas
+        # no meio do lote, o resume por sequence+1 continua apontando para o
+        # artigo certo — salvar em lote no fim desalinharia os índices.
+        if article.raw_response:
+            try:
+                individual_path = os.path.join(
+                    output_dir, f"response_{article.sequence+1}_{llm_type}_{llm_model}_raw.txt"
+                )
+                with open(individual_path, "w", encoding="utf-8") as f:
+                    f.write(article.raw_response)
+            except OSError as e:
+                print(f"⚠ Could not save raw response for article {article.sequence+1}: {e}")
+
         # Calculate how long processing took
         elapsed_time = asyncio.get_event_loop().time() - start_time
-        
+
         # If processing was too quick, add a delay to respect rate limit
         if elapsed_time < min_delay:
             delay_time = min_delay - elapsed_time
@@ -1240,7 +1270,12 @@ async def _process_articles_for_client(cfg: LLMClientConfig, llm_client: LLMClie
     if rate_limit <= 0:
         rate_limit = get_rate_limit()
     min_delay = 1.0 / rate_limit
-    max_concurrent = max(1, min(10, int(rate_limit * 1.5)))
+    # Clients pi limitam subprocessos simultâneos (max_concurrent do YAML); os demais
+    # mantêm a fórmula histórica derivada do rate limit.
+    if getattr(cfg, "max_concurrent", None):
+        max_concurrent = max(1, min(int(cfg.max_concurrent), 16))
+    else:
+        max_concurrent = max(1, min(10, int(rate_limit * 1.5)))
     semaphore = asyncio.Semaphore(max_concurrent)
 
     print(f"[{cfg.name}/{cfg.model_name}] rate={rate_limit} req/s, "
@@ -1258,11 +1293,10 @@ async def _process_articles_for_client(cfg: LLMClientConfig, llm_client: LLMClie
     ]
     await asyncio.gather(*tasks)
 
-    raw_responses = [a.raw_response for a in sequenced_articles if a.raw_response]
+    # Raws já foram salvos por artigo (imediato, sequence+1) dentro do worker —
+    # salvar em lote aqui com a lista filtrada desalinharia os índices (bug B1).
     article_analyses = [a.article_analysis for a in sequenced_articles if a.article_analysis is not None]
 
-    if raw_responses:
-        save_raw_llm_responses(raw_responses, llm_type=cfg.name, llm_model=cfg.model_name)
     if output_path and article_analyses:
         save_llm_responses_to_file(article_analyses, output_path, llm_type=cfg.name, llm_model=cfg.model_name)
 

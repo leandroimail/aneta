@@ -486,6 +486,10 @@ def setup_llm() -> LLMClient:
 def _build_client_from_config(cfg: LLMClientConfig) -> LLMClient:
     """Instancia a classe de cliente local e anexa a identidade do LLM (pasta/arquivo de saída)."""
     provider = cfg.provider.lower()
+    if provider == "pi":
+        raise ValueError(
+            "client pi não roda neste fluxo legado — use " + '--abstract_classifier_llm_one_on_one_async'
+        )
     if provider == "openai":
         client = OpenAIClient(api_key=cfg.api_key, model=cfg.model_name, base_url=cfg.base_url)
     elif provider == "google":
@@ -516,6 +520,11 @@ def setup_llms(group: str = "ABSTRACT", selected: Optional[Union[str, List[str]]
             (ex.: "gpt-5.4-nano" para rodar só o GPT).
     """
     configs = load_llm_client_configs(group, selected)
+    pi_left = [c for c in configs if c.provider.lower() == "pi"]
+    if pi_left:
+        print(f"[pi_fast] aviso: {len(pi_left)} client(s) pi ({', '.join(c.id for c in pi_left)}) "
+              f"não rodam neste fluxo legado — use {hint}")
+        configs = [c for c in configs if c.provider.lower() != "pi"]
     if not configs:
         msg = (
             "Nenhum LLM configurado. Defina LLM_CLIENTS_ABSTRACT (multi-LLM) "
