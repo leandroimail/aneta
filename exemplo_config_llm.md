@@ -25,7 +25,7 @@ de *ids* separados por vírgula. Para cada *id* defina as variáveis `LLM_<ID>_*
 LLM_CLIENTS_ABSTRACT=openai-nano,gemini-flash
 
 # --- Cliente 1 ---
-LLM_OPENAI_NANO_PROVIDER=openai            # openai | gemini | deepseek
+LLM_OPENAI_NANO_PROVIDER=openai            # openai | google | deepseek
 LLM_OPENAI_NANO_MODEL=gpt-4.1-nano
 LLM_OPENAI_NANO_API_KEY_ENV=LLM_API_KEY_SIMPLE   # nome da var que guarda a chave (reuso)
 # LLM_OPENAI_NANO_API_KEY=sk-...                  # alternativa: chave inline
@@ -57,6 +57,10 @@ em maiúsculas (ex.: `openai-nano` → `LLM_OPENAI_NANO_*`).
 | `LLM_<ID>_NAME`          | não         | nome de exibição/pasta de saída; default = `<id>` |
 | `LLM_<ID>_ENABLED`       | não         | `false` desabilita o cliente |
 
+> Sobre providers: use `openai`, `google` ou `deepseek` — `google` é o Gemini via endpoint
+> OpenAI-compatível (base URL já embutida no código). O valor `gemini` só funciona se você
+> definir também `LLM_<ID>_BASE_URL`.
+
 > **Dica:** prefira *ids* com hífen (`openai-nano`) em vez de underscore — os nomes de arquivo de
 > saída ficam mais limpos para o passo de consolidação.
 
@@ -87,5 +91,17 @@ DOI; `--filter_relevant_papers` aplica o SQL configurável sobre o resultado.
 
 A mesma mecânica existe para outros grupos (genérica):
 `LLM_CLIENTS_FULL_TEXT`, `LLM_CLIENTS_SYSTEMATIC_REVIEW` (com fallback para os respectivos
-`LLM_*_FULL_TEXT` / `LLM_*_SYSTEMATIC_REVIEW`). Atualmente apenas o grupo **ABSTRACT** está ligado
-nos comandos de classificação.
+`LLM_*_FULL_TEXT` / `LLM_*_SYSTEMATIC_REVIEW`). Hoje, **dois grupos estão ligados aos
+comandos**: **ABSTRACT** (classificação por abstract, `--abstract_classifier_llm*`) e
+**FULL_TEXT** (triagem por texto completo, `--fulltext_classifier_llm*`). O grupo
+**SYSTEMATIC_REVIEW** existe na camada de configuração (`multi_llm_config`), mas nenhum
+comando o usa ainda.
+
+
+## Alternativa sem API: clients pi-fast (harness PI)
+
+Além dos providers de API acima (`openai | google | deepseek`), os grupos podem incluir
+clients que rodam o **CLI `pi` local** (assim não há chamada de API — a auth é a
+assinatura local de cada provider). Provedores/modelos do pi são configurados em
+**`config/pi_fast.yaml`** e os ids entram no `LLM_CLIENTS_*` normalmente. Detalhes em
+`docs/tecnica/pi-fast.md`.
