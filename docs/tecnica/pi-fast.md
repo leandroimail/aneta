@@ -17,6 +17,12 @@ coding-plan (OpenAI Codex, OpenCode Go, Z.ai) em vez de crédito por token de AP
   para `.data/OUTPUTS/raw_responses[_fulltext]/<client>/` igual aos de API.
 - Timeout por chamada: 200s default (mata o grupo de processos do CLI); o full-text
   corta o artigo em 240s — o kill interno sempre ganha a corrida.
+- **PATH_DATA**: clients pi gravam/lê em `<PATH_DATA>/OUTPUTS/...` como qualquer
+  outro client; a consolidação (`--process_responses*`) também honra `PATH_DATA`
+  (o `base_dir` passado é o próprio diretório de dados) e resolve a legenda de
+  research questions como best-effort (base_dir → `PROJECT_PATH` → cwd).
+- Os raws são salvos **por artigo, imediatamente** (fix B1) — um timeout do pi no
+  meio do lote não desalinha o resume dos demais papers.
 
 ## Configuração (`config/pi_fast.yaml`)
 

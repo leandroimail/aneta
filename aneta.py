@@ -206,10 +206,10 @@ def run_bibtex_to_json_schema():
     bibtex_to_json_schema(path_directory_file_bib, output_path)
     return True
 
-def _raw_responses_dir():
-    """Caminho dos resultados brutos da classificação por abstract (.data/OUTPUTS/raw_responses)."""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, ".data", "OUTPUTS", "raw_responses")
+def _raw_responses_dir(subdir: str = "raw_responses"):
+    """Caminho dos resultados brutos da classificação (honra PATH_DATA)."""
+    path_data = os.path.abspath(os.getenv("PATH_DATA", ".data"))
+    return os.path.join(path_data, "OUTPUTS", subdir)
 
 def _has_raw_responses(raw_dir):
     """True se houver pelo menos um arquivo response_*_raw.txt em qualquer subpasta de LLM."""
@@ -241,7 +241,9 @@ def run_process_responses_to_excel():
         return False
 
     # Call the process_responses_to_excel function
-    full_path, simple_path, consolidated_path = process_responses_to_excel()
+    full_path, simple_path, consolidated_path = process_responses_to_excel(
+        base_dir=os.getenv("PATH_DATA", ".data")
+    )
 
     print(f"Excel files created successfully:")
     print(f"- Full Excel file: {full_path}")
@@ -418,14 +420,14 @@ def run_fulltext_classifier_async(selected=None):
 
 def run_process_responses_fulltext():
     """Consolida as respostas de full-text (raw_responses_fulltext) numa planilha de notas."""
-    raw_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           ".data", "OUTPUTS", "raw_responses_fulltext")
+    raw_dir = _raw_responses_dir("raw_responses_fulltext")
     if not _has_raw_responses(raw_dir):
         print("✗ Nenhuma resposta de full-text encontrada em:")
         print(f"  {raw_dir}")
         print("  → rode a classificação antes: python aneta.py --fulltext_classifier_llm_async")
         return False
     full_path, simple_path, consolidated_path = process_responses_to_excel(
+        base_dir=os.getenv("PATH_DATA", ".data"),
         raw_subdir="raw_responses_fulltext",
         article_info="select_bibs_fulltext.json",
         out_prefix="combined_responses_fulltext",

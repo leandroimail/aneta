@@ -400,6 +400,21 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
     return results
 
 
+def _find_research_questions_yaml(base_dir: str) -> Optional[str]:
+    """Localiza research_questions.yaml: primeiro em <base_dir> (Config/config),
+    depois no repo (PROJECT_PATH/cwd). Retorna None se não achar — a legenda das
+    perguntas é best-effort e não deve quebrar a consolidação."""
+    roots = [base_dir, os.getenv("PROJECT_PATH") or "", os.getcwd()]
+    for root in roots:
+        if not root:
+            continue
+        for sub in ("Config", "config"):
+            candidate = os.path.join(root, sub, "research_questions.yaml")
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
 def read_research_questions(yaml_path: str) -> Dict[str, str]:
     """
     Lê as perguntas de pesquisa do arquivo YAML.
@@ -929,14 +944,17 @@ def process_responses_to_excel(base_dir: Optional[str] = None,
     Returns:
         Tupla com os caminhos para os arquivos Excel gerados (completo, simplificado, consolidado)
     """
-    # Definir caminhos
+    # Definir caminhos. Contrato: base_dir é o DIRETÓRIO DE DADOS (o ".data" em si,
+    # honra PATH_DATA) — não a raiz do projeto.
     if base_dir is None:
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    
-    base_path = os.path.join(base_dir, ".data", "OUTPUTS", raw_subdir)
-    yaml_path = os.path.join(base_dir, "Config", "research_questions.yaml")
-    json_path = os.path.join(base_dir, ".data", "OUTPUTS", article_info)
-    output_dir = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses")
+        base_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".data"
+        )
+
+    base_path = os.path.join(base_dir, "OUTPUTS", raw_subdir)
+    yaml_path = _find_research_questions_yaml(base_dir)
+    json_path = os.path.join(base_dir, "OUTPUTS", article_info)
+    output_dir = os.path.join(base_dir, "OUTPUTS", "processed_responses")
     output_path = os.path.join(output_dir, f"{out_prefix}_full.xlsx")
     simple_output_path = os.path.join(output_dir, f"{out_prefix}_simple.xlsx")
     consolidated_output_path = os.path.join(output_dir, f"{out_prefix}_consolidated.xlsx")
@@ -947,7 +965,7 @@ def process_responses_to_excel(base_dir: Optional[str] = None,
     responses_data = read_raw_responses(str(base_path))
     
     print("Lendo perguntas de pesquisa...")
-    questions = read_research_questions(str(yaml_path))
+    questions = read_research_questions(yaml_path) if yaml_path else {}
     
     print("Lendo informações de artigos...")
     articles = read_article_info(str(json_path))

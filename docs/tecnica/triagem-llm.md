@@ -64,6 +64,19 @@ Se os blocos `LLM_CLIENTS_*` estiverem vazios, o Aneta usa **um** LLM (modo lega
 A triagem **retoma com segurança**: re-rodar pula papers já respondidos por aquele LLM
 (ciente de DOI). Se um provedor falhar no meio, basta re-rodar para preencher as lacunas.
 
+Dois contratos que sustentam essa retomada (fixes de 2026-09-05):
+
+- **Raw salvo por artigo, na hora** (abstract, fluxo async): cada resposta é gravada
+  imediatamente como `response_<sequence+1>_..._raw.txt` dentro do worker — um erro no
+  meio do lote não desalinha os índices dos demais (antes, o save em lote ao final
+  comprimia a numeração e o resume podia reaproveitar a resposta do paper errado).
+  O legado síncrono `--abstract_classifier_llm_one_on_one` ainda salva em lote; os
+  clients pi só rodam no fluxo async.
+- **`PATH_DATA` honrado de ponta a ponta**: classificação, consolidação
+  (`--process_responses*`, que usa `<PATH_DATA>/OUTPUTS/...` como base) e filtro
+  operam no mesmo diretório de dados; a legenda de research questions é resolvida
+  como best-effort (base_dir → `PROJECT_PATH` → cwd, em `Config/` ou `config/`).
+
 ---
 
 ## 2. O contrato de resposta (prompt)
