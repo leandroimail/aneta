@@ -189,7 +189,7 @@ def convert_to_json_llm(raw_text: str) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
-def save_parsed_json(parsed_content: Dict[str, Any], provider: str, model: str, file: str, base_dir: Optional[str] = None) -> str:
+def save_parsed_json(parsed_content: Dict[str, Any], provider: str, model: str, file: str, base_dir: Optional[str] = None, json_subdir: str = "final_json") -> str:
     """
     Saves the parsed JSON content to a file organized by provider and model.
     
@@ -199,6 +199,7 @@ def save_parsed_json(parsed_content: Dict[str, Any], provider: str, model: str, 
         model: Model name (e.g., 'gpt-4', 'gemini-pro')
         file: Original file name
         base_dir: Base directory for output (optional)
+        json_subdir: Subdirectory under processed_responses (defaults to 'final_json')
         
     Returns:
         str: Path to the saved JSON file
@@ -208,7 +209,7 @@ def save_parsed_json(parsed_content: Dict[str, Any], provider: str, model: str, 
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     
     # Create the output directory structure
-    output_base = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses", "final_json")
+    output_base = os.path.join(base_dir, ".data", "OUTPUTS", "processed_responses", json_subdir)
     if not os.path.exists(output_base):
         os.makedirs(output_base)
     provider_dir = os.path.join(output_base, provider)
@@ -283,11 +284,10 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
     Returns:
         Dicionário com os dados extraídos organizados por provedor
     """
-    # Determinar diretório base do projeto
-    # base_path é .data/OUTPUTS/raw_responses
-    # Precisamos .data/OUTPUTS/processed_responses/final_json
     outputs_dir = os.path.dirname(base_path)  # .data/OUTPUTS
-    processed_json_base = os.path.join(outputs_dir, "processed_responses", "final_json")
+    raw_folder_name = os.path.basename(base_path)
+    final_json_subdir = "final_json" if raw_folder_name == "raw_responses" else f"final_json_{raw_folder_name}"
+    processed_json_base = os.path.join(outputs_dir, "processed_responses", final_json_subdir)
     
     # Carregar perguntas de pesquisa para uso na extração de texto bruto
     yaml_path = os.path.join(os.path.dirname(base_path), "..", "..", "Config", "research_questions.yaml")
@@ -381,7 +381,7 @@ def read_raw_responses(base_path: str) -> Dict[str, List[Dict[str, Any]]]:
                         
                         # Salvar o JSON processado para reuso futuro
                         if parsed_content and "raw_content" not in parsed_content and "error" not in parsed_content:
-                            save_parsed_json(parsed_content, provider_name, model, file)
+                            save_parsed_json(parsed_content, provider_name, model, file, json_subdir=final_json_subdir)
                     
                     if parsed_content:
                         # Adicionar metadados
@@ -487,14 +487,20 @@ def read_article_info(json_path: str) -> Dict[str, Dict[str, str]]:
     # Criar um mapeamento de ID para informações do artigo
     article_mapping = {}
     for article in articles:
-        article_id = article.get('id')
+        article_id = article.get('id') or article.get('doi')
         if article_id:
-            article_mapping[str(article_id)] = {
+            info = {
                 'title': article.get('title', ''),
                 'abstract': article.get('abstract', ''),
                 'keywords': article.get('keywords', ''),
-                'doi': article.get('doi', '')  # Adicionando o campo DOI
+                'doi': article.get('doi', '') or str(article_id)
             }
+            s = str(article_id).strip()
+            article_mapping[s] = info
+            article_mapping[s.replace('_', '/')] = info
+            article_mapping[s.replace('/', '_')] = info
+            article_mapping[s.lower()] = info
+            article_mapping[s.replace('_', '/').lower()] = info
     
     return article_mapping
 
@@ -519,15 +525,22 @@ def flatten_json_response(response: Dict[str, Any], articles: Dict[str, Dict[str
     
     # Adicionar campo ID
     if 'id' in response:
-        flat_response['id'] = response['id']
+        raw_id = str(response['id']).strip()
+        flat_response['id'] = raw_id
         
-        # Adicionar informações do artigo
-        article_id = str(response['id'])
-        if article_id in articles:
-            flat_response['article_title'] = articles[article_id].get('title', '')
-            flat_response['article_abstract'] = articles[article_id].get('abstract', '')
-            flat_response['article_keywords'] = articles[article_id].get('keywords', '')
-            flat_response['doi'] = articles[article_id].get('doi', '')  # Adicionando o DOI
+        # Adicionar informações do artigo (com fallback normalizado)
+        found_info = (
+            articles.get(raw_id) or
+            articles.get(raw_id.replace('_', '/')) or
+            articles.get(raw_id.replace('/', '_')) or
+            articles.get(raw_id.lower()) or
+            articles.get(raw_id.replace('_', '/').lower())
+        )
+        if found_info:
+            flat_response['article_title'] = found_info.get('title', '')
+            flat_response['article_abstract'] = found_info.get('abstract', '')
+            flat_response['article_keywords'] = found_info.get('keywords', '')
+            flat_response['doi'] = found_info.get('doi', '') or raw_id
     
     # Processar perguntas de pesquisa
     if 'research_questions' in response:
