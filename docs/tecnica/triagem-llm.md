@@ -50,9 +50,10 @@ Variáveis por cliente (resumo — tabela completa em
 > Não há voto/consenso embutido no código de classificação. Cada LLM apenas grava sua
 > resposta; o "voto" emerge na consolidação + filtro SQL.
 
-Se os blocos `LLM_CLIENTS_*` estiverem vazios — e não houver clients pi no
-`config/pi_fast.yaml` para o grupo — o Aneta usa **um** LLM (modo legado
-`LLM_*_ABSTRACT`), 100% compatível.
+Se os blocos `LLM_CLIENTS_*` estiverem vazios: o single-LLM legado configurado
+(`LLM_MODEL_ABSTRACT` + chave) **vence** — mesmo com clients pi no `config/pi_fast.yaml`
+(que são ignorados com aviso). Sem legado configurado, rodam os clients pi do YAML
+(100% compatível com quem só usava o legado e não tem o arquivo).
 
 ### Onde cada LLM grava (respostas brutas)
 
@@ -74,7 +75,8 @@ Dois contratos que sustentam essa retomada (fixes de 2026-09-05):
   imediatamente como `response_<sequence+1>_..._raw.txt` dentro do worker — um erro no
   meio do lote não desalinha os índices dos demais (antes, o save em lote ao final
   comprimia a numeração e o resume podia reaproveitar a resposta do paper errado).
-  O legado síncrono `--abstract_classifier_llm_one_on_one` ainda salva em lote; os
+  O fix vale para o async **e** para o one-on-one síncrono; o modo batch continua
+  gravando 1 raw por LLM (não por artigo). Os
   clients pi só rodam no fluxo async.
 - **`PATH_DATA` honrado de ponta a ponta**: classificação, consolidação
   (`--process_responses*`, que usa `<PATH_DATA>/OUTPUTS/...` como base) e filtro

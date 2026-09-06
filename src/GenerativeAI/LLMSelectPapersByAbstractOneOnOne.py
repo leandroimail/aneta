@@ -768,7 +768,11 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
             new_dict = {}
             for key, value in dict_json.items():
                 new_dict["id"] = key
-                new_dict = new_dict | value
+                if isinstance(value, dict):
+                    new_dict = new_dict | value
+                else:
+                    # payload canônico {"articles": [...]}: mesclar apagaria o valor
+                    return dict_json
             return new_dict
         return dict_json
 
@@ -868,8 +872,7 @@ def _process_articles_for_client_sync(cfg: LLMClientConfig, llm_client: LLMClien
     Processa todos os artigos com UM cliente de LLM (sequencialmente, um por vez).
     Salva respostas brutas/processadas na pasta específica desse LLM.
     """
-    # Lists to store raw and parsed responses
-    raw_responses = []
+    # Lista de análises processadas (os raws são salvos por artigo, imediatamente)
     article_analyses = []
 
     # Identidade/flags vêm do config do cliente (multi-LLM)
@@ -902,9 +905,13 @@ def _process_articles_for_client_sync(cfg: LLMClientConfig, llm_client: LLMClien
                     # raw já está em disco (resume); sem append — o save em lote
                     # com lista filtrada desalinhava os índices (bug B1)
                     
-                    # Tentar processar o conteúdo existente
+                    # Tentar processar o conteúdo existente (json.loads primeiro — a
+                    # limpeza avançada engole o payload canônico {"articles": [...]})
                     try:
-                        parsed_response = clean_and_parse_json(raw_response)
+                        try:
+                            parsed_response = json.loads(raw_response)
+                        except json.JSONDecodeError:
+                            parsed_response = clean_and_parse_json(raw_response)
                         
                         if "raw_content" in parsed_response:
                             parsed_response = convert_to_json_llm(parsed_response["raw_content"], llm_client)
@@ -1024,9 +1031,6 @@ def _process_articles_for_client_sync(cfg: LLMClientConfig, llm_client: LLMClien
         print(f"Error during LLM analysis: {e}")
 
         # Save what we have so far
-        if raw_responses:
-            save_raw_llm_responses(raw_responses, llm_type=llm_type, llm_model=llm_model)
-
         if article_analyses and output_path:
             save_llm_responses_to_file(article_analyses, output_path, llm_type=llm_type, llm_model=llm_model)
 

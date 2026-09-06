@@ -191,3 +191,104 @@ def test_invalid_yaml_yaml_error_is_tolerated(monkeypatch, tmp_path):
     cfgs = load_llm_client_configs("ABSTRACT")
     assert [c.id for c in cfgs] == ["openai-x"]  # client de API segue funcionando
 
+
+
+# --------------------------------------------------------------------------- rodada 2
+
+class _SyncFakeClient:
+    """Client síncrono falso: FALHAR no prompt => invoke levanta; senão JSON válido."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def invoke(self, messages):
+        self.calls += 1
+        prompt = messages[0]["content"]
+        if "FALHAR" in prompt:
+            raise Exception("provider explodiu (simulado)")
+        article_id = "10.1000/a" if "artigo 1" in prompt else "10.1000/c"
+        return json.dumps({
+            "id": article_id,
+            "research_questions": {
+                "principal_research_question": {"answer": "yes", "comment": "c"}
+            },
+            "is_relevant": {"answer": "no", "comment": "c"},
+        })
+
+
+def test_b1_sync_resume_recovers_after_mid_failure(monkeypatch, tmp_path):
+    """B1 no sync: falha no meio + resume deve recuperar os artigos certos (era 0 antes)."""
+    monkeypatch.setenv("PATH_DATA", str(tmp_path))
+    from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import (
+        _process_articles_for_client_sync, clean_and_parse_json,
+    )
+
+    cfg = LLMClientConfig(id="t", name="t", provider="openai", model_name="m",
+                          api_key="x", rate_limit=1000)
+    prompts = ["artigo 1", "artigo 2 FALHAR", "artigo 3"]
+
+    # rodada 1: artigo 2 falha; raws 1 e 3 ficam em disco alinhados
+    _process_articles_for_client_sync(cfg, _SyncFakeClient(), prompts)
+    raw_dir = tmp_path / "OUTPUTS" / "raw_responses" / "t"
+    assert sorted(p.name for p in raw_dir.glob("response_*_raw.txt")) == [
+        "response_1_t_m_raw.txt", "response_3_t_m_raw.txt"]
+
+    # rodada 2 (resume): os 2 ok vêm do disco (0 chamadas) e o falhado É re-tentado
+    recovered = _SyncFakeClient()
+    analyses = _process_articles_for_client_sync(cfg, recovered, prompts)
+    assert recovered.calls == 1
+    assert len(analyses) == 2
+    ids = {a.id for a in analyses}
+    assert ids == {"10.1000/a", "10.1000/c"}
+
+
+def test_clean_and_parse_json_handles_articles_wrapper():
+    """Payload canônico {"articles": [...]} não pode crashar o merge cego dict|list."""
+    from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import (
+        clean_and_parse_json as sync_parse)
+    from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOneAsync import (
+        clean_and_parse_json as async_parse)
+
+    payload = json.dumps({"articles": [{"id": "10.1", "is_relevant": {"answer": "yes"}}]})
+    for parse in (sync_parse, async_parse):
+        assert parse(payload)["articles"][0]["id"] == "10.1"
+
+
+def test_legacy_api_key_env_indirection_resolved(monkeypatch, pi_yaml):
+    """LLM_API_KEY_ENV_<G> (indireção) deve ser resolvida pelo builder legado —
+    antes, o gate via config válida mas o builder não resolvia (sequestro pelo YAML)."""
+    monkeypatch.delenv("LLM_CLIENTS_ABSTRACT", raising=False)
+    monkeypatch.delenv("LLM_CLIENTS", raising=False)
+    monkeypatch.setenv("LLM_MODEL_ABSTRACT", "gemini-2.5-flash")
+    monkeypatch.setenv("LLM_API_KEY_ENV_ABSTRACT", "MINHA_VAR")
+    monkeypatch.setenv("MINHA_VAR", "AIza-indireta")
+    from src.GenerativeAI.multi_llm_config import load_llm_client_configs
+    cfgs = load_llm_client_configs("ABSTRACT")
+    assert len(cfgs) == 1 and cfgs[0].provider == "openai"  # LLM_API_TYPE default
+    assert cfgs[0].model_name == "gemini-2.5-flash"
+    assert cfgs[0].api_key == "AIza-indireta"
+
+
+def test_duplicate_api_roster_id_deduped(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATH_DATA", str(tmp_path))
+    monkeypatch.delenv("PI_FAST_CONFIG_PATH", raising=False)
+    monkeypatch.setenv("LLM_CLIENTS_ABSTRACT", "api-a,api-a")
+    monkeypatch.setenv("LLM_API_A_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_API_A_MODEL", "gpt-x")
+    monkeypatch.setenv("LLM_API_A_API_KEY", "sk")
+    from src.GenerativeAI.multi_llm_config import load_llm_client_configs
+    cfgs = load_llm_client_configs("ABSTRACT")
+    assert [c.id for c in cfgs] == ["api-a"]  # sem voto/custo duplicado
+
+
+def test_yaml_defaults_list_tolerated(monkeypatch, tmp_path):
+    """defaults como lista (AttributeError antes) degrada com aviso; API segue."""
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("defaults: [thinking]\nclients: []\n", encoding="utf-8")
+    monkeypatch.setenv("PI_FAST_CONFIG_PATH", str(bad))
+    monkeypatch.setenv("LLM_CLIENTS_ABSTRACT", "openai-x")
+    monkeypatch.setenv("LLM_OPENAI_X_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_OPENAI_X_MODEL", "gpt-x")
+    monkeypatch.setenv("LLM_OPENAI_X_API_KEY", "sk-x")
+    from src.GenerativeAI.multi_llm_config import load_llm_client_configs
+    assert [c.id for c in load_llm_client_configs("ABSTRACT")] == ["openai-x"]

@@ -174,7 +174,7 @@ def _legacy_single_config(group: str) -> List[LLMClientConfig]:
     llm_type = os.getenv(f"LLM_API_TYPE_{g}", "OpenAI")
     provider = llm_type.strip().lower()
     model_name = os.getenv(f"LLM_MODEL_{g}") or _DEFAULT_MODELS.get(provider)
-    api_key = os.getenv(f"LLM_API_KEY_{g}")
+    api_key = os.getenv(f"LLM_API_KEY_{g}") or os.getenv(os.getenv(f"LLM_API_KEY_ENV_{g}", "") or "")
 
     if not api_key or not model_name:
         return []
@@ -195,13 +195,6 @@ def _legacy_single_config(group: str) -> List[LLMClientConfig]:
             is_reasoner=_env_bool(f"LLM_IS_REASONER_{g}", False),
         )
     ]
-
-
-def _legacy_configured(g: str) -> bool:
-    """True se o modo legado single-LLM tem modelo e chave configurados para o grupo."""
-    return bool(os.getenv(f"LLM_MODEL_{g}")) and bool(
-        os.getenv(f"LLM_API_KEY_{g}") or os.getenv(f"LLM_API_KEY_ENV_{g}")
-    )
 
 
 def load_llm_client_configs(
@@ -240,7 +233,7 @@ def load_llm_client_configs(
     try:
         from src.GenerativeAI.pi_config import load_pi_client_specs
         pi_specs = load_pi_client_specs(group=g)
-    except (ValueError, TypeError) as error:
+    except (ValueError, TypeError, OSError, AttributeError) as error:
         print(f"[pi_fast] ✗ YAML de clients pi inválido — clients pi ignorados: {error}")
         pi_specs = []
     except yaml.YAMLError as error:
@@ -281,19 +274,23 @@ def load_llm_client_configs(
                 seen_ids.add(spec.id)
                 # Colisão: mesmo id configurado como client pi E como client de API no env
                 env_prefix = "LLM_" + re.sub(r"[^A-Z0-9]+", "_", client_id.upper()).strip("_")
-                if os.getenv(f"{env_prefix}_PROVIDER") or os.getenv(f"{env_prefix}_MODEL"):
+                if (os.getenv(f"{env_prefix}_PROVIDER") or os.getenv(f"{env_prefix}_MODEL")
+                        or os.getenv(f"{env_prefix}_MODEL_NAME")):
                     print(f"[multi_llm] aviso: id '{client_id}' existe como client pi E como "
                           "client de API no env — o PI será usado (renomeie se não for intencional)")
                 configs.append(_pi_config(spec))
                 continue
             config = _load_client_config_from_env(client_id, g)
             if config:
+                if config.id in seen_ids:
+                    continue  # id repetido no roster = voto/custo duplicado
                 seen_ids.add(config.id)
                 configs.append(config)
     else:
-        # Roster vazio: legacy configurado tem PRIORIDADE (nunca sequestrar a API de
-        # quem já configurou single-LLM); sem legacy, os clients pi do YAML assumem.
-        legacy = _legacy_single_config(g) if _legacy_configured(g) else []
+        # Roster vazio: fonte única de verdade é o PRÓPRIO builder legado — se ele
+        # produz um client (modelo + chave resolvíveis), o legacy tem prioridade e o
+        # YAML pi é ignorado com aviso; sem legacy, os clients pi do YAML assumem.
+        legacy = _legacy_single_config(g)
         if legacy:
             if pi_specs:
                 print(f"[pi_fast] grupo {g}: roster vazio e single-LLM legado configurado — "

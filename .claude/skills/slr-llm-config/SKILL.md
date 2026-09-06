@@ -45,7 +45,7 @@ consolidated per DOI and turned into a decision by the inclusion clause
 ```env
 LLM_CLIENTS_FULL_TEXT=deepseek_full,google_full,openai_full
 
-LLM_DEEPSEEK_FULL_PROVIDER=deepseek          # openai | google | deepseek
+LLM_DEEPSEEK_FULL_PROVIDER=deepseek          # openai | google | gemini | deepseek
 LLM_DEEPSEEK_FULL_MODEL=deepseek-v4-pro
 LLM_DEEPSEEK_FULL_API_KEY_ENV=DEEPSEEK_API_KEY   # name of the env var with the key
 LLM_DEEPSEEK_FULL_BASE_URL=https://api.deepseek.com
@@ -96,5 +96,6 @@ do provider (openai-codex, opencode-go, zai) em vez de crédito de API.
 - Configuração em **`config/pi_fast.yaml`** (providers/modelos/thinking/concorrência) —
   sem chaves; o pi usa a auth local de cada provider.
 - Para ativar, cite os ids pi no roster do grupo (ex.:
-  `LLM_CLIENTS_ABSTRACT=google-flash,pi-glm`) ou deixe o roster vazio (roda só o YAML).
+  `LLM_CLIENTS_ABSTRACT=google-flash,pi-glm`). Com o roster vazio: single-LLM legado
+  configurado vence (YAML pi ignorado, com aviso); sem legado, rodam os clients pi.
 - Detalhes: `docs/tecnica/pi-fast.md`.

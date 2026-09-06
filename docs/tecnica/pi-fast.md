@@ -11,6 +11,7 @@ coding-plan (OpenAI Codex, OpenCode Go, Z.ai) em vez de crédito por token de AP
   themes/context-files) + `--provider` + `--model` + `--thinking`.
 - O **prompt entra por stdin** (testado com 450K chars — sem limite de argv) e a
   resposta é o **stdout** do CLI (JSON da análise; cercas ```json são toleradas).
+- Os caminhos de dados seguem `<PATH_DATA>/OUTPUTS/...` (honra `PATH_DATA`).
 - O client implementa o mesmo contrato dos demais (`async_invoke(messages) -> str`
   cancelável via `asyncio.create_subprocess_exec` + `wait_for`), então **resume,
   rate-limit, semáforo e consolidação funcionam sem nenhuma mudança** — os raws vão
@@ -67,6 +68,10 @@ clients:
 | vazio | single-LLM legado se configurado; senão, clients pi do YAML |
 
 Seleção de um único client continua pelo `--llm <id|name|model>` (ex.: `--llm pi-glm`).
+- **Colisão de id**: se o mesmo id existe como client pi e como client de API no env,
+  o **pi vence** (com aviso) — renomeie um deles se não for intencional.
+- **Multi-match do `--llm`**: um token que case mais de um client (ex.: mesmo model em
+  API e pi) gera aviso; prefira selecionar pelo `id`.
 
 ## Validação
 

@@ -136,6 +136,8 @@ class PiClient:
                 process.communicate(timeout=5)
             except (subprocess.TimeoutExpired, ValueError):
                 _signal_group(pgid, signal.SIGKILL)
+                if pgid is None:
+                    process.kill()  # defesa: sem pgid, mata ao menos o filho direto
                 try:
                     process.communicate(timeout=2)
                 except (subprocess.TimeoutExpired, ValueError):
@@ -174,6 +176,8 @@ class PiClient:
                 await asyncio.wait_for(process.wait(), timeout=5)
             except asyncio.TimeoutError:
                 _signal_group(pgid, signal.SIGKILL)
+                if pgid is None:
+                    process.kill()
                 await process.wait()
             elapsed = asyncio.get_event_loop().time() - started
             raise Exception(

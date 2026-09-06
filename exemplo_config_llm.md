@@ -46,7 +46,7 @@ em maiúsculas (ex.: `openai-nano` → `LLM_OPENAI_NANO_*`).
 
 | Variável                 | Obrigatória | Descrição |
 |--------------------------|-------------|-----------|
-| `LLM_<ID>_PROVIDER`      | sim         | `openai`, `gemini` ou `deepseek` |
+| `LLM_<ID>_PROVIDER`      | sim         | `openai`, `google`, `gemini` ou `deepseek` |
 | `LLM_<ID>_MODEL`         | sim         | nome do modelo |
 | `LLM_<ID>_API_KEY_ENV`   | sim*        | nome da variável que contém a chave (indireção/reuso) |
 | `LLM_<ID>_API_KEY`       | sim*        | alternativa: chave inline (*ao menos uma das duas*) |
@@ -66,9 +66,11 @@ em maiúsculas (ex.: `openai-nano` → `LLM_OPENAI_NANO_*`).
 
 ## Compatibilidade (single-LLM)
 
-Se `LLM_CLIENTS_ABSTRACT` (e o genérico `LLM_CLIENTS`) estiverem **vazios/ausentes** — e não
-houver clients pi no YAML para o grupo — o Aneta usa exatamente **um** LLM, derivado das
-variáveis legadas — comportamento 100% idêntico ao atual:
+Se `LLM_CLIENTS_ABSTRACT` (e o genérico `LLM_CLIENTS`) estiverem **vazios/ausentes**, o
+single-LLM legado configurado **vence** (mesmo com clients pi no `config/pi_fast.yaml`,
+que são ignorados com aviso). Sem legado configurado, rodam os clients pi do YAML —
+100% compatível com quem só usava o legado e não tem o arquivo. Nesse caso o Aneta usa
+exatamente **um** LLM, derivado das variáveis legadas:
 
 ```env
 LLM_MODEL_ABSTRACT=gemini-2.5-flash
@@ -101,7 +103,7 @@ comando o usa ainda.
 
 ## Alternativa sem API: clients pi-fast (harness PI)
 
-Além dos providers de API acima (`openai | google | deepseek`), os grupos podem incluir
+Além dos providers de API acima (`openai | google | gemini | deepseek`), os grupos podem incluir
 clients que rodam o **CLI `pi` local** (assim não há chamada de API — a auth é a
 assinatura local de cada provider). Provedores/modelos do pi são configurados em
 **`config/pi_fast.yaml`** e os ids entram no `LLM_CLIENTS_*` normalmente. Detalhes em

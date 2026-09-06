@@ -922,7 +922,11 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
             new_dict = {}
             for key, value in dict_json.items():
                 new_dict["id"] = key
-                new_dict = new_dict | value
+                if isinstance(value, dict):
+                    new_dict = new_dict | value
+                else:
+                    # payload canônico {"articles": [...]}: mesclar apagaria o valor
+                    return dict_json
             return new_dict
         return dict_json
 
@@ -1198,7 +1202,8 @@ async def process_article_async_with_rate_limit(article: SequencedArticle,
                     # Se ainda contiver raw_content, tentar convert_to_json_llm
                     if "raw_content" in parsed_response:
                         print(f"⚠ Attempting LLM conversion for article {article.sequence+1}")
-                        parsed_response = await asyncio.to_thread(convert_to_json_llm, parsed_response["raw_content"], llm_client)
+                        async with semaphore:
+                            parsed_response = await asyncio.to_thread(convert_to_json_llm, parsed_response["raw_content"], llm_client)
                 
                 if "raw_content" in parsed_response:
                     parsed_response = parsed_response["raw_content"]

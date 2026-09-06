@@ -111,5 +111,5 @@ conforme a IDE. Detalhes em [facilitador.md](../tecnica/facilitador.md).
   por `os.getenv`.
 - **Não** commite nada sob `.data/` (saída de execução, gitignored).
 - Reporte erros/timeouts do log em vez de assumir sucesso.
-- Para runs de revisão completos, prefira o facilitador (`/slr-orchestrator`): ele já
+- Para runs de revisão completos, prefira o facilitador (agente `slr-orchestrator`): ele já
   aplica este padrão e mantém os checkpoints humanos explícitos.

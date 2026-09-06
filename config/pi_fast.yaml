@@ -3,8 +3,8 @@
 #
 # Cada client abaixo é um "voto" nos grupos informados, igual a um client de
 # API: entre no grupo desejado via LLM_CLIENTS_<GRUPO> (config/.env) listando
-# o id (ex.: LLM_CLIENTS_ABSTRACT=google-flash,pi-glm), ou deixe o grupo só
-# com clients pi.
+# o id (ex.: LLM_CLIENTS_ABSTRACT=google-flash,pi-glm). Com o roster vazio,
+# o single-LLM legado configurado tem prioridade — o YAML só assume sem ele.
 #
 # Provedores/modelos válidos: `pi --list-models` (openai-codex, opencode-go,
 # zai, minimax, ...). O pi usa a auth local de cada provider — NADA de chaves

@@ -77,6 +77,8 @@ def config_path() -> str:
 
 
 def _as_int(value, what: str) -> int:
+    if isinstance(value, bool):  # bool é int em Python: true viraria 1 silenciosamente
+        raise ValueError(f"pi_fast: {what} deve ser inteiro, recebido booleano")
     try:
         return int(value)
     except (TypeError, ValueError) as error:
@@ -124,6 +126,8 @@ def _parse_client(raw: dict, defaults: dict) -> PiClientSpec:
     if not provider:
         raise ValueError(f"pi_fast: client '{client_id}' sem 'provider' (ex.: openai-codex, opencode-go, zai)")
 
+    if "groups" in raw and raw["groups"] is not None and not raw["groups"]:
+        raise ValueError(f"pi_fast: client '{client_id}' com 'groups' vazio — remova a chave ou liste grupos")
     groups = raw.get("groups") or list(PI_VALID_GROUPS)
     if isinstance(groups, str):
         raise ValueError(
@@ -204,6 +208,8 @@ def load_pi_client_specs(
         )
 
     defaults = data.get("defaults") or {}
+    if not isinstance(defaults, dict):
+        raise ValueError(f"pi_fast: 'defaults' deve ser um mapping, recebido {type(defaults).__name__}")
     unknown_defaults = set(defaults) - _ALLOWED_DEFAULT_KEYS
     if unknown_defaults:
         raise ValueError(

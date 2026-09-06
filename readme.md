@@ -7,8 +7,8 @@ Biblioteca Python para automação de revisões sistemáticas da literatura cien
 O repositório traz um **facilitador de IA** que conduz o pipeline de SLR passo a passo,
 **confirmando cada comando com você** (human-in-the-loop), com detecção de fase e retomada.
 Funciona em **Claude Code**, **OpenCode** e **OpenAI Codex** a partir de um conjunto único de
-agentes e skills (definições canônicas em `.agents/`, espelhadas em `.claude/`, `.codex/` e
-`.opencode/`):
+agentes e skills (definições canônicas em `.agents/`; agentes espelhados em `.claude/`, `.codex/` e
+`.opencode/`; skills em `.agents/` e `.claude/`):
 
 - **Orquestrador**: `.agents/agents/slr-orchestrator.md` — comece por ele: peça pelo agente
   `slr-orchestrator` na sua IDE ("start systematic review", "continue the review") ou pela
