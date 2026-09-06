@@ -542,7 +542,7 @@ def setup_llms(group: str = "ABSTRACT", selected: Optional[Union[str, List[str]]
     pi_left = [c for c in configs if c.provider.lower() == "pi"]
     if pi_left:
         print(f"[pi_fast] aviso: {len(pi_left)} client(s) pi ({', '.join(c.id for c in pi_left)}) "
-              f"não rodam neste fluxo legado — use {hint}")
+              f"não rodam neste fluxo legado — use --abstract_classifier_llm_one_on_one_async")
         configs = [c for c in configs if c.provider.lower() != "pi"]
     if not configs:
         msg = (
@@ -899,8 +899,8 @@ def _process_articles_for_client_sync(cfg: LLMClientConfig, llm_client: LLMClien
                     individual_path = os.path.join(output_dir, f"response_{idx+1}_{llm_type}_{llm_model}_raw.txt")
                     with open(individual_path, 'r', encoding='utf-8') as f:
                         raw_response = f.read()
-                        
-                    raw_responses.append(raw_response)
+                    # raw já está em disco (resume); sem append — o save em lote
+                    # com lista filtrada desalinhava os índices (bug B1)
                     
                     # Tentar processar o conteúdo existente
                     try:
@@ -944,7 +944,14 @@ def _process_articles_for_client_sync(cfg: LLMClientConfig, llm_client: LLMClien
             try:
                 # Get raw response
                 raw_response = llm_client.invoke(messages)
-                raw_responses.append(raw_response)
+                # Salva o raw IMEDIATAMENTE com o índice REAL do artigo (fix B1 no sync):
+                # o save em lote no fim renumerava a lista de sucessos e desalinhava
+                # o resume/consolidação quando algum artigo falhava no meio.
+                try:
+                    with open(os.path.join(output_dir, f"response_{idx+1}_{llm_type}_{llm_model}_raw.txt"), "w", encoding="utf-8") as f_raw:
+                        f_raw.write(raw_response)
+                except OSError as e:
+                    print(f"⚠ Could not save raw response for article {idx+1}: {e}")
                 
                 # Try to parse as JSON
                 try:
@@ -1003,8 +1010,7 @@ def _process_articles_for_client_sync(cfg: LLMClientConfig, llm_client: LLMClien
                 print(f"⚠ Error getting response for article {idx+1}: {e}")
                 continue
         
-        # Save all raw responses to files
-        save_raw_llm_responses(raw_responses, llm_type=llm_type, llm_model=llm_model)
+        # Raws já foram salvos por artigo (imediato, índice real) — fix B1.
 
         # Save processed responses to file if output_path is specified
         if output_path and article_analyses:

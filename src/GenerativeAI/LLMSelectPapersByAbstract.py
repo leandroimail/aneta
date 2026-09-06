@@ -523,7 +523,7 @@ def setup_llms(group: str = "ABSTRACT", selected: Optional[Union[str, List[str]]
     pi_left = [c for c in configs if c.provider.lower() == "pi"]
     if pi_left:
         print(f"[pi_fast] aviso: {len(pi_left)} client(s) pi ({', '.join(c.id for c in pi_left)}) "
-              f"não rodam neste fluxo legado — use {hint}")
+              f"não rodam neste fluxo legado — use --abstract_classifier_llm_one_on_one_async")
         configs = [c for c in configs if c.provider.lower() != "pi"]
     if not configs:
         msg = (

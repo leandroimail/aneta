@@ -191,7 +191,7 @@ def build_fulltext_prompts(input_bib: Optional[str] = None) -> Tuple[List[Dict[s
 
 def _normalize_doi(value: str) -> str:
     """Lowercase + remove prefixo de resolver (https://doi.org/...); base do skip/resume."""
-    return re.sub(r'^(https?://(dx\.)?doi\.org/)', '', str(value or "").strip().lower())
+    return re.sub(r'^(?:https?://(?:dx\.)?doi\.org/|doi:)', '', str(value or "").strip().lower())
 
 
 # --------------------------------------------------------------------------- execução

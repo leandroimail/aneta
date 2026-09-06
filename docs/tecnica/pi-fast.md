@@ -47,12 +47,15 @@ clients:
     model: glm-5.2
 ```
 
-- Provedores/modelos válidos: `pi --list-models`.
+- Provedores/modelos válidos: `pi --list-models`. Override do caminho do arquivo:
+  env `PI_FAST_CONFIG_PATH`.
+- Nomenclatura: `id` e `model` **sem underscore**; `name` com 1..31 chars de
+  `[A-Za-z0-9-]` (viram nomes de arquivo/pasta na consolidação).
 - **Sem segredos neste arquivo**: o pi usa a auth local de cada provider. Campos
   desconhecidos (ex.: `api_key`) são rejeitados ao carregar.
 - Para ativar: cite os ids no grupo desejado (`config/.env`), puro ou misto com APIs:
-  `LLM_CLIENTS_ABSTRACT=google-flash,pi-glm` — ou deixe o roster vazio e o grupo usará
-  apenas os clients pi do YAML (com log avisando).
+  `LLM_CLIENTS_ABSTRACT=google-flash,pi-glm` — ou deixe o roster vazio (roda os clients pi
+  do YAML apenas quando não houver single-LLM legado configurado para o grupo; com aviso).
 
 ## Composição e seleção
 
@@ -61,7 +64,7 @@ clients:
 | só ids de API | painel de API (como sempre) |
 | ids de API + ids pi | painel misto (votos de API e pi na mesma consolidação) |
 | só ids pi | triagem 100% pi-fast |
-| vazio | clients pi do YAML (se houver p/ o grupo); senão, fallback legado single-LLM |
+| vazio | single-LLM legado se configurado; senão, clients pi do YAML |
 
 Seleção de um único client continua pelo `--llm <id|name|model>` (ex.: `--llm pi-glm`).
 

@@ -101,9 +101,9 @@ e as contagens por LLM em `.data/OUTPUTS/raw_responses*/<llm>/`.
 ## 5. Uso com agentes
 
 O facilitador cross-IDE usa o mesmo padrão de execução, mas detecta a fase atual, mostra o
-funil e pede confirmação antes de cada comando. Use `/slr-orchestrator`, "continue the
-review", "start systematic review" ou `/status`, conforme a IDE. Detalhes em
-[facilitador.md](../tecnica/facilitador.md).
+funil e pede confirmação antes de cada comando. Peça pelo agente `slr-orchestrator`
+(ex.: "continue the review" ou "start systematic review") ou pela skill `slr-status`,
+conforme a IDE. Detalhes em [facilitador.md](../tecnica/facilitador.md).
 
 ## 6. Boas práticas
 

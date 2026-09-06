@@ -150,3 +150,32 @@ def test_constants_exist():
     assert PI_DEFAULT_THINKING == "off"
     assert PI_DEFAULT_TIMEOUT_SECONDS == 200
     assert PI_DEFAULT_MAX_CONCURRENT == 4
+
+
+def test_enabled_string_false_excludes(pi_config_path):
+    pi_config_path(VALID_YAML.replace("id: pi-deepseek", "id: pi-deepseek\n    enabled: \"false\""))
+    assert [s.id for s in load_pi_client_specs()] == ["pi-luna"]
+
+
+def test_rate_limit_nan_rejected(pi_config_path):
+    pi_config_path(VALID_YAML.replace("rate_limit: 30", "rate_limit: .nan"))
+    with pytest.raises(ValueError, match="rate_limit"):
+        load_pi_client_specs()
+
+
+def test_negative_rate_limit_rejected(pi_config_path):
+    pi_config_path(VALID_YAML.replace("rate_limit: 30", "rate_limit: -5"))
+    with pytest.raises(ValueError, match="rate_limit"):
+        load_pi_client_specs()
+
+
+def test_invalid_thinking_rejected(pi_config_path):
+    pi_config_path(VALID_YAML.replace("thinking: off", "thinking: TURBO"))
+    with pytest.raises(ValueError, match="thinking"):
+        load_pi_client_specs()
+
+
+def test_groups_as_string_rejected(pi_config_path):
+    pi_config_path(VALID_YAML.replace("groups: [ABSTRACT, FULL_TEXT]", "groups: ABSTRACT"))
+    with pytest.raises(ValueError, match="lista"):
+        load_pi_client_specs()

@@ -91,16 +91,16 @@ def _analysis_json(doi: str, answer: str) -> str:
 
 
 def test_pi_raws_flow_through_consolidation(tmp_path, monkeypatch):
-    base = tmp_path
-    monkeypatch.setenv("PATH_DATA", str(base / ".data"))
-    raw_dir = base / ".data" / "OUTPUTS" / "raw_responses" / "pi-luna"
+    base = tmp_path / ".data"   # contrato novo: base_dir É o diretório de dados
+    monkeypatch.setenv("PATH_DATA", str(base))
+    raw_dir = base / "OUTPUTS" / "raw_responses" / "pi-luna"
     raw_dir.mkdir(parents=True)
     (raw_dir / "response_1_pi-luna_gpt-5.6-luna_raw.txt").write_text(
         _analysis_json("10.1000/one", "yes"), encoding="utf-8")
     (raw_dir / "response_2_pi-luna_gpt-5.6-luna_raw.txt").write_text(
         _analysis_json("10.1000/two", "no"), encoding="utf-8")
 
-    bibs_dir = base / ".data" / "OUTPUTS"
+    bibs_dir = base / "OUTPUTS"
     (bibs_dir / "select_bibs.json").write_text(json.dumps([
         {"id": "10.1000/one", "doi": "10.1000/one", "title": "One",
          "abstract": "a", "keywords": "k"},
@@ -127,3 +127,67 @@ def test_pi_raws_flow_through_consolidation(tmp_path, monkeypatch):
     by_doi = {row["doi"]: row for row in rows}
     assert by_doi["10.1000/one"]["is_relevant_yes_count"] == 1
     assert by_doi["10.1000/two"]["is_relevant_no_count"] == 1
+
+
+# --------------------------------------------------------------------------- pi×legacy
+
+PI_YAML = """
+defaults: {thinking: off, timeout_seconds: 200, max_concurrent: 4, rate_limit: 30}
+clients:
+  - id: pi-glm
+    groups: [ABSTRACT]
+    provider: zai
+    model: glm-5.2
+"""
+
+
+@pytest.fixture()
+def pi_yaml(tmp_path, monkeypatch):
+    cfg = tmp_path / "pi_fast.yaml"
+    cfg.write_text(PI_YAML, encoding="utf-8")
+    monkeypatch.setenv("PI_FAST_CONFIG_PATH", str(cfg))
+    return str(cfg)
+
+
+def test_sync_flow_filters_pi_without_crash(monkeypatch, pi_yaml):
+    """Regressão do NameError: fluxo sync com client pi deve FILTRAR com aviso, não crashar."""
+    monkeypatch.setenv("LLM_CLIENTS_ABSTRACT", "pi-glm")
+    from src.GenerativeAI.LLMSelectPapersByAbstractOneOnOne import setup_llms as sync_setup
+    with pytest.raises(ValueError, match="Nenhum LLM configurado"):
+        sync_setup("ABSTRACT")  # pi filtrado com aviso; erro claro, nada de NameError
+
+
+def test_legacy_wins_over_yaml_when_configured(monkeypatch, pi_yaml):
+    """Roster vazio + single-LLM legado configurado: o legado NÃO é sequestrado pelo YAML pi."""
+    monkeypatch.delenv("LLM_CLIENTS_ABSTRACT", raising=False)
+    monkeypatch.delenv("LLM_CLIENTS", raising=False)
+    monkeypatch.setenv("LLM_MODEL_ABSTRACT", "gpt-4.1-mini")
+    monkeypatch.setenv("LLM_API_KEY_ABSTRACT", "sk-legacy")
+    from src.GenerativeAI.multi_llm_config import load_llm_client_configs
+    cfgs = load_llm_client_configs("ABSTRACT")
+    assert [(c.id, c.provider) for c in cfgs] == [("OpenAI", "openai")]
+
+
+def test_yaml_pi_used_when_no_roster_and_no_legacy(monkeypatch, pi_yaml):
+    monkeypatch.delenv("LLM_CLIENTS_ABSTRACT", raising=False)
+    monkeypatch.delenv("LLM_CLIENTS", raising=False)
+    monkeypatch.delenv("LLM_MODEL_ABSTRACT", raising=False)
+    monkeypatch.delenv("LLM_API_KEY_ABSTRACT", raising=False)
+    from src.GenerativeAI.multi_llm_config import load_llm_client_configs
+    cfgs = load_llm_client_configs("ABSTRACT")
+    assert [(c.id, c.provider, c.harness_provider) for c in cfgs] == [("pi-glm", "pi", "zai")]
+
+
+def test_invalid_yaml_yaml_error_is_tolerated(monkeypatch, tmp_path):
+    """YAML com sintaxe inválida (tab) não pode derrubar a triagem (era TypeError/YAMLError)."""
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("clients:\n\t- id: x\n", encoding="utf-8")
+    monkeypatch.setenv("PI_FAST_CONFIG_PATH", str(bad))
+    monkeypatch.setenv("LLM_CLIENTS_ABSTRACT", "openai-x")
+    monkeypatch.setenv("LLM_OPENAI_X_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_OPENAI_X_MODEL", "gpt-4.1-mini")
+    monkeypatch.setenv("LLM_OPENAI_X_API_KEY", "sk-x")
+    from src.GenerativeAI.multi_llm_config import load_llm_client_configs
+    cfgs = load_llm_client_configs("ABSTRACT")
+    assert [c.id for c in cfgs] == ["openai-x"]  # client de API segue funcionando
+

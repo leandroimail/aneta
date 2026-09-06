@@ -39,7 +39,7 @@ Variáveis por cliente (resumo — tabela completa em
 
 | Variável | Obrigatória | Descrição |
 |---|---|---|
-| `LLM_<ID>_PROVIDER` | sim | `openai`, `gemini` ou `deepseek` |
+| `LLM_<ID>_PROVIDER` | sim | `openai`, `google`, `gemini` ou `deepseek` |
 | `LLM_<ID>_MODEL` | sim | nome do modelo |
 | `LLM_<ID>_API_KEY_ENV` *ou* `LLM_<ID>_API_KEY` | sim | nome da var com a chave (indireção) ou chave inline |
 | `LLM_<ID>_RATE_LIMIT` | não | req/s (default: rate-limit do grupo) |
@@ -50,7 +50,8 @@ Variáveis por cliente (resumo — tabela completa em
 > Não há voto/consenso embutido no código de classificação. Cada LLM apenas grava sua
 > resposta; o "voto" emerge na consolidação + filtro SQL.
 
-Se os blocos `LLM_CLIENTS_*` estiverem vazios, o Aneta usa **um** LLM (modo legado
+Se os blocos `LLM_CLIENTS_*` estiverem vazios — e não houver clients pi no
+`config/pi_fast.yaml` para o grupo — o Aneta usa **um** LLM (modo legado
 `LLM_*_ABSTRACT`), 100% compatível.
 
 ### Onde cada LLM grava (respostas brutas)
@@ -61,8 +62,11 @@ Se os blocos `LLM_CLIENTS_*` estiverem vazios, o Aneta usa **um** LLM (modo lega
 | batch | `.data/OUTPUTS/select_bibs_filtered_by_abstract_<NAME>_<MODEL>_raw.txt` |
 | texto completo | `.data/OUTPUTS/raw_responses_fulltext/<NAME>/response_<n>_…_raw.txt` |
 
-A triagem **retoma com segurança**: re-rodar pula papers já respondidos por aquele LLM
-(ciente de DOI). Se um provedor falhar no meio, basta re-rodar para preencher as lacunas.
+A triagem **retoma com segurança**: re-rodar pula papers já respondidos por aquele LLM.
+No full-text o skip é ciente de DOI (compara o `id` salvo com o esperado); no abstract
+o skip é por existência do arquivo — seguro porque os raws são gravados por artigo com
+índice estável (sequence+1). Se um provedor falhar no meio, basta re-rodar para preencher
+as lacunas.
 
 Dois contratos que sustentam essa retomada (fixes de 2026-09-05):
 

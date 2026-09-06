@@ -10,17 +10,21 @@ Funciona em **Claude Code**, **OpenCode** e **OpenAI Codex** a partir de um conj
 agentes e skills (definições canônicas em `.agents/`, espelhadas em `.claude/`, `.codex/` e
 `.opencode/`):
 
-- **Orquestrador**: `.agents/agents/slr-orchestrator.md` — comece por ele (`/slr-orchestrator`,
-  "start systematic review", "continue the review" ou `/status`).
+- **Orquestrador**: `.agents/agents/slr-orchestrator.md` — comece por ele: peça pelo agente
+  `slr-orchestrator` na sua IDE ("start systematic review", "continue the review") ou pela
+  skill `slr-status` ("onde estamos?").
 - **Agentes de fase**: `slr-setup` → `slr-search` → `slr-abstract-screening` →
   `slr-acquisition` → `slr-fulltext-screening` → `slr-reporting`.
 - **Skills**: `aneta-runner` (como executar o `aneta.py`), `slr-status` (funil/retomada) e as
   skills de autoria da metodologia (`slr-protocol`, `slr-search-strategy`,
   `slr-inclusion-criteria`, `slr-llm-config`, `slr-project-config`), além de
   `slr-pdf-acquisition` e `slr-decision-review`.
-- **Documentação**: `docs/tutorial.md` (início), `docs/como-fazer/` (executar, aquisição de
-  PDFs) e `docs/tecnica/` (arquitetura, pipeline, busca-dsl, triagem-llm, configuração,
-  facilitador, saídas do funil). Visão geral do facilitador: `docs/tecnica/facilitador.md`.
+- **Documentação**: `docs/como-fazer/` (executar, aquisição de PDFs) e `docs/tecnica/`
+  (arquitetura, pipeline, busca-dsl, triagem-llm, configuração, facilitador, pi-fast,
+  saídas do funil). Visão geral do facilitador: `docs/tecnica/facilitador.md`.
+  *Obs.:* `docs/tutorial.md`, `pipeline.md`, `busca-dsl.md`, `saidas-funil.md` e
+  `aquisicao-pdfs.md` estão em sincronização pendente do OneDrive — ver
+  `docs/tecnica/pendencias-onedrive.md`.
 
 Sem agentes, o resultado é o mesmo: rode `aneta.py` diretamente (ver
 `docs/como-fazer/executar.md`).

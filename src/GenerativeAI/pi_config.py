@@ -18,6 +18,7 @@ Nada de segredos aqui: o pi usa a auth local de cada provider (codex/opencode/za
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -41,6 +42,16 @@ _ALLOWED_CLIENT_KEYS = {
     "overwrite", "enabled",
 }
 _ALLOWED_TOP_KEYS = {"defaults", "clients"}
+PI_VALID_THINKING = {"off", "minimal", "low", "medium", "high", "xhigh", "max"}
+
+
+def _as_bool(value, default: bool) -> bool:
+    """Booleans de YAML sem pegadinha: a string "false" deve desligar, não ligar."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default
 _ALLOWED_DEFAULT_KEYS = {"thinking", "timeout_seconds", "max_concurrent", "rate_limit"}
 
 
@@ -114,13 +125,21 @@ def _parse_client(raw: dict, defaults: dict) -> PiClientSpec:
         raise ValueError(f"pi_fast: client '{client_id}' sem 'provider' (ex.: openai-codex, opencode-go, zai)")
 
     groups = raw.get("groups") or list(PI_VALID_GROUPS)
+    if isinstance(groups, str):
+        raise ValueError(
+            f"pi_fast: 'groups' deve ser uma lista (ex.: [ABSTRACT, FULL_TEXT]), recebido {groups!r}"
+        )
     invalid = [g for g in groups if g not in PI_VALID_GROUPS]
     if invalid:
         raise ValueError(
             f"pi_fast: grupo(s) inválido(s) {invalid} — use {list(PI_VALID_GROUPS)}"
         )
 
-    thinking = str(raw.get("thinking") or defaults.get("thinking") or PI_DEFAULT_THINKING)
+    thinking = str(raw.get("thinking") or defaults.get("thinking") or PI_DEFAULT_THINKING).strip().lower()
+    if thinking not in PI_VALID_THINKING:
+        raise ValueError(
+            f"pi_fast: thinking '{thinking}' inválido — use um de {sorted(PI_VALID_THINKING)}"
+        )
     timeout_seconds = _clamp(
         _as_int(
             raw.get("timeout_seconds", defaults.get("timeout_seconds", PI_DEFAULT_TIMEOUT_SECONDS)),
@@ -138,6 +157,10 @@ def _parse_client(raw: dict, defaults: dict) -> PiClientSpec:
         16,
     )
     rate_limit = float(raw.get("rate_limit", defaults.get("rate_limit", PI_DEFAULT_RATE_LIMIT)))
+    if not math.isfinite(rate_limit) or rate_limit < 0:
+        raise ValueError(
+            f"pi_fast: rate_limit '{raw.get('rate_limit')}' inválido — use um número >= 0"
+        )
 
     return PiClientSpec(
         id=client_id,
@@ -149,7 +172,7 @@ def _parse_client(raw: dict, defaults: dict) -> PiClientSpec:
         timeout_seconds=timeout_seconds,
         max_concurrent=max_concurrent,
         rate_limit=rate_limit,
-        overwrite=bool(raw.get("overwrite", False)),
+        overwrite=_as_bool(raw.get("overwrite"), False),
     )
 
 
@@ -195,7 +218,7 @@ def load_pi_client_specs(
     seen: set = set()
     for raw in raw_clients:
         spec = _parse_client(raw, defaults)
-        if not bool(raw.get("enabled", True)):
+        if not _as_bool(raw.get("enabled"), True):
             continue
         if spec.id in seen:
             raise ValueError(f"pi_fast: id de client duplicado: {spec.id}")

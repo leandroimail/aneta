@@ -57,17 +57,18 @@ em maiúsculas (ex.: `openai-nano` → `LLM_OPENAI_NANO_*`).
 | `LLM_<ID>_NAME`          | não         | nome de exibição/pasta de saída; default = `<id>` |
 | `LLM_<ID>_ENABLED`       | não         | `false` desabilita o cliente |
 
-> Sobre providers: use `openai`, `google` ou `deepseek` — `google` é o Gemini via endpoint
-> OpenAI-compatível (base URL já embutida no código). O valor `gemini` só funciona se você
-> definir também `LLM_<ID>_BASE_URL`.
+> Sobre providers: `google` é o Gemini via endpoint OpenAI-compatível (base URL já embutida
+> no código); `gemini` é o client nativo google.genai (ignora `BASE_URL`). Ambos falam com
+> o Gemini — escolha um dos dois.
 
 > **Dica:** prefira *ids* com hífen (`openai-nano`) em vez de underscore — os nomes de arquivo de
 > saída ficam mais limpos para o passo de consolidação.
 
 ## Compatibilidade (single-LLM)
 
-Se `LLM_CLIENTS_ABSTRACT` (e o genérico `LLM_CLIENTS`) estiverem **vazios/ausentes**, o Aneta usa
-exatamente **um** LLM, derivado das variáveis legadas — comportamento 100% idêntico ao atual:
+Se `LLM_CLIENTS_ABSTRACT` (e o genérico `LLM_CLIENTS`) estiverem **vazios/ausentes** — e não
+houver clients pi no YAML para o grupo — o Aneta usa exatamente **um** LLM, derivado das
+variáveis legadas — comportamento 100% idêntico ao atual:
 
 ```env
 LLM_MODEL_ABSTRACT=gemini-2.5-flash
@@ -81,8 +82,8 @@ LLM_OVERWRITE_ABSTRACT=false
 
 Cada LLM grava de forma independente:
 
-- **one-on-one (sync/async):** `\.data/OUTPUTS/raw_responses/<NAME>/response_<n>_<NAME>_<MODEL>_raw.txt`
-- **batch:** `\.data/OUTPUTS/select_bibs_filtered_by_abstract_<NAME>_<MODEL>_raw.txt`
+- **one-on-one (sync/async):** `.data/OUTPUTS/raw_responses/<NAME>/response_<n>_<NAME>_<MODEL>_raw.txt`
+- **batch:** `.data/OUTPUTS/select_bibs_filtered_by_abstract_<NAME>_<MODEL>_raw.txt`
 
 O passo `--process_responses` lê todas as subpastas de `raw_responses/` (uma por LLM) e mescla por
 DOI; `--filter_relevant_papers` aplica o SQL configurável sobre o resultado.

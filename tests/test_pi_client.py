@@ -67,6 +67,8 @@ def test_golden_command_argv(fake_pi, monkeypatch):
     captured = {}
 
     class FakePopen:
+        pid = 987654
+
         def __init__(self, argv, **kwargs):
             captured["argv"] = argv
             captured["kwargs"] = kwargs
@@ -77,6 +79,7 @@ def test_golden_command_argv(fake_pi, monkeypatch):
             return '{"ok": true}', ""
 
     monkeypatch.setattr("src.GenerativeAI.pi_client.subprocess.Popen", FakePopen)
+    monkeypatch.setattr("src.GenerativeAI.pi_client.os.getpgid", lambda pid: pid)
     client = _client(fake_pi(FAKE_PI_ECHO), provider="openai-codex", model="gpt-5.6-luna", thinking="low")
     client.invoke([{"role": "user", "content": "p"}])
 
@@ -85,8 +88,8 @@ def test_golden_command_argv(fake_pi, monkeypatch):
     assert argv[1:4] == ["-p", "--provider", "openai-codex"]
     assert argv[4:6] == ["--model", "gpt-5.6-luna"]
     assert argv[6:8] == ["--thinking", "low"]
-    for flag in ["--no-tools", "--no-session", "-ne", "-ns", "-np", "-nc"]:
-        assert flag in argv, f"flag lean ausente: {flag}"
+    assert argv[8:] == ["--no-tools", "--no-session", "-ne", "-ns", "-np", "-nc"], \
+        "flags lean fora da ordem canônica"
     assert captured["kwargs"]["stdin"] is subprocess.PIPE
     assert captured["kwargs"].get("start_new_session") is True
     assert captured["stdin_input"] == "p"
@@ -104,17 +107,19 @@ def test_empty_stdout_raises(fake_pi):
         client.invoke([{"role": "user", "content": "p"}])
 
 
-def test_timeout_kills_process_group(fake_pi):
+def test_timeout_kills_process_group(fake_pi, tmp_path):
     """Subprocesso real travado: invoke estoura o timeout rápido e não deixa órfão."""
-    client = _client(fake_pi(FAKE_PI_SLOW), timeout_seconds=1)
+    script = fake_pi(FAKE_PI_SLOW)
+    client = _client(script, timeout_seconds=5)
     t0 = time.time()
-    with pytest.raises(Exception, match="timeout|Tempo"):
+    with pytest.raises(Exception, match="timeout"):
         client.invoke([{"role": "user", "content": "p"}])
-    assert time.time() - t0 < 10
-    # o grupo morreu: nenhum sleep 300 sobreviveu
+    elapsed = time.time() - t0
+    assert elapsed < 12, f"timeout demorou {elapsed:.1f}s (kill do grupo falhou?)"
     time.sleep(0.5)
-    probe = subprocess.run(["pgrep", "-f", "sleep 300"], capture_output=True, text=True)
-    assert probe.stdout.strip() == "", "processo órfão sobreviveu ao timeout"
+    # pgrep hermético: só processos cuja linha de comando cita O SCRIPT deste teste
+    probe = subprocess.run(["pgrep", "-f", script], capture_output=True, text=True)
+    assert probe.stdout.strip() == "", f"processo órfão sobreviveu: {probe.stdout}"
 
 
 def test_async_invoke_works_and_is_cancelable(fake_pi):
@@ -126,8 +131,9 @@ def test_async_invoke_works_and_is_cancelable(fake_pi):
     assert asyncio.run(run()) == '{"ok": true}'
 
 
-def test_async_timeout_kills_subprocess(fake_pi):
-    client = _client(fake_pi(FAKE_PI_SLOW), timeout_seconds=1)
+def test_async_timeout_kills_subprocess(fake_pi, tmp_path):
+    script = fake_pi(FAKE_PI_SLOW)
+    client = _client(script, timeout_seconds=5)
 
     async def run():
         return await client.async_invoke([{"role": "user", "content": "p"}])
@@ -135,7 +141,7 @@ def test_async_timeout_kills_subprocess(fake_pi):
     t0 = time.time()
     with pytest.raises(Exception):
         asyncio.run(run())
-    assert time.time() - t0 < 10
+    assert time.time() - t0 < 12
     time.sleep(0.5)
-    probe = subprocess.run(["pgrep", "-f", "sleep 300"], capture_output=True, text=True)
+    probe = subprocess.run(["pgrep", "-f", script], capture_output=True, text=True)
     assert probe.stdout.strip() == "", "processo órfão sobreviveu ao timeout async"

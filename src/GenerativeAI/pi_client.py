@@ -29,15 +29,22 @@ from typing import Dict, List, Optional
 PI_LEAN_FLAGS = ("-ne", "-ns", "-np", "-nc")
 
 
-def _kill_group(pid: int) -> None:
-    """Mata o grupo de processos inteiro (CLIs agênticas spawnam helpers)."""
+def _pgrp_id(pid: int) -> Optional[int]:
+    """pgid do processo, capturado ENQUANTO ele está vivo (evita TOCTOU de pid reusado)."""
     try:
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        return os.getpgid(pid)
     except (ProcessLookupError, PermissionError):
-        try:
-            os.killpg(os.getpgid(pid), signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
+        return None
+
+
+def _signal_group(pgid: Optional[int], sig: int) -> None:
+    """Sinaliza o grupo inteiro (CLIs agênticas spawnam helpers)."""
+    if pgid is None:
+        return
+    try:
+        os.killpg(pgid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 class PiClient:
@@ -116,22 +123,28 @@ class PiClient:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             start_new_session=True,
         )
+        pgid = _pgrp_id(process.pid)
         try:
             stdout, stderr = process.communicate(input=prompt, timeout=self.timeout_seconds)
         except subprocess.TimeoutExpired:
-            _kill_group(process.pid)
+            _signal_group(pgid, signal.SIGTERM)
             try:
                 process.communicate(timeout=5)
             except (subprocess.TimeoutExpired, ValueError):
-                process.kill()
+                _signal_group(pgid, signal.SIGKILL)
+                try:
+                    process.communicate(timeout=2)
+                except (subprocess.TimeoutExpired, ValueError):
+                    pass
             raise Exception(
                 f"pi timeout após {self.timeout_seconds}s — grupo de processos morto"
             )
         except Exception:
-            _kill_group(process.pid)
+            _signal_group(pgid, signal.SIGKILL)
             raise
         return self._check_result(stdout, stderr, getattr(process, "returncode", None), self.timeout_seconds)
 
@@ -148,6 +161,7 @@ class PiClient:
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,
         )
+        pgid = _pgrp_id(process.pid)
         started = asyncio.get_event_loop().time()
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
@@ -155,17 +169,18 @@ class PiClient:
                 timeout=self.timeout_seconds,
             )
         except asyncio.TimeoutError:
-            _kill_group(process.pid)
+            _signal_group(pgid, signal.SIGTERM)
             try:
                 await asyncio.wait_for(process.wait(), timeout=5)
             except asyncio.TimeoutError:
-                process.kill()
+                _signal_group(pgid, signal.SIGKILL)
+                await process.wait()
             elapsed = asyncio.get_event_loop().time() - started
             raise Exception(
                 f"pi timeout após {self.timeout_seconds}s — grupo de processos morto (async, {elapsed:.1f}s)"
             )
         except asyncio.CancelledError:
-            _kill_group(process.pid)
+            _signal_group(pgid, signal.SIGKILL)
             raise
         stdout = (stdout_bytes or b"").decode("utf-8", errors="replace")
         stderr = (stderr_bytes or b"").decode("utf-8", errors="replace")

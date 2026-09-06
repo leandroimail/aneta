@@ -23,7 +23,8 @@ Até eles chegarem, os links para estes arquivos quebram (5 links known-affected
 
 1. Abra o OneDrive e faça login (a pasta é
    `~/Library/CloudStorage/OneDrive-Pessoal/Projects/python/asrl`).
-2. Espere sincronizar e rode, na raiz do repo:
+2. Espere sincronizar e rode, na raiz do repo (o script pressupõe o checkout padrão
+   em `~/Documents/asrl` — ajuste SRC/DST nele se o repo morar em outro lugar):
    ```bash
    bash completar_copia_onedrive.sh
    ```
