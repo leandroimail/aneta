@@ -1,6 +1,7 @@
 import json
 import os
 import lancedb
+from datetime import timedelta
 from typing import Union, Dict
 from dotenv import load_dotenv
 
@@ -74,6 +75,8 @@ def save_bibliographic_database(type_source: str,
             .execute(records)
             
         table.optimize()
+        if table.version % 50 == 0:
+            table.cleanup_old_versions(older_than=timedelta(seconds=0))
     except ValueError as e:
         try:
             print("Tentando criar a tabela")
