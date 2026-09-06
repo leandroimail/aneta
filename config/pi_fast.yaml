@@ -35,3 +35,8 @@ clients:
     groups: [ABSTRACT, FULL_TEXT]
     provider: zai
     model: glm-5.2
+
+  - id: pi-minimax
+    groups: [ABSTRACT, FULL_TEXT]
+    provider: minimax
+    model: MiniMax-M3

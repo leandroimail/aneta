@@ -1,6 +1,7 @@
-# Description: Configuration file for search engines - set it to true if you want to search in that engine
+# Description: Configuration file for search engines
 # Databases Engines Supported: arxiv, ieee, science_direct, scopus, spring_nature, web_of_science
-# ACM Digital Library not supported yet. Engine not has Rest API (only to enrich file)
+# ACM Digital Library not supported yet (only to enrich file).
+# ArXiv is explicitly disabled per review protocol.
 
 arxiv: false
 science_direct: true
@@ -11,63 +12,45 @@ ieee: true
 scopus: true
 
 
-# Generic Search String for all search engines (arxiv, ieee, science_direct, scopus, spring_nature, web_of_science)
+# Generic Search String for all search engines (IEEE, ScienceDirect, Scopus, Springer Nature, Web of Science)
 #
-# Linguagem padrão (traduzida automaticamente para a sintaxe oficial de cada API,
-# restrita a título/resumo/palavras-chave sempre que a base permitir):
-#   - Operadores: AND, OR, NOT (case-insensitive); precedência: NOT > AND > OR
-#   - Parênteses definem a precedência: ("a" OR "b") AND "c"
-#   - IN: "agentes" IN ("LLM", "GPT") equivale a "agentes" AND ("LLM" OR "GPT")
-#   - Termos compostos entre aspas simples ou duplas: "large language model"
-#   - Termos simples podem ficar sem aspas: agents
-#   - Curinga parcial estilo LIKE com %: organi% casa organization, organizational...
-#     (Scopus/WoS/IEEE usam *, com mínimo de 3 caracteres antes do %;
-#      arXiv, ScienceDirect e Springer não suportam curinga — o % é removido com aviso)
+# Standard DSL (automatically translated to each API's native syntax):
+#   - Operators: AND, OR, NOT (case-insensitive); precedence: NOT > AND > OR
+#   - Parentheses define precedence: ("a" OR "b") AND "c"
+#   - Multi-word phrases in quotes: "systematic literature review"
+#   - Single terms can be without quotes: automation
 
 search_string: >
-  ("agents" AND "multi") AND ("LLM" OR "large language model" OR "generative AI") 
-  AND ("organization" OR "coordination" OR "topology" OR "organizational structures" 
-  OR "design patterns" OR "structural patterns")
+  ("systematic literature review" OR "systematic review" OR "systematic mapping") 
+  AND ("automation" OR "automated" OR "autonomous") 
+  AND ("LLM" OR "large language model" OR "generative AI")
 
 
 ############ filter_string ############
 
-# A SQL Statement filter the results from the search engines. 
-# Can be used any valide SQL statement to where clause on duckdb database
-# The SQL statement is applied to the results of the search engines
-
-# fields available in the database:
-
-# keywords: term containing string with keywords split for semicolon
-# abstract: term containing string with abstract of publication
-# title: term containing string with title of publication
-# jcr: term containing float value. Initial in 0
-# scimago: term containing float value. Initial in 0
-# year: term containing containing int value with a date(year) of publication
-# type_publication: term containing string type of publication. Can be: proceedings, article, book or misc
-# publication: term containing string with name of publication. Can be the name of proceedings, article, book, etc
-
-# fields content not are case sensitive. 
-##########. DON'T USE lower() and upper() function in the SQL statement. It is not n
+# DuckDB SQL WHERE clause applied to merged and enriched search results in Selection.py.
+# Filters results by publication year (last 5 years: >= 2021) and core topical concepts.
+# Available fields in table_bibs:
+#   title, abstract, keywords, jcr, scimago, year, type_publication, publication
 
 filter_string: >
+  (year >= 2021)
+  AND
   (
-      (lower(title) LIKE '%agents%' OR lower(abstract) LIKE '%agents%' OR lower(keywords) LIKE '%agents%')
-      AND
-      (lower(title) LIKE '%multi%' OR lower(abstract) LIKE '%multi%' OR lower(keywords) LIKE '%multi%')
+      lower(title) LIKE '%systematic review%' OR lower(abstract) LIKE '%systematic review%' OR lower(keywords) LIKE '%systematic review%' OR
+      lower(title) LIKE '%systematic literature review%' OR lower(abstract) LIKE '%systematic literature review%' OR lower(keywords) LIKE '%systematic literature review%' OR
+      lower(title) LIKE '%systematic mapping%' OR lower(abstract) LIKE '%systematic mapping%' OR lower(keywords) LIKE '%systematic mapping%' OR
+      lower(title) LIKE '%evidence synthesis%' OR lower(abstract) LIKE '%evidence synthesis%' OR lower(keywords) LIKE '%evidence synthesis%'
+  )
+  AND
+  (
+      lower(title) LIKE '%automat%' OR lower(abstract) LIKE '%automat%' OR lower(keywords) LIKE '%automat%' OR
+      lower(title) LIKE '%autonom%' OR lower(abstract) LIKE '%autonom%' OR lower(keywords) LIKE '%autonom%'
   )
   AND
   (
       lower(title) LIKE '%llm%' OR lower(abstract) LIKE '%llm%' OR lower(keywords) LIKE '%llm%' OR
       lower(title) LIKE '%large language model%' OR lower(abstract) LIKE '%large language model%' OR lower(keywords) LIKE '%large language model%' OR
-      lower(title) LIKE '%generative ai%' OR lower(abstract) LIKE '%generative ai%' OR lower(keywords) LIKE '%generative ai%'
-  )
-  AND
-  (
-      lower(title) LIKE '%organization%' OR lower(abstract) LIKE '%organization%' OR lower(keywords) LIKE '%organization%' OR
-      lower(title) LIKE '%coordination%' OR lower(abstract) LIKE '%coordination%' OR lower(keywords) LIKE '%coordination%' OR
-      lower(title) LIKE '%topology%' OR lower(abstract) LIKE '%topology%' OR lower(keywords) LIKE '%topology%' OR
-      lower(title) LIKE '%organizational structures%' OR lower(abstract) LIKE '%organizational structures%' OR lower(keywords) LIKE '%organizational structures%' OR
-      lower(title) LIKE '%design patterns%' OR lower(abstract) LIKE '%design patterns%' OR lower(keywords) LIKE '%design patterns%' OR
-      lower(title) LIKE '%structural patterns%' OR lower(abstract) LIKE '%structural patterns%' OR lower(keywords) LIKE '%structural patterns%'
+      lower(title) LIKE '%generative ai%' OR lower(abstract) LIKE '%generative ai%' OR lower(keywords) LIKE '%generative ai%' OR
+      lower(title) LIKE '%gpt%' OR lower(abstract) LIKE '%gpt%' OR lower(keywords) LIKE '%gpt%'
   )

@@ -24,4 +24,4 @@ bibliometry_using_scopus: false
 enable_playwright_download: true
 enable_PyPaperBot_download: true
 enable_search_link_file_by_google_scholars: false
-enable_save_md_to_lost_papers: false
+enable_save_md_to_lost_papers: true

@@ -1,34 +1,34 @@
 principal_research_question: >
-  What organizational structures have been proposed in Generative AI multi-agent systems?
+  How are Large Language Models (LLMs) and Generative AI models being applied to automate the Systematic Literature Review (SLR) process?
 
 additional_research_questions:
   arq1: >
-    What are the work coordination patterns for Generative AI multi-agents?
+    Which stages of the systematic literature review pipeline (e.g., search strategy formulation, primary study selection/screening, data extraction, quality assessment, and evidence synthesis) are automated using LLMs or Generative AI?
+  arq2: >
+    What LLM architectures, prompt engineering techniques, multi-agent frameworks, or generative workflows are employed to conduct review automation?
 
 supporting_questions:
   sq1: >
-    What are the frameworks that address the organization and work coordination of multi-agents?
+    What evaluation metrics and benchmark datasets are used to assess the accuracy, recall, precision, and reliability of LLM-automated screening and data extraction compared to human reviewers?
   sq2: >
-    What are the most used communication patterns between agents?
+    What are the primary benefits, challenges, and limitations (e.g., hallucinations, non-determinism, computational cost, context window constraints, reproducibility) reported in automated reviews?
   sq3: >
-    What are the main factors to consider when choosing an organization and work coordination system? Examples (financial and economic factors, security and robustness factors, latency and response time factors, implementation and maintenance complexity factors, other factors to be identified)
-  sq4: >
-    Are there hybrid multi-agent organizations and coordination systems that include humans? How do they work?
+    What degree of automation is achieved across existing literature (e.g., fully autonomous end-to-end pipelines versus semi-automated human-in-the-loop workflows)?
 
 rejection_criteria:
   rc1: >
-    Single-Agent Systems: Studies that focus only on single-agent systems are excluded.
+    Non-SLR or Ad-Hoc Literature Search: Studies that do not focus on Systematic Literature Reviews (SLRs), Systematic Mapping Studies (SMS), or formal evidence synthesis methodologies (e.g., casual/ad-hoc literature searches, conversational search over arbitrary documents).
   rc2: >
-    Non-LLM-Based Systems: Articles on multi-agent systems that do not use LLMs are rejected.
+    Non-LLM / Classical Methods Only: Studies on review automation that rely exclusively on traditional NLP, classical machine learning (e.g., SVM, Naive Bayes), or active learning without using Large Language Models (LLMs) or Generative AI.
   rc3: >
-    Exclusive Focus on Applications: Works that only describe the application of a system without providing details on one of the following: architecture or design patterns, description of work coordination mechanisms, or description of organizational structural patterns of multi-agents.
+    Application of SLR Without Automation Method: Systematic reviews that merely apply standard manual SLR methodology to survey AI/LLMs in a specific domain, without proposing, evaluating, or discussing the automation of the SLR process itself using LLMs.
   rc4: >
-    Focus on the Model, Not the System: Articles whose main focus is the training, internal architecture, or fine-tuning of the LLM, rather than the interaction and organization of the agents.
+    Pure Opinion/Editorial Without Technical Framework or Empirical Evaluation: Short commentaries, position papers, or tutorials without a concrete tool, pipeline, architecture, or empirical experiment.
 
 accepted_criteria:
   ac1: >
-    The article discusses multi-agent systems that use Large Language Models (LLMs) as their core component and their organizational or work coordination structures.
+    The study proposes, implements, or evaluates the automation or semi-automation of one or more stages of systematic literature reviews (or systematic mapping/evidence synthesis) using Large Language Models (LLMs) or Generative AI.
   ac2: >
-    The content discusses the architecture, frameworks, organization, collaboration, or design patterns of multi-agent systems.
+    The study provides technical details, architectures, workflows, prompt engineering strategies, or multi-agent approaches for automating SLR tasks (e.g., title/abstract screening, full-text screening, data extraction, synthesis).
   ac3: >
-    The article directly addresses at least one of the main or additional research questions of the systematic review.
+    The study directly addresses the principal research question or at least one of the additional/supporting research questions of this systematic review.

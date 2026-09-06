@@ -1,4 +1,3 @@
-
 # YAML configuration for filtering accepted results from LLM processing in .data/OUTPUTS/processed_responses/combined_responses_consolidated.json
 # This filter is a SQL WHERE clause applied to the consolidated LLM response data to select only relevant entries for final output.
 #
@@ -12,13 +11,13 @@
 # <campo>_yes_percent/_no_percent/_other_percent; mais total_responses, providers,
 # models, id, doi, article_title. Ex. de campos: is_relevant, principal_research_question.
 #
-# Padrão atual (3 LLMs): maioria diz "sim" (>=65%) E pelo menos 2 LLMs responderam.
+# Padrão atual (3 LLMs pi-fast + 2 API): maioria diz "sim" (>=65%) E pelo menos 4 LLMs responderam.
 
 filter: >
   ((is_relevant_yes_percent >= 65
-  AND total_responses >= 2)
+  AND total_responses >= 4)
   AND
   (
     principal_research_question_yes_percent >= 65
-    AND principal_research_question_total_count >= 2
+    AND principal_research_question_total_count >= 4
   ))
