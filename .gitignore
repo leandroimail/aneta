@@ -32,6 +32,10 @@ data/*
 .data/
 .data/*
 
+# Local review planning, walkthrough, status and protocol tracking
+review_planning/
+review_planning/*
+
 
 ### RStudio ###
 .Rproj.user

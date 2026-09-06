@@ -1,4 +1,5 @@
 import shutil
+import time
 from dotenv import load_dotenv
 import os
 import requests
@@ -212,38 +213,52 @@ def main(query, path_data):
             'db': 'WOS'  # Web of Science Core Collection
         }
         
-        print(f"Requisitando página {pagina+1} (start={start})...")
+        max_retries = 3
+        for tentativa in range(max_retries):
+            if pagina > 0 or tentativa > 0:
+                time.sleep(1.5)
+            
+            try:
+                response = requests.get(BASE_URL, headers=headers, params=params)
+                if response.status_code == 429:
+                    print(f"WoS Rate Limit (429) na página {pagina+1}. Aguardando 3s antes de tentar novamente ({tentativa+1}/{max_retries})...")
+                    time.sleep(3)
+                    continue
+                response.raise_for_status()
+                
+                data = response.json()
+                results = data.get('hits', [])
+                break
+            except requests.exceptions.HTTPError as errh:
+                if tentativa < max_retries - 1 and getattr(response, 'status_code', None) == 429:
+                    print(f"WoS Rate limit (429). Aguardando 3s... (tentativa {tentativa+1})")
+                    time.sleep(3)
+                    continue
+                print(f"Erro HTTP: {errh}")
+                print(f"Resposta: {response.text}")
+                raise Exception(f"Erro HTTP: {errh}")
+            except requests.exceptions.ConnectionError as errc:
+                print(f"Erro de conexão: {errc}")
+                raise Exception(f"Erro de conexão: {errc}")
+            except requests.exceptions.Timeout as errt:
+                print(f"Timeout: {errt}")
+                raise Exception(f"Timeout   : {errt}")
+            except Exception as e:
+                raise Exception(f"Erro na requisição: {e}")
+        else:
+            print("Número máximo de tentativas atingido na página do WoS.")
+            break
+
+        if not results:
+            print("Nenhum resultado encontrado. Encerrando...")
+            break
+            
+        records_agregados.extend(results)
+        print(f"Página {pagina+1}: {len(results)} registros recebidos. Total acumulado: {len(records_agregados)}\n")
         
-        try:
-            response = requests.get(BASE_URL, headers=headers, params=params)
-            response.raise_for_status()
-            
-            data = response.json()
-            results = data.get('hits', [])
-            
-            if not results:
-                print("Nenhum resultado encontrado. Encerrando...")
-                break
-                
-            records_agregados.extend(results)
-            print(f"Página {pagina+1}: {len(results)} registros recebidos. Total acumulado: {len(records_agregados)}\n")
-            
-            if len(results) < PAGE_SIZE:
-                print("Última página alcançada. Encerrando coleta...")
-                break
-                
-        except requests.exceptions.HTTPError as errh:
-            print(f"Erro HTTP: {errh}")
-            print(f"Resposta: {response.text}")
-            raise Exception(f"Erro HTTP: {errh}")
-        except requests.exceptions.ConnectionError as errc:
-            print(f"Erro de conexão: {errc}")
-            raise Exception(f"Erro de conexão: {errc}")
-        except requests.exceptions.Timeout as errt:
-            print(f"Timeout: {errt}")
-            raise Exception(f"Timeout   : {errt}")
-        except Exception as e:
-            raise Exception(f"Erro na requisição: {e}")
+        if len(results) < PAGE_SIZE:
+            print("Última página alcançada. Encerrando coleta...")
+            break
     
     # Salvando resultados brutos no diretório criado
     if records_agregados:
