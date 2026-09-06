@@ -988,6 +988,9 @@ def download_elsevier_api(doi, pdf_path, skip_validation=False, timeout=40):
     try:
         print("Tentando baixar via Elsevier API...")
         resp = requests.get(url, headers=headers, timeout=timeout)
+        if resp.status_code == 401 and "X-ELS-Insttoken" in headers:
+            headers_no_inst = {"X-ELS-APIKey": api_key, "Accept": "application/pdf"}
+            resp = requests.get(url, headers=headers_no_inst, timeout=timeout)
         if resp.status_code == 200 and resp.content[:5] == b"%PDF-":
             with open(pdf_path, "wb") as f:
                 f.write(resp.content)
@@ -998,6 +1001,29 @@ def download_elsevier_api(doi, pdf_path, skip_validation=False, timeout=40):
                     os.remove(pdf_path)
                     return False
             return True
+
+        # Se falhou PDF, tentar obter XML/HTML e salvar em Markdown se habilitado
+        config = load_config()
+        if config.get('enable_save_md_to_lost_papers', False):
+            print("Elsevier API: PDF não disponível, tentando XML/HTML para Markdown...")
+            headers_xml = {"X-ELS-APIKey": api_key, "Accept": "text/xml"}
+            resp_xml = requests.get(url, headers=headers_xml, timeout=timeout)
+            if resp_xml.status_code == 200 and len(resp_xml.text) > 1000:
+                markdown_dir = os.path.join(os.path.dirname(pdf_path), "markdown")
+                os.makedirs(markdown_dir, exist_ok=True)
+                md_path = os.path.join(markdown_dir, sanitize_filename(doi) + ".md")
+                try:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(resp_xml.text, "xml")
+                    body = soup.find("body") or soup.find("rawtext") or soup
+                    md_text = md(str(body), heading_style="ATX") if body else resp_xml.text
+                except Exception:
+                    md_text = resp_xml.text
+                with open(md_path, "w", encoding="utf-8") as f_md:
+                    f_md.write(md_text)
+                print(f"Arquivo markdown salvo via Elsevier XML: {md_path}\n")
+                return True
+
         print(f"Elsevier API não retornou PDF (HTTP {resp.status_code}).")
     except Exception as e:
         print(f"Erro na Elsevier API: {e}")
@@ -1961,7 +1987,9 @@ def batch_download_cdp(entries, pdf_dir, logs, skip_validation=False, port=0, as
         shutil.rmtree(profile, ignore_errors=True)
 
     print(f"\nCDP: {len(downloaded)} baixados de {len(entries)} processados.\n")
-    return downloaded
+    downloaded_set = set(downloaded)
+    still_failed = [e for e in entries if e.get("doi", "").strip() not in downloaded_set]
+    return still_failed
 
 
 def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip_validation=False,

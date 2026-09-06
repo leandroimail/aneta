@@ -117,17 +117,21 @@ def extract_text(doi: str, pdf_dir: Optional[str] = None, markdown_dir: Optional
     key = sanitize_doi(doi)
 
     text = None
-    md_path = os.path.join(markdown_dir, key + ".md")
-    if os.path.exists(md_path):
-        # Leitura com timeout: se o markdown estiver só-na-nuvem (OneDrive) e pendurar,
-        # cai no PDF (que é local, baixado por nós).
-        def _read_md():
-            with open(md_path, encoding="utf-8", errors="ignore") as f:
-                return f.read()
-        content = _run_with_timeout(_read_md, timeout=20.0)
-        text = (content.strip() or None) if content else None
-        if text is None:
-            print(f"  (markdown indisponível/timeout p/ {doi}; tentando o PDF)")
+    md_paths = [
+        os.path.join(markdown_dir, key + ".md"),
+        os.path.join(pdf_dir, "markdown", key + ".md"),
+        os.path.join(pdf_dir, "markdowns", key + ".md"),
+    ]
+    for candidate_md in md_paths:
+        if os.path.exists(candidate_md):
+            def _read_md():
+                with open(candidate_md, encoding="utf-8", errors="ignore") as f:
+                    return f.read()
+            content = _run_with_timeout(_read_md, timeout=20.0)
+            text = (content.strip() or None) if content else None
+            if text:
+                break
+
     if text is None:
         pdf_path = os.path.join(pdf_dir, key + ".pdf")
         if os.path.exists(pdf_path):
@@ -145,4 +149,6 @@ def has_text(doi: str, pdf_dir: Optional[str] = None, markdown_dir: Optional[str
     markdown_dir = markdown_dir or d_md
     key = sanitize_doi(doi)
     return (os.path.exists(os.path.join(markdown_dir, key + ".md"))
+            or os.path.exists(os.path.join(pdf_dir, "markdown", key + ".md"))
+            or os.path.exists(os.path.join(pdf_dir, "markdowns", key + ".md"))
             or os.path.exists(os.path.join(pdf_dir, key + ".pdf")))
