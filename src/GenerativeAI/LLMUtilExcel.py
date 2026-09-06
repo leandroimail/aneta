@@ -78,7 +78,12 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
 
     content = content.strip("[").strip("]")
 
-    def _unwrap_single_id(parsed: Any) -> Any:
+    def _normalize_parsed(parsed: Any) -> Any:
+        if not isinstance(parsed, dict):
+            return parsed
+        # Se vier {"articles": [...]}
+        if "articles" in parsed and isinstance(parsed["articles"], list) and parsed["articles"]:
+            parsed = parsed["articles"][0]
         # Se vier {"<id>": {...}} sem chave "id", promove a chave a campo "id".
         if isinstance(parsed, dict) and len(parsed) == 1 and "id" not in parsed:
             new_dict: Dict[str, Any] = {}
@@ -86,19 +91,33 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
                 new_dict["id"] = key
                 if isinstance(value, dict):
                     new_dict = new_dict | value
-            return new_dict
+            parsed = new_dict
+        if not isinstance(parsed, dict):
+            return parsed
+        # Desaninhar chaves que caíram dentro de research_questions por alucinação de estrutura
+        rq = parsed.get("research_questions")
+        if isinstance(rq, dict):
+            for nested_key in [
+                "supporting_questions",
+                "accepted_criteria",
+                "rejection_criteria",
+                "additional_questions_by_article",
+                "is_relevant",
+            ]:
+                if nested_key in rq and (nested_key not in parsed or not parsed[nested_key]):
+                    parsed[nested_key] = rq.pop(nested_key)
         return parsed
 
     # 1) Tentativa direta.
     try:
-        return _unwrap_single_id(json.loads(content))
+        return _normalize_parsed(json.loads(content))
     except json.JSONDecodeError:
         pass
 
     # 2) Lidar com vírgulas finais (",}" / ",]").
     try:
         fixed = re.sub(r',\s*]', ']', re.sub(r',\s*}', '}', content))
-        return _unwrap_single_id(json.loads(fixed))
+        return _normalize_parsed(json.loads(fixed))
     except json.JSONDecodeError:
         pass
 
@@ -107,7 +126,7 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
     #    restante, salvando a resposta sem precisar de conversão via LLM.
     try:
         decoded, _end = json.JSONDecoder().raw_decode(content.lstrip())
-        return _unwrap_single_id(decoded)
+        return _normalize_parsed(decoded)
     except json.JSONDecodeError as e:
         first_error = e
 
@@ -118,7 +137,7 @@ def clean_and_parse_json(file_content: str) -> Dict[str, Any]:
         import json_repair
         repaired = json_repair.loads(content)
         if isinstance(repaired, dict) and repaired:
-            return _unwrap_single_id(repaired)
+            return _normalize_parsed(repaired)
     except Exception:
         pass
 
