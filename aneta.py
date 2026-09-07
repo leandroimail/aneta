@@ -61,12 +61,12 @@ def run_selection():
     get_analyse()
     return True
 
-def run_bibliometry_function():
-    run_bibliometry_func()
+def run_bibliometry_function(stage=None, bib=None):
+    run_bibliometry_func(stage=stage, bib=bib)
     return True
 
-def run_bibliometry_async():
-    run_bibliometry_async_func()
+def run_bibliometry_async(stage=None, bib=None):
+    run_bibliometry_async_func(stage=stage, bib=bib)
     return True
 
 def run_download(skip_validation=False, max_workers=None):
@@ -524,6 +524,12 @@ def parse_arguments():
                         help='Roda a classificação de abstract usando APENAS o LLM informado '
                              '(nome do modelo, id ou name do cliente; ex.: --llm gpt-5.4-nano). '
                              'Sem esta opção, roda todos os LLMs de LLM_CLIENTS_ABSTRACT.')
+    parser.add_argument('--stage', choices=['post_abstract', 'final', 'both'], default=None,
+                        help='Fase da revisão para rodar a bibliometria ("post_abstract", "final" ou "both"). '
+                             'Se omitido, usa a configuração bibliometry_stage de config/general_config.yaml.')
+    parser.add_argument('--bib', default=None,
+                        help='Caminho customizado de arquivo BibTeX para análise bibliométrica '
+                             '(sobrescreve o padrão da fase configurada).')
 
     return parser.parse_args(), parser
 
@@ -559,11 +565,11 @@ if __name__ == "__main__":
     elif args.enrich_async:
         run_enrich_async()
     elif args.bibliometry_async:
-        run_bibliometry_async()
+        run_bibliometry_async(stage=args.stage, bib=args.bib)
     elif args.selection:
         run_selection()
     elif args.bibliometry:
-        run_bibliometry_function()
+        run_bibliometry_function(stage=args.stage, bib=args.bib)
     elif args.download_pdf:
         run_download()
     elif args.download_pdf_async:
@@ -643,6 +649,7 @@ if __name__ == "__main__":
         "search": "busca",
         "enrich": "enriquecimento", "enrich_async": "enriquecimento",
         "selection": "selecao_metadados",
+        "bibliometry": "bibliometria", "bibliometry_async": "bibliometria",
         "abstract_classifier_llm": "classificacao_llm",
         "abstract_classifier_llm_one_on_one": "classificacao_llm",
         "abstract_classifier_llm_one_on_one_async": "classificacao_llm",

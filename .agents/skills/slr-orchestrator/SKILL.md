@@ -34,15 +34,17 @@ The human can adjust, skip, redo a previous phase, or stop at any point.
 ## Pipeline (phases → Aneta commands)
 
 ```
-Phase 0  Setup            slr-setup              (authors configs + protocol.md)
-Phase 1  Search           slr-search             --search → --enrich_async → --selection
-Phase 2  Abstract screen  slr-abstract-screening --abstract_classifier_llm_one_on_one_async
-                                                  → --process_responses → --filter_relevant_papers
-Phase 3  Acquisition      slr-acquisition        --download_pdf_async / --download_pdf_assisted
-                                                  → --read_pdfs
-Phase 4  Full-text screen slr-fulltext-screening --fulltext_classifier_llm_async
-                                                  → --process_responses_fulltext → --filter_final_papers
-Phase 5  Reporting        slr-reporting          --pipeline_report → --export_final
+Phase 0    Setup            slr-setup              (authors configs + protocol.md)
+Phase 1    Search           slr-search             --search → --enrich_async → --selection
+Phase 2    Abstract screen  slr-abstract-screening --abstract_classifier_llm_one_on_one_async
+                                                   → --process_responses → --filter_relevant_papers
+Phase 2.5  Bibliometry      slr-bibliometry        (optional post-abstract: --bibliometry_async --stage post_abstract)
+Phase 3    Acquisition      slr-acquisition        --download_pdf_async / --download_pdf_assisted
+                                                   → --read_pdfs
+Phase 4    Full-text screen slr-fulltext-screening --fulltext_classifier_llm_async
+                                                   → --process_responses_fulltext → --filter_final_papers
+Phase 5    Bibliometry      slr-bibliometry        (parameterized final: --bibliometry_async --stage final)
+Phase 6    Reporting        slr-reporting          --pipeline_report → --export_final
 ```
 
 Each phase confirms with the human before running and again before advancing.
@@ -67,9 +69,11 @@ the default offer.
 | Setup | protocol.md + configs | methodology is human-owned |
 | Search | N identified / enriched | scope sanity check |
 | Abstract screening | selected vs rejected (decision sheet) | gate before spending on downloads |
+| Bibliometry (Post-Abstract) | OpenAlex / Bibliometrix landscape | explore candidate literature before PDF acquisition |
 | Download | coverage; resolve Cloudflare (HITL) | some sites need a human |
-| Full-text screening | final selected vs rejected (decision sheet) | the inclusion decision |
-| Reporting | funnel + delivery folder | final deliverable |
+| Full-text screening | selected vs rejected (decision sheet) | final corpus selection gate |
+| Bibliometry (Final) | definitive corpus analytics | characterize final accepted papers |
+| Final Delivery | export bundle + PRISMA report | verify deliverables before publication |
 
 ## Principles
 

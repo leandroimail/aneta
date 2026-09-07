@@ -292,24 +292,10 @@ def run_R_bibliometrix():
 
 
 
-def run_bibliometry():
+def run_bibliometry(stage=None, bib=None):
     """
-    Função principal para execução da bibliometria.
+    Função principal para execução da bibliometria (síncrona / compatível com pipeline).
+    Delega para BibliometryAsync com suporte a estágios (post_abstract / final) e bibtex customizado.
     """
-    path_data = os.getenv("PATH_DATA", ".data")
-    bibtex_file = os.getenv("BIB_FILE", ".data/OUTPUTS/select_bibs.bib")
-    full_path_bibtex = os.path.join(path_data, bibtex_file)
-    full_path_bibtex = os.path.abspath(full_path_bibtex)
-    fetch_and_store_metadata(full_path_bibtex)
-    
-    print("\n\n\n")
-    print(f"{90 * '-'}")
-    print("Executando script R (Bibliometrix)...")
-    print(f"{90 * '-'}")
-    
-    run_R_bibliometrix()
-    
-    print("\n\n\n")
-    print(f"{90 * '-'}")
-    print("Bibliometria concluída com sucesso!")
-    print(f"{90 * '-'} \n\n\n")
+    from src.BibliometryAsync import run_bibliometry as run_bib_async
+    run_bib_async(stage=stage, bib=bib)

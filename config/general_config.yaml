@@ -9,8 +9,17 @@ enrich_arxiv: false
 
 
 ######################## Bibliometry options ########################
+enable_bibliometry: true
+# Momento de execução da bibliometria:
+#   - "final": executa sobre os artigos aprovados na triagem final (default: final_papers.bib)
+#   - "post_abstract": executa logo após a triagem por resumo (relevant_abstract_papers.bib)
+#   - "both": executa e compara ambas as fases
+bibliometry_stage: "final"
+
 bibliometry_using_openalex: true
 bibliometry_for_arxiv: false
+bibliometry_generate_r_plots: true
+bibliometry_generate_py_charts: true
 
 ###### Not implemented yet ######
 bibliometry_using_scopus: false 

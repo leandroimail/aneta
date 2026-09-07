@@ -57,6 +57,7 @@ Map artifact existence to the furthest completed phase. Read paths from `.conf`
 | `.data/PDFs/markdowns/*.md` | PDF reading (docling) |
 | `.data/OUTPUTS/raw_responses_fulltext/<llm>/response_*` | Full-text classification |
 | `.data/OUTPUTS/processed_responses/final_papers.json` | Final filter done |
+| `.data/OUTPUTS/openalex_metadata.json` ou `.data/BIBLIOMETRY/` | Bibliometria executada |
 | `.data/OUTPUTS/final_results/` | Export done |
 
 The **next** step is the first phase whose artifact is missing. Report the detected phase

@@ -184,6 +184,27 @@ def export_final_results(dest: Optional[str] = None) -> Optional[str]:
     print(f"  ✓ {len(have)}/{len(dois)} PDFs copiados" +
           (f" · {len(missing)} ausentes/indisponíveis" if missing else ""))
 
+    # 4) Copia os artefatos de bibliometria (se existirem).
+    biblio_src = _j("OUTPUTS/BIBLIOMETRY")
+    biblio_dest = os.path.join(dest, "bibliometry")
+    biblio_copied = 0
+    if os.path.exists(biblio_src):
+        os.makedirs(biblio_dest, exist_ok=True)
+        for root, dirs, files in os.walk(biblio_src):
+            rel_dir = os.path.relpath(root, biblio_src)
+            target_dir = os.path.join(biblio_dest, rel_dir) if rel_dir != "." else biblio_dest
+            os.makedirs(target_dir, exist_ok=True)
+            for file in files:
+                s_file = os.path.join(root, file)
+                d_file = os.path.join(target_dir, file)
+                if _copy_guarded(s_file, d_file, timeout=20.0):
+                    biblio_copied += 1
+        openalex_meta = _j("OUTPUTS/openalex_metadata.json")
+        if os.path.exists(openalex_meta):
+            _copy_guarded(openalex_meta, os.path.join(biblio_dest, "openalex_metadata.json"), timeout=20.0)
+            biblio_copied += 1
+        print(f"  ✓ {biblio_copied} arquivo(s) de bibliometria copiados para bibliometry/")
+
     # LEIA-ME com o resumo da entrega.
     readme = [
         "# Resultados finais do SLR (Aneta)", "",
@@ -200,6 +221,8 @@ def export_final_results(dest: Optional[str] = None) -> Optional[str]:
         "- `pipeline_report.md` / `pipeline_funnel.csv` / `pipeline_metrics.json` — funil do pipeline",
         "- `pdfs/` — PDFs dos artigos selecionados",
     ]
+    if os.path.exists(biblio_src):
+        readme.append("- `bibliometry/` — Relatórios, gráficos e rankings da análise bibliométrica")
     if missing:
         readme += ["", "## PDFs ausentes/indisponíveis", ""]
         readme += [f"- {d}" for d in missing]

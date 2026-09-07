@@ -25,9 +25,11 @@ Quando o usuário solicitar execução, progresso ou gerenciamento da revisão s
 Fase 0: Setup          (protocol.md + config/*.yaml)
 Fase 1: Busca          (--search → --enrich_async → --selection)
 Fase 2: Abstract       (--abstract_classifier_llm_one_on_one_async → --process_responses → --filter_relevant_papers)
+Fase 2.5: Bibliometria (Opcional pós-abstract: --bibliometry_async --stage post_abstract)
 Fase 3: Aquisição      (--download_pdf_async / --download_pdf_assisted)
 Fase 4: Full-Text      (--fulltext_classifier_llm_async → --process_responses_fulltext → --filter_final_papers)
-Fase 5: Entrega        (--pipeline_report → --export_final)
+Fase 5: Bibliometria   (Parametrizável final: --bibliometry_async --stage final)
+Fase 6: Entrega        (--pipeline_report → --export_final)
 ```
 
 ---
@@ -43,3 +45,4 @@ Fase 5: Entrega        (--pipeline_report → --export_final)
 - `slr-llm-config`: Configuração de painéis de LLMs e credenciais.
 - `slr-pdf-acquisition`: Playbook de aquisição de PDFs e tratamento de bloqueios.
 - `slr-decision-review`: Resumo de decisões e identificação de artigos limítrofes.
+- `slr-bibliometry`: Análise bibliométrica parametrizada (OpenAlex, redes de co-autoria e Bibliometrix R).
