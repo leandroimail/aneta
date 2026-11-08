@@ -252,6 +252,40 @@ def generate_bibliometry_report_and_plots(
             plt.savefig(p3, dpi=300)
             plt.close()
             plots_generated.append(p3)
+
+        # Gráfico 4: Top 10 Autores Mais Produtivos
+        top_auth = author_counts.most_common(10)
+        if top_auth:
+            plt.figure(figsize=(10, 6))
+            a_names = [a[0][:35] for a in reversed(top_auth)]
+            a_vals = [a[1] for a in reversed(top_auth)]
+            plt.barh(a_names, a_vals, color="#5c4a72", edgecolor="#392d47")
+            plt.title(f"Top 10 Autores Mais Produtivos ({stage.upper()})", fontsize=13, pad=12, fontweight="bold")
+            plt.xlabel("Número de Artigos", fontsize=11)
+            for i, val in enumerate(a_vals):
+                plt.text(val + 0.1, i, f"{val}", va="center", fontsize=9, fontweight="bold")
+            plt.tight_layout()
+            p4 = os.path.join(output_dir, "top_authors.png")
+            plt.savefig(p4, dpi=300)
+            plt.close()
+            plots_generated.append(p4)
+
+        # Gráfico 5: Top 10 Conceitos / Palavras-Chave
+        top_conc = concept_counts.most_common(10)
+        if top_conc:
+            plt.figure(figsize=(10, 6))
+            c_names = [c[0][:35] for c in reversed(top_conc)]
+            c_vals = [c[1] for c in reversed(top_conc)]
+            plt.barh(c_names, c_vals, color="#2f6b80", edgecolor="#1c414e")
+            plt.title(f"Top 10 Conceitos / Palavras-Chave ({stage.upper()})", fontsize=13, pad=12, fontweight="bold")
+            plt.xlabel("Frequência de Ocorrência", fontsize=11)
+            for i, val in enumerate(c_vals):
+                plt.text(val + 0.5, i, f"{val}", va="center", fontsize=9, fontweight="bold")
+            plt.tight_layout()
+            p5 = os.path.join(output_dir, "top_concepts.png")
+            plt.savefig(p5, dpi=300)
+            plt.close()
+            plots_generated.append(p5)
             
     except Exception as e:
         print(f"Aviso ao gerar gráficos matplotlib: {e}")
