@@ -23,6 +23,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from PDFReader import read_single_pdf, read_pdfs_batch, process_pdfs, _get_pdf_filenames, _optimize_post_processing
 
 
+def _mock_document():
+    document = Mock()
+    document.iterate_items.return_value = []
+    return document
+
+
 class TestReadSinglePDF:
     """Test suite for read_single_pdf() function."""
     
@@ -59,7 +65,7 @@ class TestReadSinglePDF:
         
         try:
             # Mock the docling converter and document
-            mock_document = Mock()
+            mock_document = _mock_document()
             mock_document.export_to_markdown.return_value = "# Test Markdown\n\nContent here"
             mock_document.pages = [Mock(), Mock(), Mock()]  # 3 pages
             
@@ -152,7 +158,7 @@ class TestReadSinglePDF:
         
         try:
             # Mock successful conversion but failed markdown export
-            mock_document = Mock()
+            mock_document = _mock_document()
             mock_document.export_to_markdown.side_effect = Exception("Export failed")
             mock_document.pages = [Mock()]
             
@@ -186,7 +192,7 @@ class TestReadSinglePDF:
         
         try:
             # Mock docling
-            mock_document = Mock()
+            mock_document = _mock_document()
             mock_document.export_to_markdown.return_value = "# Test"
             mock_document.pages = [Mock() for _ in range(5)]  # 5 pages
             
@@ -225,7 +231,7 @@ class TestReadSinglePDF:
             
             def slow_convert(*args, **kwargs):
                 time.sleep(0.1)  # 100ms delay
-                mock_document = Mock()
+                mock_document = _mock_document()
                 mock_document.export_to_markdown.return_value = "# Test"
                 mock_document.pages = [Mock()]
                 mock_result = Mock()
@@ -255,7 +261,7 @@ class TestReadSinglePDF:
         required_keys = {
             "markdown", "filename", "page_count", 
             "processing_time", "file_size_mb", 
-            "success", "error"
+            "success", "error", "content_summary", "markdown_saved", "markdown_char_count", "document"
         }
         
         assert set(result.keys()) == required_keys
@@ -318,7 +324,7 @@ class TestReadPDFsBatch:
             
             # Mock docling to succeed for all PDFs
             def create_mock_document(page_count):
-                mock_doc = Mock()
+                mock_doc = _mock_document()
                 mock_doc.export_to_markdown.return_value = f"# Test Document\n\nContent here"
                 mock_doc.pages = [Mock() for _ in range(page_count)]
                 mock_result = Mock()
@@ -364,7 +370,7 @@ class TestReadPDFsBatch:
                     raise Exception("Simulated conversion error")
                 
                 # Succeed on others
-                mock_doc = Mock()
+                mock_doc = _mock_document()
                 mock_doc.export_to_markdown.return_value = "# Success"
                 mock_doc.pages = [Mock(), Mock()]
                 mock_result = Mock()
@@ -440,7 +446,7 @@ class TestReadPDFsBatch:
                 
                 concurrent_count -= 1
                 
-                mock_doc = Mock()
+                mock_doc = _mock_document()
                 mock_doc.export_to_markdown.return_value = "# Test"
                 mock_doc.pages = [Mock()]
                 mock_result = Mock()
@@ -490,7 +496,7 @@ class TestReadPDFsBatch:
                 
                 concurrent_count -= 1
                 
-                mock_doc = Mock()
+                mock_doc = _mock_document()
                 mock_doc.export_to_markdown.return_value = "# Test"
                 mock_doc.pages = [Mock()]
                 mock_result = Mock()
@@ -524,7 +530,7 @@ class TestReadPDFsBatch:
                     f.write(b'%PDF-1.4 ' + f'content{i}'.encode() * 50)
             
             # Mock docling to succeed for all
-            mock_doc = Mock()
+            mock_doc = _mock_document()
             mock_doc.export_to_markdown.return_value = "# Paper\n\nContent"
             mock_doc.pages = [Mock() for _ in range(5)]
             mock_result = Mock()
@@ -566,7 +572,7 @@ class TestReadPDFsBatch:
                 if call_count[0] == 2:
                     raise Exception("Simulated error")
                 
-                mock_doc = Mock()
+                mock_doc = _mock_document()
                 mock_doc.export_to_markdown.return_value = "# Test"
                 mock_doc.pages = [Mock()]
                 mock_result = Mock()
@@ -584,7 +590,7 @@ class TestReadPDFsBatch:
             required_keys = {
                 "markdown", "filename", "page_count",
                 "processing_time", "file_size_mb",
-                "success", "error"
+                "success", "error", "content_summary", "markdown_saved", "markdown_char_count", "document"
             }
             
             for result in results:

@@ -17,7 +17,7 @@ Combining deterministic academic search engines, asynchronous metadata enrichmen
 - **Multi-LLM Consensus Screening**: Automated abstract and full-text screening using a panel of diverse LLMs (OpenAI, Google Gemini, DeepSeek). Inclusion decisions are governed by transparent, declarative SQL voting clauses with full per-paper decision auditing.
 - **Resilient PDF Acquisition Cascade**: Multi-tiered download cascade leveraging publisher APIs, Unpaywall open-access links, and an assisted human-in-the-loop browser mode for Cloudflare-protected venues.
 - **High-Throughput PDF Parsing**: Fast, structured extraction of text, tables, and figures from PDFs via **Docling** and **PyMuPDF** with configurable concurrency.
-- **Dual-Stage Bibliometrics**: Integrated bibliometric analysis (R Bibliometrix & Python visual analytics) parameterizable to run after abstract screening or at the final inclusion stage.
+- **Dual-Stage Bibliometrics**: Native Python bibliometric analysis parameterizable to run after abstract screening or at the final inclusion stage.
 - **PRISMA-Compliant Reporting**: Automatically generates PRISMA-style funnel metrics, markdown review reports, decision spreadsheets, and delivery packages.
 - **Human-in-the-Loop AI Facilitator**: Run via CLI or guided by specialized AI agents across IDEs (**Antigravity**, **Claude Code**, **Codex**, **OpenCode**) ensuring researchers stay in complete control of methodology.
 
@@ -79,7 +79,7 @@ flowchart TD
 ### 1. Requirements
 - **Python**: `>= 3.12.7`
 - **Pandoc**: Required for report compilation (`brew install pandoc` on macOS, `sudo apt-get install pandoc` on Ubuntu/Debian).
-- **R (Optional, for advanced bibliometrics)**: Install `R` and bibliometric packages if running R Bibliometrix.
+- **Bibliometrics** uses the Python dependencies in the project manifest. The historical R script is available for reference. See the [validation results and remaining differences](docs/tecnica/paridade-bibliometria.md).
 - **Playwright / Chromium (Optional, for assisted PDF downloads)**: Needed for the assisted browser mode.
 
 ### 2. Environment Setup
@@ -341,3 +341,29 @@ aneta/
 Contributions, issues, and feature requests are welcome!
 
 This project is licensed under the terms of the [MIT License](LICENSE).
+
+
+### Shared cache and migration
+
+Set `ANETA_CACHE_DIR` to a persistent local directory shared by your reviews
+(default `~/.cache/aneta`). Include it when backing up review data. New metadata
+uses compressed, content-addressed SQLite records. Each review pins the payload
+it consumed. Legacy Lance tables remain readable. Search snapshots are keyed by
+provider, query and collection settings. Set a new `ANETA_SEARCH_EDITION` to
+collect fresh results. PDF downloads keep their existing per-review filenames.
+On filesystems that support copy-on-write clones, review and delivery copies can
+share physical storage while remaining independently editable.
+
+From the project root, inspect a historical review with the following commands.
+Set `PATH_DATA` to its directory when it differs from the active configuration.
+
+```sh
+python -m src.StorageReport .data
+python -m src.Database
+python -m src.PdfCache .data/PDFs
+```
+
+The storage report accepts multiple folders and reports logical duplicates by hash.
+Append `--import` to the metadata or PDF command to import existing records or PDFs. Imports can be repeated.
+Original files remain available. Keep the common cache together with review
+version pins when moving an unfinished review to another machine.

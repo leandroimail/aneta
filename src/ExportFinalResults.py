@@ -6,14 +6,18 @@ Exporta os RESULTADOS FINAIS do SLR para uma pasta única (cópia), pronta para 
   - Relatório do pipeline (funil PRISMA): pipeline_report.md/.csv + pipeline_metrics.json
   - LEIA-ME.md com o resumo do que foi exportado
 
-Robusto a OneDrive on-demand: cópia com timeout (arquivos só-na-nuvem que pendurariam são
-pulados com aviso, em vez de travar a exportação).
+Uma falha de leitura ou cópia preserva a entrega anterior.
 """
+from src.CachePaths import doi_filename as _sanitize
 import os
 import re
 import json
-import shutil
-import urllib.parse
+import hashlib
+from contextlib import contextmanager
+from pathlib import Path
+import tempfile
+from src.PdfCache import clone_or_copy
+from src.CachePaths import cache_root
 from datetime import datetime
 from typing import List, Optional
 
@@ -30,11 +34,6 @@ def _base() -> str:
 
 def _j(rel: str) -> str:
     return os.path.join(_base(), rel)
-
-
-def _sanitize(doi: str) -> str:
-    doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
-    return urllib.parse.quote(doi, safe="")
 
 
 def _run_with_timeout(fn, timeout: float):
@@ -60,23 +59,21 @@ def _run_with_timeout(fn, timeout: float):
 
 
 def _copy_guarded(src: str, dst: str, timeout: float = 40.0) -> bool:
-    """Cópia binária com timeout. Lê tudo numa thread; só grava se a leitura concluiu
-    (evita arquivo parcial e não pendura em arquivo só-na-nuvem)."""
+    """Stage an independent copy under timeout before publishing the destination."""
     if not src or not os.path.exists(src):
         return False
 
-    def _read():
-        with open(src, "rb") as f:
-            return f.read()
-
-    data = _run_with_timeout(_read, timeout)
-    if data is None:
-        return False
     try:
-        with open(dst, "wb") as f:
-            f.write(data)
-        return True
-    except Exception:
+        with tempfile.TemporaryDirectory(dir=os.path.dirname(os.path.abspath(dst))) as directory:
+            staged = os.path.join(directory, "export")
+            def prepare():
+                clone_or_copy(src, staged)
+                return True
+            if not _run_with_timeout(prepare, timeout):
+                return False
+            os.replace(staged, dst)
+            return True
+    except OSError:
         return False
 
 
@@ -113,11 +110,105 @@ def _selected_dois(final_json: str, final_bib: str) -> List[str]:
     return out
 
 
+_MANIFEST = ".aneta-export.json"
+
+
+def _inventory(folder):
+    files = {}
+    for entry in folder.rglob("*"):
+        if entry.is_symlink():
+            raise ValueError(f"Entrega contém link simbólico: {entry}")
+        if entry.is_dir():
+            files[entry.relative_to(folder).as_posix()] = "directory"
+        elif entry.name == _MANIFEST and entry.parent == folder:
+            continue
+        elif entry.is_file():
+            def checksum(path=entry):
+                with path.open("rb") as stream:
+                    return hashlib.file_digest(stream, "sha256").hexdigest()
+            digest = _run_with_timeout(checksum, 40)
+            if digest is None:
+                raise OSError(f"Não foi possível verificar a integridade de {entry}")
+            files[entry.relative_to(folder).as_posix()] = digest
+        else:
+            raise ValueError(f"Entrada desconhecida na entrega: {entry}")
+    return files
+
+
+def _check_destination(folder):
+    if folder.is_symlink():
+        raise ValueError(f"Destino da entrega é um link: {folder}")
+    if not folder.exists() or (folder.is_dir() and not any(folder.iterdir())):
+        return
+    manifest = folder / _MANIFEST
+    readme = folder / "LEIA-ME.md"
+    if not manifest.exists() and readme.is_file() and not readme.is_symlink() and (folder / "pdfs").is_dir():
+        with readme.open(encoding="utf-8") as stream:
+            if stream.readline().strip() == "# Resultados finais do SLR (Aneta)" and (
+                (folder / "final_papers.bib").is_file() or (folder / "final_papers.json").is_file()
+            ):
+                return "legacy"
+    if not manifest.is_file() or manifest.is_symlink():
+        raise ValueError(f"Destino contém arquivos sem inventário do Aneta: {folder}. Escolha uma pasta vazia.")
+    if json.loads(manifest.read_text(encoding="utf-8")) != _inventory(folder):
+        raise ValueError(f"O conteúdo da entrega foi alterado: {folder}. Escolha uma pasta vazia.")
+
+
+@contextmanager
+def _publish_lock(folder):
+    """Serialize the short destination check/swap across concurrent Aneta exports."""
+    lockfile = folder.parent / ("." + folder.name + ".aneta-export.lock")
+    with lockfile.open("a+b") as lock:
+        if os.name == "nt":
+            import msvcrt
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        yield
+
+
 def export_final_results(dest: Optional[str] = None) -> Optional[str]:
-    """
-    Monta a pasta de entrega com os resultados finais. Gera antes o pipeline-report
-    (para incluí-lo atualizado). Retorna o caminho da pasta, ou None se não há final.
-    """
+    """Prepare and verify the delivery before replacing a previous managed export."""
+    folder = Path(dest or _j(os.getenv("FINAL_RESULTS_FOLDER", "OUTPUTS/final_results"))).absolute()
+    resolved = folder.resolve()
+    protected = [
+        Path.cwd(), Path(_base()), Path(_j("OUTPUTS")), Path(_j("OUTPUTS/processed_responses")),
+        Path(_j(os.getenv("FINAL_PAPERS_OUTPUT", "OUTPUTS/processed_responses/final_papers.json"))),
+        Path(_j(os.getenv("FINAL_PAPERS_BIBs_OUTPUT", "OUTPUTS/final_papers.bib"))),
+    ]
+    sources = [Path(_j(os.getenv("FOLDER_SAVE_PDF", "PDFs"))), Path(_j("OUTPUTS/BIBLIOMETRY")),
+               cache_root()]
+    if any(path.resolve().is_relative_to(resolved) for path in protected + sources) or any(
+        resolved.is_relative_to(path.resolve()) for path in sources
+    ):
+        raise ValueError(f"O destino da entrega se sobrepõe aos dados de origem: {folder}")
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=folder.parent, prefix=".aneta-export-") as directory:
+        staged = Path(directory) / "new"
+        if not _build_delivery(str(staged)):
+            return None
+        (staged / _MANIFEST).write_text(json.dumps(_inventory(staged), sort_keys=True), encoding="utf-8")
+        with _publish_lock(folder):
+            previous = Path(directory) / "previous"
+            if _check_destination(folder) == "legacy":
+                backup = Path(tempfile.mkdtemp(prefix=folder.name + "-legacy-", dir=folder.parent))
+                previous = backup / folder.name
+                print(f"Entrega legada preservada em {previous}")
+            if folder.exists():
+                folder.rename(previous)
+            try:
+                staged.rename(folder)
+            except BaseException:
+                if previous.exists() and not folder.exists():
+                    previous.rename(folder)
+                raise
+    print(f"Entrega disponível em {folder}")
+    return str(folder)
+
+
+def _build_delivery(dest: str) -> Optional[str]:
     print("\n" + "=" * 70)
     print("=== EXPORTAR RESULTADOS FINAIS ===")
     print("=" * 70 + "\n")
@@ -131,11 +222,7 @@ def export_final_results(dest: Optional[str] = None) -> Optional[str]:
         print("  → rode a triagem final antes: python aneta.py --select_fulltext")
         return None
 
-    dest = dest or _j(os.getenv("FINAL_RESULTS_FOLDER", "OUTPUTS/final_results"))
     pdfs_dest = os.path.join(dest, "pdfs")
-    # Idempotência: limpa a pasta de entrega antes, para não deixar PDFs/artefatos órfãos
-    # de uma execução anterior (ex.: se a seleção final diminuiu entre rodadas).
-    shutil.rmtree(dest, ignore_errors=True)
     os.makedirs(pdfs_dest, exist_ok=True)
 
     # 1) Gera o pipeline-report atualizado (para entrar na pasta).
@@ -167,7 +254,7 @@ def export_final_results(dest: Optional[str] = None) -> Optional[str]:
             if _copy_guarded(src, dst, timeout=30.0):
                 copied_artifacts.append(os.path.basename(src))
             else:
-                print(f"  (aviso: não foi possível copiar {os.path.basename(src)})")
+                raise OSError(f"Falha ao copiar {src}; entrega anterior preservada.")
     print(f"  ✓ {len(copied_artifacts)} arquivo(s) copiado(s).")
 
     # 3) Copia os PDFs dos selecionados.
@@ -179,6 +266,8 @@ def export_final_results(dest: Optional[str] = None) -> Optional[str]:
         dst = os.path.join(pdfs_dest, _sanitize(doi) + ".pdf")
         if _copy_guarded(src, dst, timeout=40.0):
             have.append(doi)
+        elif os.path.exists(src):
+            raise OSError(f"Falha ao copiar {src}; entrega anterior preservada.")
         else:
             missing.append(doi)
     print(f"  ✓ {len(have)}/{len(dois)} PDFs copiados" +
@@ -197,12 +286,25 @@ def export_final_results(dest: Optional[str] = None) -> Optional[str]:
             for file in files:
                 s_file = os.path.join(root, file)
                 d_file = os.path.join(target_dir, file)
-                if _copy_guarded(s_file, d_file, timeout=20.0):
-                    biblio_copied += 1
-        openalex_meta = _j("OUTPUTS/openalex_metadata.json")
-        if os.path.exists(openalex_meta):
-            _copy_guarded(openalex_meta, os.path.join(biblio_dest, "openalex_metadata.json"), timeout=20.0)
+                if not _copy_guarded(s_file, d_file, timeout=20.0):
+                    raise OSError(f"Falha ao copiar {s_file}; entrega anterior preservada.")
+                biblio_copied += 1
+    metadata = Path(_j("OUTPUTS"))
+    final_meta = metadata / "openalex_metadata_final.json"
+    abstract_meta = metadata / "openalex_metadata_post_abstract.json"
+    alias = "openalex_metadata.json"
+    sources = [(final_meta, final_meta.name), (abstract_meta, abstract_meta.name)]
+    if final_meta.is_file():
+        sources.append((final_meta, alias))
+    elif not abstract_meta.is_file():
+        sources.append((metadata / alias, alias))
+    for source, name in sources:
+        if source.is_file():
+            os.makedirs(biblio_dest, exist_ok=True)
+            if not _copy_guarded(str(source), os.path.join(biblio_dest, name), timeout=20.0):
+                raise OSError(f"Falha ao copiar {source}. Entrega anterior preservada.")
             biblio_copied += 1
+    if biblio_copied:
         print(f"  ✓ {biblio_copied} arquivo(s) de bibliometria copiados para bibliometry/")
 
     # LEIA-ME com o resumo da entrega.

@@ -6,7 +6,7 @@ import string
 import random
 import re
 import os
-import shutil
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import duckdb
@@ -35,12 +35,13 @@ def loop_json(list_dic, bib):
     return value.strip(";")
 
 
+def _output_directory(path):
+    return Path(path).parent / "OUTPUTS"
+
+
 def create_folder(path):
-    path_exit = path.replace(".bibs", "OUTPUTS")
-    
-    if os.path.exists(path_exit):
-        shutil.rmtree(path_exit)
-    os.makedirs(path_exit)
+    """Prepare selection outputs while preserving artifacts from other stages."""
+    _output_directory(path).mkdir(parents=True, exist_ok=True)
 
 
 def read_impact_factor(path_impact_factor):
@@ -373,8 +374,8 @@ def clean_duplicate(bibs_clear, type_deduplication):
     else:
         raise ValueError("Value of 'type_deduplication' need be 'default' or 'fuzze'. Please set in Config.py file")
     
-    path_directory_bibs_bib_duplicate = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_duplicate.bib")
-    path_directory_bibs_bib_deduplicate = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_deduplicate.bib")
+    path_directory_bibs_bib_duplicate = str(_output_directory(path_directory_bibs) / "bib_duplicate.bib")
+    path_directory_bibs_bib_deduplicate = str(_output_directory(path_directory_bibs) / "bib_deduplicate.bib")
     write_bibtex(path_directory_bibs_bib_duplicate, list_duplicate)
     write_bibtex(path_directory_bibs_bib_deduplicate, list_bib)
 
@@ -586,7 +587,7 @@ def display_results(dictionary, name_file, column_key, column_value="value", sor
 
     if sort_by_value:
         sort_index = 1
-    path = path_directory_bibs.replace(".bibs", "OUTPUTS/" + name_file +".csv")
+    path = str(_output_directory(path_directory_bibs) / f"{name_file}.csv")
     # path = path_directory_bibs + "/OUTPUTS/" + name_file +".csv"
     with open(path, "w") as file:
         file.writelines(column_key + ";" + column_value + "\n" )
@@ -848,8 +849,8 @@ def analyzer(path):
     else:
         summary_bibs["'precente_include_over_total"] = "0%"
 
-    path_directory_bibs_select_bibs = path_directory_bibs.replace(".bibs", "OUTPUTS/select_bibs.bib")
-    path_directory_bibs_exclude_bib = path_directory_bibs.replace(".bibs", "OUTPUTS/bib_exclude.bib")
+    path_directory_bibs_select_bibs = str(_output_directory(path_directory_bibs) / "select_bibs.bib")
+    path_directory_bibs_exclude_bib = str(_output_directory(path_directory_bibs) / "bib_exclude.bib")
     write_bibtex(path_directory_bibs_select_bibs, select_bibs)
     write_bibtex(path_directory_bibs_exclude_bib, exclude_bib)
 
@@ -873,7 +874,7 @@ def analyzer(path):
 
     print("\n")
     print("--- Gravando Titles ---")
-    path = path_directory_bibs.replace(".bibs", "OUTPUTS/title.txt")
+    path = str(_output_directory(path_directory_bibs) / "title.txt")
     # path = path_directory_bibs + "/OUTPUTS/title.txt"
     with open(path, "w", encoding="utf-8") as file:
         for bib in select_bibs:
@@ -881,7 +882,7 @@ def analyzer(path):
 
     print("\n")
     print("--- Gravando DOIs ---")
-    path = path_directory_bibs.replace(".bibs", "OUTPUTS/DOIs.txt")
+    path = str(_output_directory(path_directory_bibs) / "DOIs.txt")
     # path = path_directory_bibs + "/OUTPUTS/DOIs.txt"
     with open(path, "w", encoding="utf-8") as file:
         for bib in select_bibs:
