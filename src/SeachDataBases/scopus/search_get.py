@@ -38,7 +38,6 @@ if SCOPUS_VIEW not in ("STANDARD", "COMPLETE"):
 # universalmente seguro, então limitamos a ele.
 if PAGE_SIZE > 25:
     PAGE_SIZE = 25
-records_agregados = []
 
 def extrai_ano(data_str):
     """Extrai o ano de uma data no formato Scopus (YYYY-MM-DD)"""
@@ -155,7 +154,7 @@ def main(query, path_data):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
     
-    global records_agregados
+    records_agregados = []
     
     query = query.strip().replace('\n', ' ').replace('\t', ' ')
     while '  ' in query:
@@ -221,7 +220,10 @@ def main(query, path_data):
             status = response.status_code
 
             if status == 200:
-                results = response.json().get('search-results', {}).get('entry', [])
+                page = response.json()['search-results']
+                if 'entry' not in page and str(page.get('opensearch:totalResults')) != '0':
+                    raise ValueError('Resposta Scopus sem registros ou contagem')
+                results = page.get('entry', [])
                 if not results:
                     print("Nenhum resultado encontrado. Encerrando...")
                     encerrar = True
@@ -265,11 +267,8 @@ def main(query, path_data):
             encerrar = True
             break
 
-        if not sucesso_pagina and not encerrar:
-            print(f"Página {pagina+1} falhou após {max_retries} tentativas. "
-                  f"Encerrando a coleta e preservando os {len(records_agregados)} "
-                  f"registros já obtidos.")
-            break
+        if not sucesso_pagina:
+            raise RuntimeError(f"Coleta Scopus incompleta na página {pagina + 1}")
 
     # Salvando resultados brutos
     if records_agregados:

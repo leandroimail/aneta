@@ -32,7 +32,6 @@ PAGE_SIZE = int(os.getenv("PAGE_SIZE", 50))
 if PAGE_SIZE < 50:
     PAGE_SIZE = 50
 
-records_agregados = []
 
 # ============================================================
 # Funções auxiliares
@@ -169,7 +168,7 @@ def converte_para_bibtex(entry):
 # Função principal
 # ============================================================
 def main(query, path_data):
-    global records_agregados
+    records_agregados = []
     
     if int(os.getenv("PAGE_SIZE", 50)) < 50:
         print("Tamanho da página ajustado para 50")
@@ -234,7 +233,7 @@ def main(query, path_data):
                     print(f"Aguardando {random_retry_delay} segundos antes da próxima requisição...")
                     time.sleep(random_retry_delay)
                 
-                response = requests.get(BASE_URL, params=params)
+                response = requests.get(BASE_URL, params=params, timeout=60)
                 
                 # Verifica se é erro 418 ou outro erro
                 if response.status_code == 418:
@@ -247,6 +246,8 @@ def main(query, path_data):
                 response.raise_for_status()
                 data = response.json()
                 
+                if 'articles' not in data and str(data.get('total_records')) != '0':
+                    raise ValueError('Resposta IEEE sem artigos ou contagem')
                 if not data.get('articles'):
                     print("Nenhum resultado encontrado. Encerrando...")
                     ultima_pagina_alcancada = True

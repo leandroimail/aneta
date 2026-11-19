@@ -21,7 +21,6 @@ if PAGE_SIZE > 25:
     PAGE_SIZE = 25
 
 
-records_agregados = []
 
 def extrai_ano(data_str):
     if data_str:
@@ -205,7 +204,7 @@ def main(query, path_data):
         import shutil
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
-    global records_agregados
+    records_agregados = []
     erro_ocorrido = False
 
     print("Iniciando a coleta dos registros da API Springer Nature...\n")
@@ -227,7 +226,7 @@ def main(query, path_data):
         print(f"URL: {url_debug}\n")
 
         try:
-            response = requests.get(BASE_URL, params=params)
+            response = requests.get(BASE_URL, params=params, timeout=60)
         except Exception as e:
             print(f"Exceção durante a requisição: {e}")
             erro_ocorrido = True
@@ -242,7 +241,7 @@ def main(query, path_data):
                 erro_ocorrido = True
                 break
 
-            records = data.get('records', [])
+            records = data['records']
             if not records:
                 print("Nenhum registro retornado nesta página. Encerrando a coleta.\n")
                 break
@@ -263,11 +262,12 @@ def main(query, path_data):
             erro_ocorrido = True
             break
 
+    if erro_ocorrido:
+        raise RuntimeError("Coleta Springer incompleta")
     if not records_agregados:
         print("\nHouve um erro durante a coleta ou nenhum registro foi encontrado. Nenhum arquivo será salvo.")
         return ""
-    elif erro_ocorrido:
-        raise RuntimeError("Erro durante a coleta dos registros. Nenhum arquivo será salvo.")
+
 
     try:
         with open(os.path.join(out_dir, "springer.json"), "w", encoding="utf-8") as f_json:

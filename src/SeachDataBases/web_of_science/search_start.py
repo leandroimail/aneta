@@ -24,7 +24,6 @@ PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
 if PAGE_SIZE > 50:
     # A API WoS Starter aceita no máximo limit=50 por página
     PAGE_SIZE = 50
-records_agregados = []
 
 # ============================================================
 # Funções auxiliares
@@ -186,7 +185,7 @@ def main(query, path_data):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
     
-    global records_agregados
+    records_agregados = []
     headers = {
         'X-ApiKey': API_KEY,
         'Accept': 'application/json'
@@ -219,7 +218,7 @@ def main(query, path_data):
                 time.sleep(1.5)
             
             try:
-                response = requests.get(BASE_URL, headers=headers, params=params)
+                response = requests.get(BASE_URL, headers=headers, params=params, timeout=60)
                 if response.status_code == 429:
                     print(f"WoS Rate Limit (429) na página {pagina+1}. Aguardando 3s antes de tentar novamente ({tentativa+1}/{max_retries})...")
                     time.sleep(3)
@@ -227,7 +226,7 @@ def main(query, path_data):
                 response.raise_for_status()
                 
                 data = response.json()
-                results = data.get('hits', [])
+                results = data['hits']
                 break
             except requests.exceptions.HTTPError as errh:
                 if tentativa < max_retries - 1 and getattr(response, 'status_code', None) == 429:
@@ -246,8 +245,7 @@ def main(query, path_data):
             except Exception as e:
                 raise Exception(f"Erro na requisição: {e}")
         else:
-            print("Número máximo de tentativas atingido na página do WoS.")
-            break
+            raise RuntimeError("Número máximo de tentativas atingido na página do WoS.")
 
         if not results:
             print("Nenhum resultado encontrado. Encerrando...")

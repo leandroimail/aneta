@@ -1,5 +1,6 @@
 import os
 import yaml
+from src.SearchCache import cached_search
 from dotenv import load_dotenv
 from src.SeachDataBases.arxiv import search as arxiv_search
 from src.SeachDataBases.ieee import search as ieee_search
@@ -7,7 +8,6 @@ from src.SeachDataBases.science_direct import search_metadata as sd_search
 from src.SeachDataBases.spring_nature import search as spring_search
 from src.SeachDataBases.web_of_science import search_start as wos_search
 from src.SeachDataBases.scopus import search_get as scopus_search
-# from SeachDataBases.scopus import search as scopus_search
 
 # Carrega as variáveis do .env
 load_dotenv(os.path.abspath(".conf"))
@@ -22,29 +22,19 @@ def run_search():
     with open(os.path.abspath("config/search_config.yaml"), "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
         
-    SEARCH_STRING = config.get("search_string", config.get("search_string", None))    
+    SEARCH_STRING = config.get("search_string")
 
     if not SEARCH_STRING:
         raise ValueError("A string de busca que deve ser declarada em'search_string' no arquivo de configuração config/search_config.yaml não foi definida")
 
     # Orquestração das buscas conforme flags do YAML
-    if config.get("arxiv", False):
-        arxiv_search.main(SEARCH_STRING, PATH_DATA)
-
-    if config.get("science_direct", False):    
-        sd_search.main(SEARCH_STRING, PATH_DATA)
-
-    if config.get("scopus", False):    
-        scopus_search.main(SEARCH_STRING, PATH_DATA)
-
-    if config.get("spring_nature", False):    
-        spring_search.main(SEARCH_STRING, PATH_DATA)
-
-    if config.get("web_of_science", False):    
-        wos_search.main(SEARCH_STRING, PATH_DATA)
-
-    if config.get("ieee", False):    
-        ieee_search.main(SEARCH_STRING, PATH_DATA)
+    providers = {
+        "arxiv": arxiv_search, "science_direct": sd_search, "scopus": scopus_search,
+        "spring_nature": spring_search, "web_of_science": wos_search, "ieee": ieee_search,
+    }
+    for source, provider in providers.items():
+        if config.get(source, False):
+            cached_search(source, provider, SEARCH_STRING, PATH_DATA)
 
     print("\n\n++++++++++++++++++++++++++++++++++++++++++++++")
     print("     Search process completed successfully!")

@@ -11,20 +11,14 @@ bibliografia e apêndice — que não ajuda na decisão de inclusão e gasta tok
 
 A chave é o DOI (sanitizado igual ao resto do pipeline: urllib.parse.quote(doi, safe='')).
 """
+from src.CachePaths import doi_filename as sanitize_doi
 import os
 import re
-import urllib.parse
 from typing import Optional
 
 from dotenv import load_dotenv
 
 load_dotenv(os.path.abspath(".conf"))
-
-
-def sanitize_doi(doi: str) -> str:
-    """Igual a DonwloadPapers.sanitize_filename — chave de arquivo a partir do DOI."""
-    doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
-    return urllib.parse.quote(doi, safe="")
 
 
 def _default_dirs():

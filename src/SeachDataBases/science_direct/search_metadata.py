@@ -22,7 +22,6 @@ BASE_URL = 'https://api.elsevier.com/content/search/sciencedirect'
 # Remova QS_QUERY fixa; use "query" que será passado
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", 500))
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", 25))
-records_agregados = []
 
 # ============================================================
 # Funções auxiliares
@@ -47,7 +46,7 @@ def get_metadata(list_pii, API_KEY):
         f'?query={query_encoded}&apiKey={API_KEY}&view=COMPLETE'
     )
     try:
-        response = requests.get(url, headers={'Accept': 'application/json'})
+        response = requests.get(url, headers={'Accept': 'application/json'}, timeout=60)
         response.raise_for_status()  
         return response.json()
     except requests.RequestException as e:
@@ -199,7 +198,7 @@ def main(query, path_data):
     if os.path.exists(out_dir):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
-    global records_agregados
+    records_agregados = []
     erro_ocorrido = False
 
     print("Iniciando a coleta dos registros da API Elsevier (ScienceDirect) via PUT...\n")
@@ -234,7 +233,7 @@ def main(query, path_data):
         print(f"Corpo da requisição: {json.dumps(body)}\n")
 
         try:
-            response = requests.put(BASE_URL, json=body, headers=headers)
+            response = requests.put(BASE_URL, json=body, headers=headers, timeout=60)
         except Exception as e:
             print(f"Exceção durante a requisição: {e}")
             erro_ocorrido = True
@@ -249,13 +248,16 @@ def main(query, path_data):
                 erro_ocorrido = True
                 break
 
-            results = data.get("results", [])
+            results = data["results"] if str(data.get("resultsFound")) != "0" else []
             if not results:
                 print("Nenhum registro retornado nesta página. Encerrando a coleta.\n")
                 break
 
             list_pii = [item.get("pii") for item in results if item.get("pii")]
             metadata = get_metadata(list_pii, API_KEY)
+
+            if not metadata or len(metadata.get("search-results", {}).get("entry", [])) < len(set(list_pii)) or len(list_pii) != len(results):
+                raise RuntimeError("Metadados ScienceDirect incompletos")
 
             if metadata:
                 records_agregados.extend(metadata.get("search-results", {}).get("entry", []))

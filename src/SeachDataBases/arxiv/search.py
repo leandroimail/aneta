@@ -26,8 +26,6 @@ ns = {
     'arxiv': 'http://arxiv.org/schemas/atom'
 }
 
-records_agregados = []
-raw_feeds = []
 
 
 # =============================================================================
@@ -266,7 +264,8 @@ def main(query, path_data):
     if os.path.exists(out_dir):
         shutil.rmtree(out_dir)
     os.makedirs(out_dir)
-    global records_agregados, raw_feeds
+    records_agregados = []
+    raw_feeds = []
     erro_ocorrido = False
     print("Starting the collection of records from the arXiv API...\n")
     num_requisicoes = (MAX_SEARCH_RESULTS // PAGE_SIZE) + (1 if MAX_SEARCH_RESULTS % PAGE_SIZE else 0)
@@ -287,7 +286,7 @@ def main(query, path_data):
         print(f"URL: {url}\n")
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=60)
         except Exception as e:
             print(f"Exception during request: {e}")
             erro_ocorrido = True
@@ -301,6 +300,8 @@ def main(query, path_data):
         try:
             # Parses the XML and stores the raw feed
             feed_xml = ET.fromstring(response.text)
+            if feed_xml.tag != "{http://www.w3.org/2005/Atom}feed":
+                raise ValueError("Expected an Atom feed")
             raw_feeds.append(feed_xml)
         except Exception as e:
             print(f"Error parsing XML: {e}")
@@ -321,10 +322,12 @@ def main(query, path_data):
             print("Fewer records returned than expected for the page. Finalizing collection.\n")
             break
 
+    if erro_ocorrido:
+        raise RuntimeError("Coleta arXiv incompleta")
+
     if not records_agregados:
         print("\nThere was an error during collection or no records were found. No files will be saved.")
-        if erro_ocorrido:
-            raise ValueError("An error occurred during the collection process.")
+        return
 
     # -----------------------------------------------------------------------------
     # Saves simplified data in JSON

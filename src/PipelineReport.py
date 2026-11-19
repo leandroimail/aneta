@@ -14,12 +14,12 @@ Saídas do relatório:
   - .data/OUTPUTS/pipeline_funnel.csv  (funil em tabela)
   - .data/OUTPUTS/pipeline_metrics.json (estado consolidado)
 """
+from src.CachePaths import doi_filename as _sanitize
 import os
 import re
 import csv
 import json
 import glob
-import urllib.parse
 from collections import Counter
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -69,12 +69,6 @@ def _paths() -> Dict[str, str]:
         "report_md": j("OUTPUTS/pipeline_report.md"),
         "funnel_csv": j("OUTPUTS/pipeline_funnel.csv"),
     }
-
-
-def _sanitize(doi: str) -> str:
-    """Replica DonwloadPapers.sanitize_filename (sem importar o módulo pesado)."""
-    doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
-    return urllib.parse.quote(doi, safe="")
 
 
 def _read(path: str) -> Optional[str]:

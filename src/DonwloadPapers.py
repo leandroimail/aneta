@@ -1,3 +1,4 @@
+from src.CachePaths import doi_filename as sanitize_filename
 import os
 import sys
 import urllib
@@ -10,6 +11,7 @@ import yaml
 import re
 from typing import Optional, Tuple, Dict, List, Set
 from dotenv import load_dotenv
+from src.PdfCache import PdfCache
 from src.Database import create_lancedb_instance, save_bibliographic_database, fetch_bibliographic_database
 
 
@@ -56,15 +58,6 @@ SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
 SESSION_PREPARED_HOSTS: Set[str] = set()
 
-
-
-def sanitize_filename(doi):
-    """
-    Converte um DOI em um nome de arquivo válido:
-    substitui caracteres não alfanuméricos (exceto pontos e hífens) por underline.
-    """
-    doi = doi.replace("https://doi.org/", "").replace("http://doi.org/", "").strip()
-    return urllib.parse.quote(doi, safe='')
 
 
 def normalize_doi(doi: str) -> str:
@@ -1718,6 +1711,27 @@ def batch_download_playwright_assisted(entries, pdf_dir, logs, skip_validation=F
     return downloaded
 
 
+def _cache_pdfs(entries, pdf_dir, *, store=False):
+    cache = PdfCache()
+    for entry in entries:
+        doi = (entry.get("doi") or "").strip()
+        filename_id = doi or entry.get("ID")
+        url = (entry.get("url") or "").strip()
+        identifier = doi or (url if "arxiv.org/" in url.lower() else "")
+        if not identifier or not filename_id:
+            continue
+        path = os.path.join(pdf_dir, sanitize_filename(filename_id) + ".pdf")
+        try:
+            if store:
+                cache.store(identifier, path, pin=True)
+            elif os.path.isfile(path):
+                cache.store(identifier, path, pin=True, historical=True)
+            else:
+                cache.restore(identifier, path)
+        except OSError as exc:
+            print(f"Cache de PDFs indisponível para {identifier}: {exc}")
+
+
 def download_assisted(bibtex_path=None, pdf_dir=None, skip_validation=False):
     """
     Modo ASSISTIDO: para TODOS os artigos do bib ainda NÃO baixados, abre um navegador
@@ -1738,6 +1752,7 @@ def download_assisted(bibtex_path=None, pdf_dir=None, skip_validation=False):
     with open(bibtex_path, encoding="utf-8") as f:
         database = bibtexparser.load(f, parser=parser)
 
+    _cache_pdfs(database.entries, pdf_dir)
     missing = []
     for entry in database.entries:
         doi = (entry.get("doi") or "").strip()
@@ -1747,6 +1762,7 @@ def download_assisted(bibtex_path=None, pdf_dir=None, skip_validation=False):
             missing.append(entry)
 
     if not missing:
+        _cache_pdfs(database.entries, pdf_dir, store=True)
         print("✓ Todos os artigos com DOI já estão baixados. Nada a fazer no modo assistido.")
         return True
 
@@ -1769,9 +1785,10 @@ def download_assisted(bibtex_path=None, pdf_dir=None, skip_validation=False):
     logs = {"downloaded": [], "failed": [], "markdown_saved": []}
     # Usa o Chrome real via CDP (passa o Cloudflare sozinho) + HITL: quando o automático
     # falha, pausa e captura o download que você fizer manualmente na janela.
-    got = batch_download_cdp(missing, pdf_dir, logs, skip_validation=skip_validation, assisted=True)
+    failed = batch_download_cdp(missing, pdf_dir, logs, skip_validation=skip_validation, assisted=True)
     print("\n" + "=" * 64)
-    print(f"✓ Modo assistido concluído: {len(got)} baixados / {len(missing) - len(got)} ainda faltando.")
+    _cache_pdfs(database.entries, pdf_dir, store=True)
+    print(f"✓ Modo assistido concluído: {len(missing) - len(failed)} baixados / {len(failed)} ainda faltando.")
     print("=" * 64 + "\n")
     return True
 
@@ -2059,6 +2076,9 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
     else:
         doi_entries = doi_bibtex_entries
 
+    cache_entries = [*arxiv_entries, *doi_entries]
+    _cache_pdfs(cache_entries, pdf_dir)
+
     # Resolver o nível de concorrência (env DOWNLOAD_MAX_CONCURRENT como fallback).
     if max_workers is None:
         try:
@@ -2169,6 +2189,7 @@ def download_all_papers(bibtex_path=None, pdf_dir=None, doi_file_path=None, skip
     else:
         print("\nTodos os artigos foram baixados com sucesso pelos métodos principais.\n")
 
+    _cache_pdfs(cache_entries, pdf_dir, store=True)
     downloaded_log_path = os.path.join(pdf_dir, "downloaded_log.txt")
     failed_log_path = os.path.join(pdf_dir, "failed_log.txt")
     markdown_log_path = os.path.join(pdf_dir, "markdown_log.txt")
