@@ -200,7 +200,7 @@ def generate_bibliometry_report_and_plots(
         import matplotlib.pyplot as plt
         import seaborn as sns
         
-        sns.set_theme(style="whitegrid")
+        sns.set_theme(style="whitegrid", font="DejaVu Sans")
         
         # Gráfico 1: Publicações por Ano
         if year_counts:

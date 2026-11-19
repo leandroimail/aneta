@@ -3,11 +3,11 @@ name: slr-bibliometry
 description: >
   Guides the execution, parameterization, and analysis of bibliometrics in Aneta.
   Integrates OpenAlex citation and institutional metadata, journal impact metrics (JCR/SJR),
-  and R Bibliometrix / Python visual analytics. Supports parameterization to run either
+  and native Python bibliometric analyses. Supports parameterization to run either
   posterior to abstract screening (post_abstract) or in the final phase (final).
 compatibility: >
   Requires the Aneta pipeline with Python environment (resolved via aneta-runner).
-  Uses OpenAlex API for citation metrics and optionally Rscript with bibliometrix.
+  Uses OpenAlex API for citation metrics and generates the figures and exports in Python.
 metadata:
   version: "1.0"
   project: aneta-slr
@@ -72,7 +72,7 @@ PYTHONUNBUFFERED=1 "$PY" aneta.py --bibliometry_async --stage post_abstract
 | Artifact | Location | Purpose |
 | :--- | :--- | :--- |
 | `openalex_metadata.json` | `.data/OUTPUTS/` | Enriched OpenAlex records (citations, concepts, institutions, co-authors). |
-| Bibliometrix R Plots | `.data/BIBLIOMETRY/` | Co-authorship networks, thematic maps, Bradford core sources, Lotka distribution. |
+| Bibliometrix-compatible outputs | `.data/OUTPUTS/BIBLIOMETRY/<stage>/` | Collaboration networks, thematic maps, citation analyses, XLSX, RDS and interactive HTML. |
 | Python Charts & Tables | `.data/OUTPUTS/BIBLIOMETRY/` | Publication trends by year, citation distributions, top authors and venues. |
 | Export Package | `.data/OUTPUTS/final_results/bibliometry/` | Automatically copied into the final delivery bundle by `--export_final`. |
 

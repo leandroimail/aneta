@@ -44,3 +44,14 @@ pymupdf                # extração de texto via fitz (full-text screening)
 
 # --- Leitura de PDF rica (--read_pdfs); stack pesado de ML, opcional ---
 # docling
+
+# Bibliometria nativa
+matplotlib>=3.10.3
+seaborn
+networkx>=3
+scipy
+countryinfo==0.1.2
+plotly
+wordcloud
+rdata>=1.0
+igraph>=0.11

@@ -3,7 +3,6 @@ import yaml
 import json
 import asyncio
 import aiohttp
-import shutil
 from typing import Optional, List, Dict, Any, Tuple
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -392,39 +391,6 @@ def fetch_and_store_metadata(bibtex_path: str, stage: str = "final") -> Tuple[Li
     return entries, error_file, list_openalex
 
 
-def run_R_bibliometrix(rscript_bin: Optional[str] = None, stage: str = "final") -> bool:
-    """Executa o script em linguagem R com o pacote Bibliometrix se Rscript estiver disponível."""
-    path = os.path.abspath("src/Bibliometry/RunBibliometrix.r")
-    r_exec = rscript_bin or shutil.which("Rscript") or ("/opt/homebrew/bin/Rscript" if os.path.exists("/opt/homebrew/bin/Rscript") else None)
-    if not r_exec:
-        print("Rscript não encontrado. Pulando execução do script R.")
-        return False
-        
-    print(f"Executando {r_exec} {path}...")
-    ret = os.system(f"{r_exec} {path}")
-    
-    path_data = os.getenv("PATH_DATA", ".data")
-    path_error = os.path.join(path_data, "BIBLIOMETRY", "error.log")
-    path_execution = os.path.join(path_data, "BIBLIOMETRY", "execution.log")
-    has_error = False
-    
-    if os.path.exists(path_error):
-        with open(path_error, "r", encoding="utf-8") as f:
-            error_log = f.read().strip()
-            if error_log:
-                has_error = True
-                print("Aviso na execução do script R (Bibliometrix):")
-                for line in error_log.split("\n")[:10]:
-                    print(f"  {line}")
-    
-    if not has_error and ret == 0:
-        print(f"\n{90 * '-'}\nScript R (Bibliometrix) executado com sucesso!\nVerifique os gráficos e logs em: {path_data}/BIBLIOMETRY\n{90 * '-'}")
-        return True
-    else:
-        print(f"Aviso no Bibliometrix R. Logs disponíveis em: {path_data}/BIBLIOMETRY")
-        return False
-
-
 def run_bibliometry(stage: Optional[str] = None, bibtex_path: Optional[str] = None, bib: Optional[str] = None):
     """
     Ponto de entrada principal para a execução parametrizada da bibliometria.
@@ -445,31 +411,32 @@ def run_bibliometry(stage: Optional[str] = None, bibtex_path: Optional[str] = No
             
     stage = stage or gen_cfg.get("bibliometry_stage", "final")
     
+    if stage not in {"post_abstract","final","both"}:
+        raise ValueError(f"Estágio bibliométrico inválido: {stage}")
+
     if stage == "both":
         print("\n=== Executando Bibliometria Parametrizada para AMBOS os estágios (post_abstract + final) ===")
-        run_bibliometry(stage="post_abstract")
-        run_bibliometry(stage="final")
-        return True
+        abstract = run_bibliometry(stage="post_abstract", bibtex_path=bibtex_path)
+        final = run_bibliometry(stage="final", bibtex_path=bibtex_path)
+        return abstract and final
         
     # Resolução dinâmica do arquivo de entrada BibTeX
     if not bibtex_path:
         if stage == "post_abstract":
             candidates = [
-                os.path.join(path_data, "OUTPUTS", "relevant_abstract_papers.bib"),
-                os.path.join(path_data, "OUTPUTS", "select_bibs.bib"),
+                os.path.join(path_data, os.getenv("RELEVANT_ABSTRACT_PAPERS_BIBs_OUTPUT","OUTPUTS/relevant_abstract_papers.bib")),
             ]
         else: # final
             candidates = [
-                os.path.join(path_data, "OUTPUTS", "final_papers.bib"),
+                os.path.join(path_data, os.getenv("FINAL_PAPERS_BIBs_OUTPUT","OUTPUTS/final_papers.bib")),
                 os.path.join(path_data, "OUTPUTS", "final_results", "final_papers.bib"),
-                os.path.join(path_data, "OUTPUTS", "relevant_abstract_papers.bib"),
             ]
         for c in candidates:
             if os.path.exists(c):
                 bibtex_path = c
                 break
         if not bibtex_path:
-            bibtex_path = os.path.join(path_data, "OUTPUTS", "select_bibs.bib")
+            raise FileNotFoundError(f"Corpus BibTeX ausente para {stage}: {candidates}")
             
     full_path_bibtex = os.path.abspath(bibtex_path)
     print("\n" + "=" * 70)
@@ -480,21 +447,22 @@ def run_bibliometry(stage: Optional[str] = None, bibtex_path: Optional[str] = No
     # 1. Recuperar metadados OpenAlex
     entries, error_file, list_openalex = fetch_and_store_metadata(full_path_bibtex, stage=stage)
     
+    if not list_openalex:
+        if error_file:
+            raise RuntimeError(f"Bibliometria sem metadados OpenAlex no estágio {stage}. Detalhes em {error_file}")
+        print(f"Ausência de dados OpenAlex no estágio {stage}.")
+        return False
+
     # 2. Gerar relatórios, métricas e gráficos em Python
-    if gen_cfg.get("bibliometry_generate_py_charts", True) and list_openalex:
+    if gen_cfg.get("bibliometry_generate_py_charts", True):
         print(f"\n{'-'*70}\nGerando análises, tabelas e gráficos em Python...\n{'-'*70}")
         out_dir = os.path.join(path_data, "OUTPUTS", "BIBLIOMETRY", stage)
         generate_bibliometry_report_and_plots(list_openalex, stage=stage, output_dir=out_dir)
         
-    # 3. Executar script R (Bibliometrix) se habilitado e disponível
     if gen_cfg.get("bibliometry_generate_r_plots", True):
-        rscript_bin = shutil.which("Rscript") or ("/opt/homebrew/bin/Rscript" if os.path.exists("/opt/homebrew/bin/Rscript") else None)
-        if rscript_bin:
-            print(f"\n{'-'*70}\nExecutando script R (Bibliometrix)...\n{'-'*70}")
-            run_R_bibliometrix(rscript_bin=rscript_bin, stage=stage)
-        else:
-            print(f"\nℹ Rscript não detectado no sistema no momento. As análises bibliométricas, métricas e gráficos foram gerados nativamente em Python.")
-            
+        from src.BibliometryNative import generate_native_outputs
+        generate_native_outputs(list_openalex, os.path.join(path_data, "OUTPUTS", "BIBLIOMETRY", stage))
+
     print("\n" + "=" * 70)
     print(f"✓ Bibliometria ({stage.upper()}) concluída com sucesso!")
     print("=" * 70 + "\n")

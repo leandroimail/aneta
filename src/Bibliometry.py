@@ -256,46 +256,10 @@ def fetch_metadata_from_scopus(doi):
 
 
 
-def run_R_bibliometrix():
-    path = os.path.abspath("src/Bibliometry/RunBibliometrix.r")
-    os.system(f"Rscript {path}")
-    
-    path_data = os.getenv("PATH_DATA", ".data")
-    path_error = os.path.join(path_data, "BIBLIOMETRY", "error.log")
-    path_executation = os.path.join(path_data, "BIBLIOMETRY", "execution.log")
-    has_error = False
-    
-    if os.path.exists(path_error):
-        has_error = True
-        with open(path_error, "r", encoding="utf-8") as f:
-            error_log = f.read()
-            print(f"Erro ao executar o script R (Bibliometry)")
-            
-            for line in error_log.split("\n"):
-                print(line)
-                
-
-    
-    if not has_error:
-        print("\n\n\n")
-        print(f"{90 * '-'}")
-        print("Script R (Bibliometrix) executado com sucesso!")
-        print(f"Verifique o log de execução em  {path_executation}")
-        print(f"{90 * '-'}")
-    else:
-        print("Script R (Bibliometrix) executado! Entretanto houve erros na sua execução")
-        # Exibir erro em vermelho e com letra grande
-        print("\n\n\n")
-        print(f"{90 * '-'}")
-        print("\033[91m" + "\033[1m" + f"ERRO NO BIBLIOMETRIX R! Verifique o log em: {path_error}" + "\033[0m")
-        print(f"{90 * '-'}")
-
-
-
 def run_bibliometry(stage=None, bib=None):
     """
     Função principal para execução da bibliometria (síncrona / compatível com pipeline).
     Delega para BibliometryAsync com suporte a estágios (post_abstract / final) e bibtex customizado.
     """
     from src.BibliometryAsync import run_bibliometry as run_bib_async
-    run_bib_async(stage=stage, bib=bib)
+    return run_bib_async(stage=stage, bib=bib)

@@ -18,6 +18,8 @@ bibliometry_stage: "final"
 
 bibliometry_using_openalex: true
 bibliometry_for_arxiv: false
+# Nome legado: gera em Python as saídas do script Bibliometrix.
+# Nome legado: habilita os gráficos e planilhas Bibliometrix implementados em Python.
 bibliometry_generate_r_plots: true
 bibliometry_generate_py_charts: true
 
